@@ -7,9 +7,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-
 import 'models.dart';
+
+import 'eeg_backend.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auto-save (ScoringHero JSON) – called after every stage change
@@ -20,19 +20,28 @@ import 'models.dart';
 Future<void> autoSaveScoring(
   String? activePath,
   List<SleepStage> stages,
-  int epochSeconds,
-) async {
+  int epochSeconds, {
+  List<ScoredEvent> events = const [],
+  List<bool>? stagesUncertain,
+}) async {
   if (activePath == null) return;
   final jsonPath = _jsonPathForEdf(activePath);
   try {
-    await _writeJsonScoring(jsonPath, stages, epochSeconds, activePath);
+    await _writeJsonScoring(
+      jsonPath,
+      stages,
+      epochSeconds,
+      activePath,
+      events: events,
+      stagesUncertain: stagesUncertain,
+    );
   } catch (_) {
     // Auto-save failure is non-fatal
   }
 }
 
 /// Load scoring from the JSON file that lives next to the EDF (auto-loaded on open).
-Future<List<SleepStage>?> tryLoadAutoScoring(
+Future<ScoringLoadResult?> tryLoadAutoScoring(
   String activePath,
   int epochCount,
 ) async {
@@ -44,6 +53,42 @@ Future<List<SleepStage>?> tryLoadAutoScoring(
   } catch (_) {
     return null;
   }
+}
+
+Future<List<ScoredEvent>> tryLoadAutoEvents(String activePath) async {
+  final jsonPath = _jsonPathForEdf(activePath);
+  final file = File(jsonPath);
+  if (!file.existsSync()) return const [];
+  try {
+    final content = await file.readAsString();
+    final dynamic json = jsonDecode(content);
+    if (json is! List || json.length < 2 || json[1] is! List) {
+      return const [];
+    }
+    return _parseEvents(json[1] as List<dynamic>);
+  } catch (_) {
+    return const [];
+  }
+}
+
+/// Load config from the JSON file that lives next to the EDF (auto-loaded on open).
+Future<AppConfig?> tryLoadAutoConfig(String activePath) async {
+  final dotIdx = activePath.lastIndexOf('.');
+  final base = dotIdx >= 0 ? activePath.substring(0, dotIdx) : activePath;
+  final configPath = '$base.config.json';
+  final file = File(configPath);
+  if (!file.existsSync()) return null;
+  try {
+    final content = await file.readAsString();
+    final json = jsonDecode(content);
+    if (json is Map<String, dynamic>) {
+      return AppConfig.fromJson(json);
+    }
+    return AppConfig.fromPythonJson(json, const []);
+  } catch (e) {
+    // Config load error is non-fatal
+  }
+  return null;
 }
 
 String _jsonPathForEdf(String edfPath) {
@@ -66,30 +111,46 @@ Future<void> _writeJsonScoring(
   String path,
   List<SleepStage> stages,
   int epochSeconds,
-  String edfPath,
-) async {
+  String edfPath, {
+  List<ScoredEvent> events = const [],
+  List<bool>? stagesUncertain,
+}) async {
   final entries = <Map<String, dynamic>>[];
   for (var i = 0; i < stages.length; i++) {
     final stage = stages[i];
+    final isUncertain = stagesUncertain != null && i < stagesUncertain.length && stagesUncertain[i];
     entries.add({
       'epoch': i + 1,
       'start': i * epochSeconds.toDouble(),
       'end': (i + 1) * epochSeconds.toDouble(),
       'stage': stage.isScored ? stage.label : null,
       'digit': stage.isScored ? stage.code : null,
-      'confidence': null,
+      'confidence': isUncertain ? 0.0 : null,
       'channels': <String>[],
       'clean': 1,
       'source': stage.isScored ? 'human' : null,
     });
   }
-  final json = [entries, <dynamic>[]]; // [stages_list, annotations_list]
-  await File(path).writeAsString(
-    const JsonEncoder.withIndent('  ').convert(json),
-  );
+  final annotations = <Map<String, dynamic>>[];
+  for (var i = 0; i < events.length; i++) {
+    final event = events[i];
+    annotations.add({
+      'key': event.key,
+      'event': event.label,
+      'digit': event.digit,
+      'counter': i,
+      'epoch': event.epochs(epochSeconds, stages.length),
+      'start': event.startSec,
+      'end': event.endSec,
+    });
+  }
+  final json = [entries, annotations]; // [stages_list, annotations_list]
+  await File(
+    path,
+  ).writeAsString(const JsonEncoder.withIndent('  ').convert(json));
 }
 
-Future<List<SleepStage>> _loadJsonScoring(String path, int epochCount) async {
+Future<ScoringLoadResult> _loadJsonScoring(String path, int epochCount) async {
   final content = await File(path).readAsString();
   final dynamic json = jsonDecode(content);
 
@@ -100,10 +161,14 @@ Future<List<SleepStage>> _loadJsonScoring(String path, int epochCount) async {
   } else if (json is List) {
     entries = json;
   } else {
-    return List.filled(epochCount, SleepStage.unknown);
+    return ScoringLoadResult(
+      List.filled(epochCount, SleepStage.unknown),
+      List.filled(epochCount, false),
+    );
   }
 
   final stages = List.filled(epochCount, SleepStage.unknown);
+  final stagesUncertain = List.filled(epochCount, false);
   for (final entry in entries) {
     if (entry is Map<String, dynamic>) {
       final epochOneBased = (entry['epoch'] as num?)?.toInt();
@@ -112,9 +177,36 @@ Future<List<SleepStage>> _loadJsonScoring(String path, int epochCount) async {
       if (idx < 0 || idx >= epochCount) continue;
       final stageStr = entry['stage'] as String?;
       stages[idx] = SleepStage.fromLabel(stageStr);
+      final confidence = entry['confidence'] as num?;
+      if (confidence != null && confidence.toDouble() == 0.0) {
+        stagesUncertain[idx] = true;
+      }
     }
   }
-  return stages;
+  return ScoringLoadResult(stages, stagesUncertain);
+}
+
+List<ScoredEvent> _parseEvents(List<dynamic> annotations) {
+  final events = <ScoredEvent>[];
+  for (final item in annotations) {
+    if (item is! Map<String, dynamic>) continue;
+    final digit = (item['digit'] as num?)?.toInt() ?? 0;
+    final start = (item['start'] as num?)?.toDouble();
+    final end = (item['end'] as num?)?.toDouble();
+    if (start == null || end == null || end <= start) continue;
+    events.add(
+      ScoredEvent(
+        digit: digit,
+        key: item['key'] as String? ?? (digit == 0 ? 'A' : 'F$digit'),
+        label:
+            item['event'] as String? ??
+            (digit == 0 ? 'Artifact' : 'Event $digit'),
+        startSec: start,
+        endSec: end,
+      ),
+    );
+  }
+  return events;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,7 +215,7 @@ Future<List<SleepStage>> _loadJsonScoring(String path, int epochCount) async {
 
 /// Show a file picker and import a scoring file. Returns the parsed stages list,
 /// or null if cancelled or failed. [onStatus] is called with status messages.
-Future<List<SleepStage>?> importScoringDialog(
+Future<ScoringLoadResult?> importScoringDialog(
   int epochCount,
   String filetype, {
   required void Function(String) onStatus,
@@ -143,9 +235,15 @@ Future<List<SleepStage>?> importScoringDialog(
     case 'vis':
       dialogTitle = 'Load Zurich scoring (.vis)';
       extensions = ['vis'];
+    case 'sleepyland':
+      dialogTitle = 'Load Sleepyland scoring (.annot)';
+      extensions = ['annot'];
+    case 'gssc':
+      dialogTitle = 'Load GSSC scoring (.csv)';
+      extensions = ['csv'];
     default:
       dialogTitle = 'Load scoring file';
-      extensions = ['json', 'txt', 'csv', 'vis'];
+      extensions = ['json', 'txt', 'csv', 'vis', 'annot'];
   }
 
   final result = await FilePicker.pickFiles(
@@ -160,16 +258,28 @@ Future<List<SleepStage>?> importScoringDialog(
   }
 
   try {
-    final stages = await _parseScoringFile(path, filetype, epochCount);
-    onStatus('Loaded scoring from ${_basename(path)} — ${stages.where((s) => s.isScored).length}/${stages.length} epochs scored');
-    return stages;
+    final inferredType = filetype == 'any' ? _inferScoringType(path) : filetype;
+    final loadResult = await _parseScoringFile(path, inferredType, epochCount);
+    onStatus(
+      'Loaded scoring from ${_basename(path)} — ${loadResult.stages.where((s) => s.isScored).length}/${loadResult.stages.length} epochs scored',
+    );
+    return loadResult;
   } catch (e) {
     onStatus('Failed to load scoring: $e');
     return null;
   }
 }
 
-Future<List<SleepStage>> _parseScoringFile(
+String _inferScoringType(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.txt')) return 'yasa';
+  if (lower.endsWith('.csv')) return 'sleeptrip';
+  if (lower.endsWith('.vis')) return 'vis';
+  if (lower.endsWith('.annot')) return 'sleepyland';
+  return 'scoringhero';
+}
+
+Future<ScoringLoadResult> _parseScoringFile(
   String path,
   String filetype,
   int epochCount,
@@ -178,11 +288,20 @@ Future<List<SleepStage>> _parseScoringFile(
     case 'scoringhero':
       return _loadJsonScoring(path, epochCount);
     case 'yasa':
-      return _loadYasaScoring(path, epochCount);
+      final stages = await _loadYasaScoring(path, epochCount);
+      return ScoringLoadResult(stages, List.filled(stages.length, false));
     case 'sleeptrip':
-      return _loadSleetripScoring(path, epochCount);
+      final stages = await _loadSleetripScoring(path, epochCount);
+      return ScoringLoadResult(stages, List.filled(stages.length, false));
     case 'vis':
-      return _loadVisScoring(path, epochCount);
+      final stages = await _loadVisScoring(path, epochCount);
+      return ScoringLoadResult(stages, List.filled(stages.length, false));
+    case 'sleepyland':
+      final stages = await _loadSleepylandScoring(path, epochCount);
+      return ScoringLoadResult(stages, List.filled(stages.length, false));
+    case 'gssc':
+      final stages = await _loadGsscScoring(path, epochCount);
+      return ScoringLoadResult(stages, List.filled(stages.length, false));
     default:
       throw UnsupportedError('Unknown scoring format: $filetype');
   }
@@ -230,12 +349,18 @@ SleepStage _stageFromYasaLabel(String label) {
 // Sleeptrip CSV format (.csv — has "stage" column)
 // ─────────────────────────────────────────────────────────────────────────────
 
-Future<List<SleepStage>> _loadSleetripScoring(String path, int epochCount) async {
+Future<List<SleepStage>> _loadSleetripScoring(
+  String path,
+  int epochCount,
+) async {
   final lines = (await File(path).readAsString()).split('\n');
   if (lines.isEmpty) return List.filled(epochCount, SleepStage.unknown);
 
   // Find header row
-  final header = lines[0].split(',').map((h) => h.trim().toLowerCase()).toList();
+  final header = lines[0]
+      .split(',')
+      .map((h) => h.trim().toLowerCase())
+      .toList();
   final stageCol = header.indexOf('stage');
   if (stageCol < 0) throw FormatException('No "stage" column in Sleeptrip CSV');
 
@@ -273,6 +398,58 @@ Future<List<SleepStage>> _loadVisScoring(String path, int epochCount) async {
   return stages;
 }
 
+Future<List<SleepStage>> _loadSleepylandScoring(
+  String path,
+  int epochCount,
+) async {
+  final lines = (await File(path).readAsString()).split('\n');
+  final stages = List.filled(epochCount, SleepStage.unknown);
+  var row = 0;
+  for (final line in lines.skip(1)) {
+    if (row >= epochCount) break;
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final parts = trimmed.split('\t');
+    if (parts.length < 2) continue;
+    stages[row] = _stageFromYasaLabel(parts[1].trim());
+    row++;
+  }
+  return stages;
+}
+
+Future<List<SleepStage>> _loadGsscScoring(String path, int epochCount) async {
+  final lines = (await File(path).readAsString()).split('\n');
+  final stages = List.filled(epochCount, SleepStage.unknown);
+  var row = 0;
+  SleepStage? lastScored;
+  for (final line in lines.skip(1)) {
+    if (row >= epochCount) break;
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final parts = trimmed.split(',');
+    if (parts.length < 3 || parts[0] == 'Epoch') continue;
+    final code = int.tryParse(parts[2].trim());
+    if (code == null) continue;
+    final stage = switch (code) {
+      0 => SleepStage.wake,
+      1 => SleepStage.n1,
+      2 => SleepStage.n2,
+      3 => SleepStage.n3,
+      4 => SleepStage.rem,
+      _ => SleepStage.unknown,
+    };
+    stages[row] = stage;
+    if (stage != SleepStage.unknown) lastScored = stage;
+    row++;
+  }
+  if (lastScored != null) {
+    for (var i = row; i < epochCount; i++) {
+      stages[i] = lastScored;
+    }
+  }
+  return stages;
+}
+
 bool _isDigitStr(String c) => c.codeUnitAt(0) >= 48 && c.codeUnitAt(0) <= 57;
 
 SleepStage _stageFromVisCode(int code) {
@@ -301,9 +478,10 @@ Future<void> exportScoringDialog(
   List<SleepStage> stages,
   int epochSeconds,
   String? activePath, {
+  List<ScoredEvent> events = const [],
+  List<bool>? stagesUncertain,
   required void Function(String) onStatus,
 }) async {
-  final formats = ['ScoringHero JSON (.json)', 'YASA (.txt)', 'Sleeptrip (.csv)', 'Zurich (.vis)'];
   final ext = ['json', 'txt', 'csv', 'vis'];
 
   String? savePath = await FilePicker.saveFile(
@@ -327,7 +505,15 @@ Future<void> exportScoringDialog(
   if (!savePath.contains('.')) savePath = '$savePath.json';
 
   try {
-    await _writeScoringFile(savePath, stages, epochSeconds, filetype, activePath);
+    await _writeScoringFile(
+      savePath,
+      stages,
+      epochSeconds,
+      filetype,
+      activePath,
+      events,
+      stagesUncertain: stagesUncertain,
+    );
     onStatus('Saved scoring to ${_basename(savePath)}');
   } catch (e) {
     onStatus('Failed to save: $e');
@@ -340,10 +526,19 @@ Future<void> _writeScoringFile(
   int epochSeconds,
   String filetype,
   String? activePath,
-) async {
+  List<ScoredEvent> events, {
+  List<bool>? stagesUncertain,
+}) async {
   switch (filetype) {
     case 'scoringhero':
-      await _writeJsonScoring(path, stages, epochSeconds, activePath ?? path);
+      await _writeJsonScoring(
+        path,
+        stages,
+        epochSeconds,
+        activePath ?? path,
+        events: events,
+        stagesUncertain: stagesUncertain,
+      );
     case 'yasa':
       await _writeYasa(path, stages);
     case 'sleeptrip':
@@ -356,12 +551,18 @@ Future<void> _writeScoringFile(
 Future<void> _writeYasa(String path, List<SleepStage> stages) async {
   final lines = stages.map((s) {
     switch (s) {
-      case SleepStage.wake: return 'W';
-      case SleepStage.n1: return 'N1';
-      case SleepStage.n2: return 'N2';
-      case SleepStage.n3: return 'N3';
-      case SleepStage.rem: return 'R';
-      default: return 'W'; // export unscored as Wake to avoid blank lines
+      case SleepStage.wake:
+        return 'W';
+      case SleepStage.n1:
+        return 'N1';
+      case SleepStage.n2:
+        return 'N2';
+      case SleepStage.n3:
+        return 'N3';
+      case SleepStage.rem:
+        return 'R';
+      default:
+        return 'W'; // export unscored as Wake to avoid blank lines
     }
   });
   await File(path).writeAsString(lines.join('\n'));
@@ -383,12 +584,18 @@ Future<void> _writeSleeptrip(
 Future<void> _writeVis(String path, List<SleepStage> stages) async {
   final codes = stages.map((s) {
     switch (s) {
-      case SleepStage.wake: return 0;
-      case SleepStage.n1: return 1;
-      case SleepStage.n2: return 2;
-      case SleepStage.n3: return 3;
-      case SleepStage.rem: return 5;
-      default: return 8;
+      case SleepStage.wake:
+        return 0;
+      case SleepStage.n1:
+        return 1;
+      case SleepStage.n2:
+        return 2;
+      case SleepStage.n3:
+        return 3;
+      case SleepStage.rem:
+        return 5;
+      default:
+        return 8;
     }
   });
   await File(path).writeAsString(codes.join('\n'));
@@ -401,4 +608,10 @@ Future<void> _writeVis(String path, List<SleepStage> stages) async {
 String _basename(String path) {
   final sep = Platform.pathSeparator;
   return path.split(sep).last;
+}
+
+class ScoringLoadResult {
+  final List<SleepStage> stages;
+  final List<bool> stagesUncertain;
+  ScoringLoadResult(this.stages, this.stagesUncertain);
 }

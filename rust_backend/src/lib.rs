@@ -5,6 +5,8 @@ use std::path::Path;
 use std::ptr;
 
 mod morlet;
+pub mod edf;
+pub mod spectrogram;
 
 #[repr(C)]
 pub struct SleepEegPoint {

@@ -1,12 +1,13 @@
 // lib/src/config_dialog.dart
 //
-// Minimal configuration dialog — subset of ScoringHero-0.2.4 configurationWindow.py.
-// Allows choosing the spectrogram channel, amplitude scale, and TF frequency range.
+// Configuration dialog matching PyQt sleep EEG app's multi-tab layout.
+//
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'eeg_backend.dart';
+import 'models.dart';
 
 class ConfigDialog extends StatefulWidget {
   const ConfigDialog({
@@ -14,11 +15,13 @@ class ConfigDialog extends StatefulWidget {
     required this.config,
     required this.channelLabels,
     required this.onApply,
+    this.onPreview,
   });
 
   final AppConfig config;
   final List<String> channelLabels;
   final void Function(AppConfig) onApply;
+  final void Function(AppConfig)? onPreview;
 
   @override
   State<ConfigDialog> createState() => _ConfigDialogState();
@@ -26,18 +29,27 @@ class ConfigDialog extends StatefulWidget {
 
 class _ConfigDialogState extends State<ConfigDialog> {
   late AppConfig _working;
+  bool _applyAllChannels = false;
 
   // Text controllers
   late final TextEditingController _amplCtrl;
+  late final TextEditingController _distanceCtrl;
+  late final TextEditingController _referenceCtrl;
   late final TextEditingController _tfMinCtrl;
   late final TextEditingController _tfMaxCtrl;
+  late final TextEditingController _tfPowerMinCtrl;
+  late final TextEditingController _tfPowerMaxCtrl;
   late final TextEditingController _spectMinCtrl;
   late final TextEditingController _spectMaxCtrl;
+  late final TextEditingController _spectFreqMinCtrl;
+  late final TextEditingController _spectFreqMaxCtrl;
+  late final TextEditingController _periodFreqMinCtrl;
+  late final TextEditingController _periodFreqMaxCtrl;
 
   @override
   void initState() {
     super.initState();
-    // Deep-copy the config so edits don't affect the live config
+    // Copy the configuration fields
     _working = AppConfig(
       spectrogramChannelIndex: widget.config.spectrogramChannelIndex,
       periodogramChannelIndex: widget.config.periodogramChannelIndex,
@@ -45,11 +57,43 @@ class _ConfigDialogState extends State<ConfigDialog> {
       amplitudeRangeUv: widget.config.amplitudeRangeUv,
       tfFreqMin: widget.config.tfFreqMin,
       tfFreqMax: widget.config.tfFreqMax,
+      spectrogramFreqMin: widget.config.spectrogramFreqMin,
+      spectrogramFreqMax: widget.config.spectrogramFreqMax,
+      periodogramFreqMin: widget.config.periodogramFreqMin,
+      periodogramFreqMax: widget.config.periodogramFreqMax,
       spectrogramPowerMin: widget.config.spectrogramPowerMin,
       spectrogramPowerMax: widget.config.spectrogramPowerMax,
+      tfEnabled: widget.config.tfEnabled,
+      tfDisplayMode: widget.config.tfDisplayMode,
+      tfFrequencyScale: widget.config.tfFrequencyScale,
+      tfShowRidge: widget.config.tfShowRidge,
+      tfPowerMin: widget.config.tfPowerMin,
+      tfPowerMax: widget.config.tfPowerMax,
+      stackChannels: widget.config.stackChannels,
+      robustZStandardize: widget.config.robustZStandardize,
+      periodogramDisplayMode: widget.config.periodogramDisplayMode,
+      eegPanelTimeUnit: widget.config.eegPanelTimeUnit,
+      distanceBetweenChannelsUv: widget.config.distanceBetweenChannelsUv,
+      referenceAmplitudeLineUv: widget.config.referenceAmplitudeLineUv,
+      channels: widget.config.channels.isNotEmpty
+          ? widget.config.channels.map((c) => c.copy()).toList()
+          : widget.channelLabels
+                .asMap()
+                .entries
+                .map(
+                  (entry) =>
+                      ChannelConfig(name: entry.value, sourceIndex: entry.key),
+                )
+                .toList(),
     );
     _amplCtrl = TextEditingController(
       text: _working.amplitudeRangeUv.toStringAsFixed(1),
+    );
+    _distanceCtrl = TextEditingController(
+      text: _working.distanceBetweenChannelsUv.toStringAsFixed(1),
+    );
+    _referenceCtrl = TextEditingController(
+      text: _working.referenceAmplitudeLineUv.toStringAsFixed(1),
     );
     _tfMinCtrl = TextEditingController(
       text: _working.tfFreqMin.toStringAsFixed(2),
@@ -57,129 +101,649 @@ class _ConfigDialogState extends State<ConfigDialog> {
     _tfMaxCtrl = TextEditingController(
       text: _working.tfFreqMax.toStringAsFixed(1),
     );
+    _tfPowerMinCtrl = TextEditingController(
+      text: _working.tfPowerMin.toStringAsFixed(1),
+    );
+    _tfPowerMaxCtrl = TextEditingController(
+      text: _working.tfPowerMax.toStringAsFixed(1),
+    );
     _spectMinCtrl = TextEditingController(
       text: _working.spectrogramPowerMin.toStringAsFixed(1),
     );
     _spectMaxCtrl = TextEditingController(
       text: _working.spectrogramPowerMax.toStringAsFixed(1),
     );
+    _spectFreqMinCtrl = TextEditingController(
+      text: _working.spectrogramFreqMin.toStringAsFixed(0),
+    );
+    _spectFreqMaxCtrl = TextEditingController(
+      text: _working.spectrogramFreqMax.toStringAsFixed(0),
+    );
+    _periodFreqMinCtrl = TextEditingController(
+      text: _working.periodogramFreqMin.toStringAsFixed(0),
+    );
+    _periodFreqMaxCtrl = TextEditingController(
+      text: _working.periodogramFreqMax.toStringAsFixed(0),
+    );
   }
 
   @override
   void dispose() {
     _amplCtrl.dispose();
+    _distanceCtrl.dispose();
+    _referenceCtrl.dispose();
     _tfMinCtrl.dispose();
     _tfMaxCtrl.dispose();
+    _tfPowerMinCtrl.dispose();
+    _tfPowerMaxCtrl.dispose();
     _spectMinCtrl.dispose();
     _spectMaxCtrl.dispose();
+    _spectFreqMinCtrl.dispose();
+    _spectFreqMaxCtrl.dispose();
+    _periodFreqMinCtrl.dispose();
+    _periodFreqMaxCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final labels = widget.channelLabels;
-    return AlertDialog(
-      title: const Text('Configuration'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ─── Spectrogram channel ────────────────────────────────────────
-            const _SectionHeader('Spectrogram'),
-            _ChannelDropdown(
-              label: 'Channel',
-              channelLabels: labels,
-              value: _working.spectrogramChannelIndex.clamp(0, labels.length - 1),
-              onChanged: (v) =>
-                  setState(() => _working.spectrogramChannelIndex = v),
-            ),
-            _NumberRow(
-              label: 'Power min (log₁₀)',
-              controller: _spectMinCtrl,
-              onChanged: (v) =>
-                  _working.spectrogramPowerMin = v ?? _working.spectrogramPowerMin,
-            ),
-            _NumberRow(
-              label: 'Power max (log₁₀)',
-              controller: _spectMaxCtrl,
-              onChanged: (v) =>
-                  _working.spectrogramPowerMax = v ?? _working.spectrogramPowerMax,
-            ),
-
-            const SizedBox(height: 12),
-            const _SectionHeader('Power Spectrum Panel'),
-            _ChannelDropdown(
-              label: 'Channel',
-              channelLabels: labels,
-              value: _working.periodogramChannelIndex.clamp(0, labels.length - 1),
-              onChanged: (v) =>
-                  setState(() => _working.periodogramChannelIndex = v),
-            ),
-
-            const SizedBox(height: 12),
-            const _SectionHeader('Time-Frequency (Morlet)'),
-            _ChannelDropdown(
-              label: 'Channel',
-              channelLabels: labels,
-              value: _working.tfChannelIndex.clamp(0, labels.length - 1),
-              onChanged: (v) => setState(() => _working.tfChannelIndex = v),
-            ),
-            _NumberRow(
-              label: 'Freq min (Hz)',
-              controller: _tfMinCtrl,
-              onChanged: (v) =>
-                  _working.tfFreqMin = v ?? _working.tfFreqMin,
-            ),
-            _NumberRow(
-              label: 'Freq max (Hz)',
-              controller: _tfMaxCtrl,
-              onChanged: (v) =>
-                  _working.tfFreqMax = v ?? _working.tfFreqMax,
-            ),
-
-            const SizedBox(height: 12),
-            const _SectionHeader('EEG Display'),
-            _NumberRow(
-              label: 'Amplitude range (µV ±)',
-              controller: _amplCtrl,
-              onChanged: (v) =>
-                  _working.amplitudeRangeUv = v ?? _working.amplitudeRangeUv,
-            ),
-          ],
+    final labels = _working.channels.map((channel) => channel.name).toList();
+    return DefaultTabController(
+      length: 6,
+      child: AlertDialog(
+        title: const Text('Configuration Window'),
+        contentPadding: EdgeInsets.zero,
+        content: SizedBox(
+          width: 980,
+          height: 600,
+          child: Column(
+            children: [
+              const TabBar(
+                labelColor: Colors.blue,
+                unselectedLabelColor: Colors.black54,
+                indicatorColor: Colors.blue,
+                tabs: [
+                  Tab(text: 'Configuration'),
+                  Tab(text: 'Channels'),
+                  Tab(text: 'Events'),
+                  Tab(text: 'Spectrogram'),
+                  Tab(text: 'Periodogram'),
+                  Tab(text: 'Wavelet'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    // Tab 1: General Settings
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _NumberRow(
+                            label: 'Amplitude range (µV ±)',
+                            controller: _amplCtrl,
+                            onChanged: (v) => _working.amplitudeRangeUv =
+                                v ?? _working.amplitudeRangeUv,
+                          ),
+                          _NumberRow(
+                            label: 'Vertical distance between channels (µV)',
+                            controller: _distanceCtrl,
+                            onChanged: (v) =>
+                                _working.distanceBetweenChannelsUv =
+                                    v ?? _working.distanceBetweenChannelsUv,
+                          ),
+                          _NumberRow(
+                            label: 'Reference amplitude line (µV)',
+                            controller: _referenceCtrl,
+                            onChanged: (v) =>
+                                _working.referenceAmplitudeLineUv =
+                                    v ?? _working.referenceAmplitudeLineUv,
+                          ),
+                          _StringDropdown(
+                            label: 'EEG time unit in',
+                            value: _working.eegPanelTimeUnit,
+                            options: const ['Seconds', 'Minutes', 'Hours'],
+                            onChanged: (v) =>
+                                setState(() => _working.eegPanelTimeUnit = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tab 2: Per-channel display settings
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    'Apply changes to all channels',
+                                  ),
+                                  value: _applyAllChannels,
+                                  onChanged: (v) {
+                                    setState(
+                                      () => _applyAllChannels = v ?? false,
+                                    );
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Stack channels'),
+                                  value: _working.stackChannels,
+                                  onChanged: (v) {
+                                    setState(
+                                      () => _working.stackChannels = v ?? false,
+                                    );
+                                    _preview();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    'Select/deselect all channels',
+                                  ),
+                                  value: _working.channels.every(
+                                    (c) => c.displayOnScreen,
+                                  ),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      for (final channel in _working.channels) {
+                                        channel.displayOnScreen = v ?? true;
+                                      }
+                                    });
+                                    _preview();
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    'Robustly z-standardize channels',
+                                  ),
+                                  value: _working.robustZStandardize,
+                                  onChanged: (v) {
+                                    setState(
+                                      () => _working.robustZStandardize =
+                                          v ?? false,
+                                    );
+                                    _preview();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const _ChannelHeaderRow(),
+                          for (var i = 0; i < _working.channels.length; i++)
+                            _ChannelConfigTile(
+                              key: ValueKey(_working.channels[i]),
+                              index: i,
+                              config: _working.channels[i],
+                              allChannels: _working.channels,
+                              applyAllChannels: _applyAllChannels,
+                              onApplyAll: (updater) {
+                                setState(() {
+                                  for (final channel in _working.channels) {
+                                    updater(channel);
+                                  }
+                                });
+                                _preview();
+                              },
+                              onMoveUp: i == 0
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        final channel = _working.channels
+                                            .removeAt(i);
+                                        _working.channels.insert(
+                                          i - 1,
+                                          channel,
+                                        );
+                                      });
+                                      _preview();
+                                    },
+                              onMoveDown: i == _working.channels.length - 1
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        final channel = _working.channels
+                                            .removeAt(i);
+                                        _working.channels.insert(
+                                          i + 1,
+                                          channel,
+                                        );
+                                      });
+                                      _preview();
+                                    },
+                              onChanged: () {
+                                setState(() {});
+                                _preview();
+                              },
+                              onRemove: () {
+                                setState(() {
+                                  final removed = _working.channels.removeAt(i);
+                                  for (final channel in _working.channels) {
+                                    if (channel.reReference == removed.name) {
+                                      channel.reReference = 'None';
+                                    }
+                                  }
+                                });
+                                _preview();
+                              },
+                            ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add re-referenced channel'),
+                              onPressed: _showAddChannelDialog,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tab 3: Events
+                    const SingleChildScrollView(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Event labels and colors are available from the Events menu. Draw one or more boxes on the signal panel, then press A or F1-F12 to create events.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    // Tab 4: Spectrogram Settings
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _ChannelDropdown(
+                            label: 'Channel',
+                            channelLabels: labels,
+                            value: _working.spectrogramChannelIndex.clamp(
+                              0,
+                              labels.length - 1,
+                            ),
+                            onChanged: (v) => setState(
+                              () => _working.spectrogramChannelIndex = v,
+                            ),
+                          ),
+                          _NumberRow(
+                            label: 'Frequency min (Hz)',
+                            controller: _spectFreqMinCtrl,
+                            onChanged: (v) => _working.spectrogramFreqMin =
+                                v ?? _working.spectrogramFreqMin,
+                          ),
+                          _NumberRow(
+                            label: 'Frequency max (Hz)',
+                            controller: _spectFreqMaxCtrl,
+                            onChanged: (v) => _working.spectrogramFreqMax =
+                                v ?? _working.spectrogramFreqMax,
+                          ),
+                          _NumberRow(
+                            label: 'Power min (log₁₀)',
+                            controller: _spectMinCtrl,
+                            onChanged: (v) => _working.spectrogramPowerMin =
+                                v ?? _working.spectrogramPowerMin,
+                          ),
+                          _NumberRow(
+                            label: 'Power max (log₁₀)',
+                            controller: _spectMaxCtrl,
+                            onChanged: (v) => _working.spectrogramPowerMax =
+                                v ?? _working.spectrogramPowerMax,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tab 5: Periodogram Settings
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _ChannelDropdown(
+                            label: 'Channel',
+                            channelLabels: labels,
+                            value: _working.periodogramChannelIndex.clamp(
+                              0,
+                              labels.length - 1,
+                            ),
+                            onChanged: (v) => setState(
+                              () => _working.periodogramChannelIndex = v,
+                            ),
+                          ),
+                          _NumberRow(
+                            label: 'Frequency min (Hz)',
+                            controller: _periodFreqMinCtrl,
+                            onChanged: (v) => _working.periodogramFreqMin =
+                                v ?? _working.periodogramFreqMin,
+                          ),
+                          _NumberRow(
+                            label: 'Frequency max (Hz)',
+                            controller: _periodFreqMaxCtrl,
+                            onChanged: (v) => _working.periodogramFreqMax =
+                                v ?? _working.periodogramFreqMax,
+                          ),
+                          _StringDropdown(
+                            label: 'Display mode',
+                            value: _working.periodogramDisplayMode,
+                            options: const ['Raw Power', 'dB', '1/f Removed'],
+                            onChanged: (v) => setState(
+                              () => _working.periodogramDisplayMode = v,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tab 6: Wavelet (Time-Frequency) Settings
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            title: const Text(
+                              'Enable Time-Frequency Panel',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                            value: _working.tfEnabled,
+                            onChanged: (v) =>
+                                setState(() => _working.tfEnabled = v),
+                          ),
+                          if (_working.tfEnabled) ...[
+                            _ChannelDropdown(
+                              label: 'Channel',
+                              channelLabels: labels,
+                              value: _working.tfChannelIndex.clamp(
+                                0,
+                                labels.length - 1,
+                              ),
+                              onChanged: (v) =>
+                                  setState(() => _working.tfChannelIndex = v),
+                            ),
+                            _StringDropdown(
+                              label: 'Frequency scale',
+                              value: _working.tfFrequencyScale,
+                              options: const ['Logarithmic', 'Linear'],
+                              onChanged: (v) =>
+                                  setState(() => _working.tfFrequencyScale = v),
+                            ),
+                            _NumberRow(
+                              label: 'Freq min (Hz)',
+                              controller: _tfMinCtrl,
+                              onChanged: (v) =>
+                                  _working.tfFreqMin = v ?? _working.tfFreqMin,
+                            ),
+                            _NumberRow(
+                              label: 'Freq max (Hz)',
+                              controller: _tfMaxCtrl,
+                              onChanged: (v) =>
+                                  _working.tfFreqMax = v ?? _working.tfFreqMax,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 160,
+                                    child: Text(
+                                      'Display mode',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _working.tfDisplayMode,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'Raw Power',
+                                          child: Text(
+                                            'Raw Power',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'L2-Normalized Power',
+                                          child: Text(
+                                            'L2-Normalized Power',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'dB (median baseline)',
+                                          child: Text(
+                                            'dB (median baseline)',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'Z-Standardized Power',
+                                          child: Text(
+                                            'Z-Standardized Power',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (v) {
+                                        if (v != null) {
+                                          setState(
+                                            () => _working.tfDisplayMode = v,
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _NumberRow(
+                              label: 'Scale min',
+                              controller: _tfPowerMinCtrl,
+                              onChanged: (v) => _working.tfPowerMin =
+                                  v ?? _working.tfPowerMin,
+                            ),
+                            _NumberRow(
+                              label: 'Scale max',
+                              controller: _tfPowerMaxCtrl,
+                              onChanged: (v) => _working.tfPowerMax =
+                                  v ?? _working.tfPowerMax,
+                            ),
+                            CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Show ridge'),
+                              value: _working.tfShowRidge,
+                              onChanged: (v) => setState(
+                                () => _working.tfShowRidge = v ?? false,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              widget.onApply(_working);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Apply'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            widget.onApply(_working);
-            Navigator.of(context).pop();
+    );
+  }
+
+  Future<void> _showAddChannelDialog() async {
+    if (_working.channels.length < 2) return;
+    var source = _working.channels.first.name;
+    var reference = _working.channels[1].name;
+    final added = await showDialog<ChannelConfig>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Add Re-referenced Channel'),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Create a new channel as Channel A - Channel B',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: source,
+                      decoration: const InputDecoration(
+                        labelText: 'Channel A',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final channel in _working.channels)
+                          DropdownMenuItem(
+                            value: channel.name,
+                            child: Text(channel.name),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() => source = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: reference,
+                      decoration: const InputDecoration(
+                        labelText: 'Channel B',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final channel in _working.channels)
+                          DropdownMenuItem(
+                            value: channel.name,
+                            child: Text(channel.name),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() => reference = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: source == reference
+                      ? null
+                      : () {
+                          final sourceCfg = _working.channels.firstWhere(
+                            (channel) => channel.name == source,
+                          );
+                          Navigator.of(context).pop(
+                            ChannelConfig(
+                              name: '$source-$reference',
+                              sourceIndex: sourceCfg.sourceIndex,
+                              derived: true,
+                              sourceChannel: source,
+                              reReference: reference,
+                              color: sourceCfg.color,
+                            ),
+                          );
+                        },
+                  child: const Text('Add Channel'),
+                ),
+              ],
+            );
           },
-          child: const Text('Apply'),
-        ),
-      ],
+        );
+      },
+    );
+    if (added == null) return;
+    setState(() {
+      _working.channels.add(added);
+    });
+    _preview();
+  }
+
+  void _preview() {
+    widget.onPreview?.call(_copyConfig(_working));
+  }
+
+  AppConfig _copyConfig(AppConfig cfg) {
+    return AppConfig(
+      spectrogramChannelIndex: cfg.spectrogramChannelIndex,
+      periodogramChannelIndex: cfg.periodogramChannelIndex,
+      tfChannelIndex: cfg.tfChannelIndex,
+      amplitudeRangeUv: cfg.amplitudeRangeUv,
+      tfFreqMin: cfg.tfFreqMin,
+      tfFreqMax: cfg.tfFreqMax,
+      spectrogramFreqMin: cfg.spectrogramFreqMin,
+      spectrogramFreqMax: cfg.spectrogramFreqMax,
+      periodogramFreqMin: cfg.periodogramFreqMin,
+      periodogramFreqMax: cfg.periodogramFreqMax,
+      spectrogramPowerMin: cfg.spectrogramPowerMin,
+      spectrogramPowerMax: cfg.spectrogramPowerMax,
+      tfEnabled: cfg.tfEnabled,
+      tfDisplayMode: cfg.tfDisplayMode,
+      tfFrequencyScale: cfg.tfFrequencyScale,
+      tfShowRidge: cfg.tfShowRidge,
+      tfPowerMin: cfg.tfPowerMin,
+      tfPowerMax: cfg.tfPowerMax,
+      stackChannels: cfg.stackChannels,
+      robustZStandardize: cfg.robustZStandardize,
+      periodogramDisplayMode: cfg.periodogramDisplayMode,
+      eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+      distanceBetweenChannelsUv: cfg.distanceBetweenChannelsUv,
+      referenceAmplitudeLineUv: cfg.referenceAmplitudeLineUv,
+      channels: cfg.channels.map((c) => c.copy()).toList(),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          text,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-        ),
-      );
-}
 
 class _ChannelDropdown extends StatelessWidget {
   const _ChannelDropdown({
@@ -209,13 +773,15 @@ class _ChannelDropdown extends StatelessWidget {
           ),
           Expanded(
             child: DropdownButtonFormField<int>(
-              value: value,
+              initialValue: value,
               isExpanded: true,
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
               ),
               items: [
                 for (var i = 0; i < channelLabels.length; i++)
@@ -263,21 +829,966 @@ class _NumberRow extends StatelessWidget {
           Expanded(
             child: TextFormField(
               controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true, signed: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(
-                  RegExp(r'^-?\d*\.?\d*'),
-                ),
+                FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
               ],
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
               ),
               style: const TextStyle(fontSize: 12),
               onChanged: (v) => onChanged(double.tryParse(v)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChannelHeaderRow extends StatelessWidget {
+  const _ChannelHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(fontSize: 12, fontWeight: FontWeight.w700);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFDDDDDD))),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(width: 36, child: Text('#', style: style)),
+          SizedBox(width: 48),
+          Expanded(flex: 2, child: Text('Channel', style: style)),
+          SizedBox(width: 72, child: Text('Scale', style: style)),
+          SizedBox(width: 72, child: Text('Shift', style: style)),
+          SizedBox(width: 110, child: Text('Color', style: style)),
+          Expanded(child: Text('Re-reference', style: style)),
+          SizedBox(width: 64, child: Text('Flip', style: style)),
+          SizedBox(width: 42),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChannelConfigTile extends StatelessWidget {
+  const _ChannelConfigTile({
+    super.key,
+    required this.index,
+    required this.config,
+    required this.allChannels,
+    required this.applyAllChannels,
+    required this.onApplyAll,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final int index;
+  final ChannelConfig config;
+  final List<ChannelConfig> allChannels;
+  final bool applyAllChannels;
+  final void Function(void Function(ChannelConfig channel)) onApplyAll;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFD0D0D0)),
+        color: const Color(0xFFFAFAFA),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: Text(
+                  '${index + 1}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.drag_indicator, size: 18, color: Colors.black54),
+              SizedBox(
+                width: 32,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: onMoveUp,
+                      child: Icon(
+                        Icons.keyboard_arrow_up,
+                        size: 16,
+                        color: onMoveUp == null
+                            ? Colors.black26
+                            : Colors.black54,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: onMoveDown,
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: onMoveDown == null
+                            ? Colors.black26
+                            : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Checkbox(
+                value: config.displayOnScreen,
+                onChanged: (v) {
+                  config.displayOnScreen = v ?? true;
+                  onChanged();
+                },
+              ),
+              Expanded(
+                child: TextFormField(
+                  initialValue: config.name,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onChanged: (v) {
+                    config.name = v;
+                    onChanged();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _validColor(config.color),
+                items: const [
+                  DropdownMenuItem(value: 'Black', child: Text('Black')),
+                  DropdownMenuItem(value: 'Blue', child: Text('Blue')),
+                  DropdownMenuItem(value: 'Green', child: Text('Green')),
+                  DropdownMenuItem(value: 'Magenta', child: Text('Magenta')),
+                  DropdownMenuItem(value: 'Orange', child: Text('Orange')),
+                  DropdownMenuItem(value: 'Cyan', child: Text('Cyan')),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  if (applyAllChannels) {
+                    onApplyAll((channel) => channel.color = v);
+                  } else {
+                    config.color = v;
+                    onChanged();
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              const Text('Flip', style: TextStyle(fontSize: 12)),
+              Checkbox(
+                value: config.flipPolarity,
+                onChanged: (v) {
+                  config.flipPolarity = v ?? false;
+                  onChanged();
+                },
+              ),
+              IconButton(
+                tooltip: 'Remove from display',
+                icon: const Icon(Icons.delete_outline, size: 18),
+                onPressed: onRemove,
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _InlineNumberField(
+                  label: 'Scale %',
+                  value: config.scalingFactor,
+                  onChanged: (v) {
+                    final value = v ?? config.scalingFactor;
+                    if (applyAllChannels) {
+                      onApplyAll((channel) => channel.scalingFactor = value);
+                    } else {
+                      config.scalingFactor = value;
+                      onChanged();
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _InlineNumberField(
+                  label: 'Vertical shift',
+                  value: config.verticalShift,
+                  onChanged: (v) {
+                    final value = v ?? config.verticalShift;
+                    if (applyAllChannels) {
+                      onApplyAll((channel) => channel.verticalShift = value);
+                    } else {
+                      config.verticalShift = value;
+                      onChanged();
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _validReference(config.reReference),
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Re-reference',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 'None', child: Text('None')),
+                    for (final channel in allChannels)
+                      if (!identical(channel, config))
+                        DropdownMenuItem(
+                          value: channel.name,
+                          child: Text(
+                            channel.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    config.reReference = v;
+                    onChanged();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _validColor(String color) {
+    const colors = {'Black', 'Blue', 'Green', 'Magenta', 'Orange', 'Cyan'};
+    return colors.contains(color) ? color : 'Black';
+  }
+
+  String _validReference(String reference) {
+    if (reference == 'None') return 'None';
+    return allChannels.any((c) => c.name == reference) ? reference : 'None';
+  }
+}
+
+class _FilterRow extends StatelessWidget {
+  const _FilterRow({
+    required this.config,
+    required this.applyAllChannels,
+    required this.onApplyAll,
+    required this.onChanged,
+  });
+
+  final ChannelConfig config;
+  final bool applyAllChannels;
+  final void Function(void Function(ChannelConfig channel)) onApplyAll;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(
+          width: 86,
+          child: Text('Filters', style: TextStyle(fontSize: 12)),
+        ),
+        Expanded(
+          child: _CompactFilterGroup(
+            label: 'HP',
+            enabled: config.filterHpEnabled,
+            cutoff: config.filterHpCutoff,
+            order: config.filterHpOrder,
+            onEnabled: (value) =>
+                _update((channel) => channel.filterHpEnabled = value),
+            onCutoff: (value) =>
+                _update((channel) => channel.filterHpCutoff = value),
+            onOrder: (value) =>
+                _update((channel) => channel.filterHpOrder = value),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _CompactFilterGroup(
+            label: 'LP',
+            enabled: config.filterLpEnabled,
+            cutoff: config.filterLpCutoff,
+            order: config.filterLpOrder,
+            onEnabled: (value) =>
+                _update((channel) => channel.filterLpEnabled = value),
+            onCutoff: (value) =>
+                _update((channel) => channel.filterLpCutoff = value),
+            onOrder: (value) =>
+                _update((channel) => channel.filterLpOrder = value),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _CompactFilterGroup(
+            label: 'Notch',
+            enabled: config.filterNotchEnabled,
+            cutoff: config.filterNotchCutoff,
+            order: config.filterNotchOrder,
+            onEnabled: (value) =>
+                _update((channel) => channel.filterNotchEnabled = value),
+            onCutoff: (value) =>
+                _update((channel) => channel.filterNotchCutoff = value),
+            onOrder: (value) =>
+                _update((channel) => channel.filterNotchOrder = value),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _update(void Function(ChannelConfig channel) updater) {
+    if (applyAllChannels) {
+      onApplyAll(updater);
+    } else {
+      updater(config);
+      onChanged();
+    }
+  }
+}
+
+class _CompactFilterGroup extends StatelessWidget {
+  const _CompactFilterGroup({
+    required this.label,
+    required this.enabled,
+    required this.cutoff,
+    required this.order,
+    required this.onEnabled,
+    required this.onCutoff,
+    required this.onOrder,
+  });
+
+  final String label;
+  final bool enabled;
+  final double cutoff;
+  final int order;
+  final void Function(bool value) onEnabled;
+  final void Function(double value) onCutoff;
+  final void Function(int value) onOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Checkbox(
+          visualDensity: VisualDensity.compact,
+          value: enabled,
+          onChanged: (value) => onEnabled(value ?? false),
+        ),
+        SizedBox(width: 46, child: Text(label)),
+        Expanded(
+          child: _CompactNumberField(
+            value: cutoff,
+            decimals: 2,
+            suffix: 'Hz',
+            onChanged: onCutoff,
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 52,
+          child: _CompactNumberField(
+            value: order.toDouble(),
+            decimals: 0,
+            onChanged: (value) => onOrder(value.round().clamp(1, 10)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StringDropdown extends StatelessWidget {
+  const _StringDropdown({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<String> options;
+  final void Function(String value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentValue = options.contains(value) ? value : options.first;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 160,
+            child: Text(label, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: currentValue,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+              ),
+              items: [
+                for (final option in options)
+                  DropdownMenuItem(value: option, child: Text(option)),
+              ],
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineNumberField extends StatefulWidget {
+  const _InlineNumberField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final void Function(double?) onChanged;
+
+  @override
+  State<_InlineNumberField> createState() => _InlineNumberFieldState();
+}
+
+class _InlineNumberFieldState extends State<_InlineNumberField> {
+  late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(1));
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineNumberField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && !_focusNode.hasFocus) {
+      _controller.text = widget.value.toStringAsFixed(1);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: _controller,
+      focusNode: _focusNode,
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: true,
+      ),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
+      ],
+      decoration: InputDecoration(
+        labelText: widget.label,
+        isDense: true,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+      style: const TextStyle(fontSize: 12),
+      onChanged: (v) => widget.onChanged(double.tryParse(v)),
+    );
+  }
+}
+
+class _CompactNumberField extends StatefulWidget {
+  const _CompactNumberField({
+    required this.value,
+    required this.onChanged,
+    this.decimals = 1,
+    this.suffix,
+  });
+
+  final double value;
+  final int decimals;
+  final String? suffix;
+  final void Function(double value) onChanged;
+
+  @override
+  State<_CompactNumberField> createState() => _CompactNumberFieldState();
+}
+
+class _CompactNumberFieldState extends State<_CompactNumberField> {
+  late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.value.toStringAsFixed(widget.decimals),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompactNumberField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.value != widget.value ||
+            oldWidget.decimals != widget.decimals) &&
+        !_focusNode.hasFocus) {
+      _controller.text = widget.value.toStringAsFixed(widget.decimals);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: _controller,
+      focusNode: _focusNode,
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: true,
+      ),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
+      ],
+      decoration: InputDecoration(
+        isDense: true,
+        suffixText: widget.suffix,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      ),
+      style: const TextStyle(fontSize: 12),
+      onChanged: (value) {
+        final parsed = double.tryParse(value);
+        if (parsed != null) widget.onChanged(parsed);
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dedicated Filter Settings Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class FilterDialog extends StatefulWidget {
+  const FilterDialog({
+    super.key,
+    required this.config,
+    required this.channelLabels,
+    required this.onApply,
+  });
+
+  final AppConfig config;
+  final List<String> channelLabels;
+  final void Function(AppConfig) onApply;
+
+  @override
+  State<FilterDialog> createState() => _FilterDialogState();
+}
+
+class _FilterDialogState extends State<FilterDialog> {
+  late AppConfig _working;
+  bool _applyAllChannels = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _working = AppConfig(
+      spectrogramChannelIndex: widget.config.spectrogramChannelIndex,
+      periodogramChannelIndex: widget.config.periodogramChannelIndex,
+      tfChannelIndex: widget.config.tfChannelIndex,
+      amplitudeRangeUv: widget.config.amplitudeRangeUv,
+      tfFreqMin: widget.config.tfFreqMin,
+      tfFreqMax: widget.config.tfFreqMax,
+      spectrogramFreqMin: widget.config.spectrogramFreqMin,
+      spectrogramFreqMax: widget.config.spectrogramFreqMax,
+      periodogramFreqMin: widget.config.periodogramFreqMin,
+      periodogramFreqMax: widget.config.periodogramFreqMax,
+      spectrogramPowerMin: widget.config.spectrogramPowerMin,
+      spectrogramPowerMax: widget.config.spectrogramPowerMax,
+      tfEnabled: widget.config.tfEnabled,
+      tfDisplayMode: widget.config.tfDisplayMode,
+      tfFrequencyScale: widget.config.tfFrequencyScale,
+      tfShowRidge: widget.config.tfShowRidge,
+      tfPowerMin: widget.config.tfPowerMin,
+      tfPowerMax: widget.config.tfPowerMax,
+      stackChannels: widget.config.stackChannels,
+      robustZStandardize: widget.config.robustZStandardize,
+      periodogramDisplayMode: widget.config.periodogramDisplayMode,
+      eegPanelTimeUnit: widget.config.eegPanelTimeUnit,
+      distanceBetweenChannelsUv: widget.config.distanceBetweenChannelsUv,
+      referenceAmplitudeLineUv: widget.config.referenceAmplitudeLineUv,
+      channels: widget.config.channels.map((c) => c.copy()).toList(),
+    );
+  }
+
+  void _propagate(void Function(ChannelConfig) updater) {
+    setState(() {
+      for (final channel in _working.channels) {
+        updater(channel);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Filter Settings'),
+      contentPadding: EdgeInsets.zero,
+      content: SizedBox(
+        width: 960,
+        height: 520,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'ℹ High-pass, low-pass, or notch-filter a given EEG channel using a Chebyshev Type 2 filter. '
+                        'Filters affect only the displayed EEG signal, not any power computations.',
+                        style: TextStyle(fontSize: 12, color: Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            CheckboxListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: const Text('Apply changes to all channels'),
+              value: _applyAllChannels,
+              onChanged: (v) {
+                setState(() {
+                  _applyAllChannels = v ?? false;
+                });
+              },
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: _FilterHeaderRow(),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: ListView.builder(
+                  itemCount: _working.channels.length,
+                  itemBuilder: (context, index) {
+                    return _FilterChannelRow(
+                      index: index,
+                      config: _working.channels[index],
+                      applyAllChannels: _applyAllChannels,
+                      onChanged: () => setState(() {}),
+                      onApplyAll: _propagate,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            widget.onApply(_working);
+            Navigator.of(context).pop();
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilterHeaderRow extends StatelessWidget {
+  const _FilterHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey.shade200,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              'Channel',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              'High-pass Filter',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            flex: 3,
+            child: Text(
+              'Low-pass Filter',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            flex: 3,
+            child: Text(
+              'Notch Filter',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+          SizedBox(width: 16),
+          SizedBox(
+            width: 50,
+            child: Text(
+              'All',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChannelRow extends StatelessWidget {
+  const _FilterChannelRow({
+    required this.index,
+    required this.config,
+    required this.applyAllChannels,
+    required this.onChanged,
+    required this.onApplyAll,
+  });
+
+  final int index;
+  final ChannelConfig config;
+  final bool applyAllChannels;
+  final VoidCallback onChanged;
+  final void Function(void Function(ChannelConfig)) onApplyAll;
+
+  void _update(void Function(ChannelConfig) updater) {
+    if (applyAllChannels) {
+      onApplyAll(updater);
+    } else {
+      updater(config);
+      onChanged();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allChecked =
+        config.filterHpEnabled &&
+        config.filterLpEnabled &&
+        config.filterNotchEnabled;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '${index + 1}  ${config.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+          // HP Filter Group
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _CompactNumberField(
+                    value: config.filterHpCutoff,
+                    suffix: ' Hz',
+                    onChanged: (v) => _update((c) => c.filterHpCutoff = v),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 32,
+                  child: _CompactNumberField(
+                    value: config.filterHpOrder.toDouble(),
+                    decimals: 0,
+                    onChanged:
+                        (v) => _update(
+                          (c) => c.filterHpOrder = v.round().clamp(1, 10),
+                        ),
+                  ),
+                ),
+                Checkbox(
+                  value: config.filterHpEnabled,
+                  onChanged:
+                      (v) => _update((c) => c.filterHpEnabled = v ?? false),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // LP Filter Group
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _CompactNumberField(
+                    value: config.filterLpCutoff,
+                    suffix: ' Hz',
+                    onChanged: (v) => _update((c) => c.filterLpCutoff = v),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 32,
+                  child: _CompactNumberField(
+                    value: config.filterLpOrder.toDouble(),
+                    decimals: 0,
+                    onChanged:
+                        (v) => _update(
+                          (c) => c.filterLpOrder = v.round().clamp(1, 10),
+                        ),
+                  ),
+                ),
+                Checkbox(
+                  value: config.filterLpEnabled,
+                  onChanged:
+                      (v) => _update((c) => c.filterLpEnabled = v ?? false),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Notch Filter Group
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _CompactNumberField(
+                    value: config.filterNotchCutoff,
+                    suffix: ' Hz',
+                    onChanged: (v) => _update((c) => c.filterNotchCutoff = v),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 32,
+                  child: _CompactNumberField(
+                    value: config.filterNotchOrder.toDouble(),
+                    decimals: 0,
+                    onChanged:
+                        (v) => _update(
+                          (c) => c.filterNotchOrder = v.round().clamp(1, 10),
+                        ),
+                  ),
+                ),
+                Checkbox(
+                  value: config.filterNotchEnabled,
+                  onChanged:
+                      (v) => _update((c) => c.filterNotchEnabled = v ?? false),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // All check row-level toggle
+          SizedBox(
+            width: 50,
+            child: Checkbox(
+              value: allChecked,
+              tristate: true,
+              onChanged: (v) {
+                final checked = v ?? false;
+                _update((c) {
+                  c.filterHpEnabled = checked;
+                  c.filterLpEnabled = checked;
+                  c.filterNotchEnabled = checked;
+                });
+              },
             ),
           ),
         ],

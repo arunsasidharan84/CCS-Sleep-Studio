@@ -5,7 +5,7 @@ void main() {
   testWidgets('renders the sleep EEG viewer shell', (tester) async {
     await tester.pumpWidget(const SleepEegApp());
 
-    expect(find.text('Epoch:'), findsOneWidget);
+    expect(find.text('Jump to epoch:'), findsOneWidget);
     expect(find.textContaining('Ready'), findsOneWidget);
   });
 }
