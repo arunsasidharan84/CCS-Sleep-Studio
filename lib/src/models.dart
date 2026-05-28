@@ -235,6 +235,9 @@ class EegViewport {
     this.periodogramFreqMin = 4.0,
     this.periodogramFreqMax = 45.0,
     this.periodogramDisplayMode = '1/f Removed',
+    this.spectrogramFiltered = false,
+    this.periodogramFiltered = false,
+    this.tfFiltered = false,
   });
 
   final double sampleRateHz;
@@ -248,6 +251,11 @@ class EegViewport {
   final double visibleDurationSeconds;
   final double totalDurationSeconds;
   final String sourceDescription;
+
+  // Filter status indicators
+  final bool spectrogramFiltered;
+  final bool periodogramFiltered;
+  final bool tfFiltered;
 
   // Night-level references
   final List<List<double>> spectrogramPower;
@@ -340,6 +348,9 @@ class EegViewport {
     ui.Image? spectrogramImage,
     bool clearSpectrogramImage = false,
     bool clearTfImage = false,
+    bool? spectrogramFiltered,
+    bool? periodogramFiltered,
+    bool? tfFiltered,
   }) {
     return EegViewport(
       sampleRateHz: sampleRateHz,
@@ -354,6 +365,9 @@ class EegViewport {
           visibleDurationSeconds ?? this.visibleDurationSeconds,
       totalDurationSeconds: totalDurationSeconds,
       sourceDescription: sourceDescription,
+      spectrogramFiltered: spectrogramFiltered ?? this.spectrogramFiltered,
+      periodogramFiltered: periodogramFiltered ?? this.periodogramFiltered,
+      tfFiltered: tfFiltered ?? this.tfFiltered,
       spectrogramPower: spectrogramPower,
       spectrogramFreqs: spectrogramFreqs,
       swaPerEpoch: swaPerEpoch,

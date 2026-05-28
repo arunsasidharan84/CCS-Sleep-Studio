@@ -156,8 +156,8 @@ class AppConfig {
     this.tfDisplayMode = 'dB (median baseline)',
     this.tfFrequencyScale = 'Linear',
     this.tfShowRidge = false,
-    this.tfPowerMin = 0.0,
-    this.tfPowerMax = 20.0,
+    this.tfPowerMin = -10.0,
+    this.tfPowerMax = 15.0,
     this.stackChannels = false,
     this.robustZStandardize = false,
     this.periodogramDisplayMode = '1/f Removed',
@@ -376,6 +376,17 @@ class AppConfig {
           tfMin = (limits[0] as num).toDouble();
           tfMax = (limits[1] as num).toDouble();
         }
+      } else {
+        if (tfDisplay == 'Z-Standardized Power') {
+          tfMin = -3.0;
+          tfMax = 5.0;
+        } else if (tfDisplay == 'dB (median baseline)') {
+          tfMin = -10.0;
+          tfMax = 15.0;
+        } else if (tfDisplay == 'L2-Normalized Power' || tfDisplay == 'Raw Power') {
+          tfMin = -6.0;
+          tfMax = 0.0;
+        }
       }
 
       final tfFreqLimits =
@@ -503,18 +514,46 @@ class AppConfig {
 
     for (var i = 0; i < channels.length; i++) {
       final channel = channels[i];
-      if (channel.sourceIndex != null &&
-          channel.sourceIndex! >= 0 &&
-          channel.sourceIndex! < loadedLabels.length) {
-        continue;
-      }
-
       final sourceName = channel.derived
           ? (channel.sourceChannel ?? channel.name)
           : channel.name;
-      final byName = rawNameToIndex[sourceName];
-      final fallback = i < loadedLabels.length ? i : null;
-      channel.sourceIndex = byName ?? fallback;
+
+      // 1. Exact match
+      var byName = rawNameToIndex[sourceName];
+
+      // 2. Case-insensitive and trimmed match
+      if (byName == null) {
+        final normName = sourceName.toLowerCase().trim();
+        for (final entry in rawNameToIndex.entries) {
+          if (entry.key.toLowerCase().trim() == normName) {
+            byName = entry.value;
+            break;
+          }
+        }
+      }
+
+      // 3. Partial match (e.g. "EEG L" matches "EEG L-M2")
+      if (byName == null) {
+        final normName = sourceName.toLowerCase().trim();
+        for (final entry in rawNameToIndex.entries) {
+          final normKey = entry.key.toLowerCase().trim();
+          if (normKey.contains(normName) || normName.contains(normKey)) {
+            byName = entry.value;
+            break;
+          }
+        }
+      }
+
+      if (byName != null) {
+        channel.sourceIndex = byName;
+      } else {
+        // Fallback: keep existing index if valid, otherwise bind to i
+        if (channel.sourceIndex == null ||
+            channel.sourceIndex! < 0 ||
+            channel.sourceIndex! >= loadedLabels.length) {
+          channel.sourceIndex = i < loadedLabels.length ? i : null;
+        }
+      }
     }
 
     if (channels.isNotEmpty) {
@@ -669,9 +708,7 @@ class EegBackend {
             
             final count = sig.sampleCount;
             final samples = Float64List(count);
-            for (var j = 0; j < count; j++) {
-              samples[j] = sig.samples[j];
-            }
+            samples.setAll(0, sig.samples.asTypedList(count));
             channelSamples.add(samples);
           }
           
@@ -735,11 +772,13 @@ class EegBackend {
       raw.channelSamples,
       config,
       spectConfigIndex,
+      applyFilters: true,
     );
     final periodSignal = _fullSignalForConfig(
       raw.channelSamples,
       config,
       periodConfigIndex,
+      applyFilters: true,
     );
     final spectSource = _sourceIndexForConfig(
       _configAt(config, spectConfigIndex, raw.channelSamples.length),
@@ -878,6 +917,10 @@ class EegBackend {
       }
     }
 
+    final spectChCfg = _configAt(cfg, cfg.spectrogramChannelIndex, eeg.channelSamples.length);
+    final periodChCfg = _configAt(cfg, cfg.periodogramChannelIndex, eeg.channelSamples.length);
+    final tfChCfg = _configAt(cfg, cfg.tfChannelIndex, eeg.channelSamples.length);
+
     return EegViewport(
       sampleRateHz: eeg.sampleRateHz,
       epochSeconds: epochSeconds,
@@ -894,6 +937,9 @@ class EegBackend {
       visibleDurationSeconds: displayDurationSec,
       totalDurationSeconds: totalDuration,
       sourceDescription: eeg.sourceDescription,
+      spectrogramFiltered: _hasDisplayFilter(spectChCfg),
+      periodogramFiltered: _hasDisplayFilter(periodChCfg),
+      tfFiltered: _hasDisplayFilter(tfChCfg),
       spectrogramPower: eeg.spectrogramPower,
       spectrogramFreqs: eeg.spectrogramFreqs,
       swaPerEpoch: eeg.swaPerEpoch,
@@ -1103,6 +1149,10 @@ class EegBackend {
       tfImage = _tfImageCache[imageKey] ?? (old.currentEpoch == safeEpoch ? old.tfImage : null);
     }
 
+    final spectChCfg = _configAt(cfg, cfg.spectrogramChannelIndex, eeg.channelSamples.length);
+    final periodChCfg = _configAt(cfg, cfg.periodogramChannelIndex, eeg.channelSamples.length);
+    final tfChCfg = _configAt(cfg, cfg.tfChannelIndex, eeg.channelSamples.length);
+
     return old.copyWith(
       currentEpoch: safeEpoch,
       points: points,
@@ -1127,6 +1177,9 @@ class EegBackend {
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
       spectrogramImage: eeg.spectrogramImage,
+      spectrogramFiltered: _hasDisplayFilter(spectChCfg),
+      periodogramFiltered: _hasDisplayFilter(periodChCfg),
+      tfFiltered: _hasDisplayFilter(tfChCfg),
     );
   }
 
@@ -1418,40 +1471,67 @@ class EegBackend {
     int epoch,
     AppConfig cfg,
   ) {
-    if (eeg.epochPeriodograms.isNotEmpty &&
-        epoch < eeg.epochPeriodograms.length) {
-      // Clamp to configured frequency limit (default 0–45 Hz)
-      final freqs = eeg.spectrogramFreqs;
-      final psd = eeg.epochPeriodograms[epoch];
-      final minFreq = math.max(0.0, cfg.periodogramFreqMin);
-      final maxFreq = math.min(cfg.periodogramFreqMax, eeg.sampleRateHz / 2);
-      final filtered = <double>[];
-      final filteredFreqs = <double>[];
-      for (var i = 0; i < freqs.length && i < psd.length; i++) {
-        if (freqs[i] >= minFreq && freqs[i] <= maxFreq) {
-          filteredFreqs.add(freqs[i]);
-          filtered.add(psd[i]);
-        }
-      }
-      return (filtered, filteredFreqs);
-    }
-    // Fallback: compute on-the-fly
     final periodConfigIndex = _clampConfigIndex(
       cfg.periodogramChannelIndex,
       cfg,
     );
-    final signal = _fullSignalForConfig(
-      eeg.channelSamples,
-      cfg,
-      periodConfigIndex,
-    );
+    final periodCfg = _configAt(cfg, periodConfigIndex, eeg.channelSamples.length);
+    final hasFilters = _hasDisplayFilter(periodCfg);
+
+    // If display filters are active on the periodogram channel, recompute
+    // the PSD from the filtered signal so the periodogram matches the display.
+    if (!hasFilters &&
+        eeg.epochPeriodograms.isNotEmpty &&
+        epoch < eeg.epochPeriodograms.length) {
+      // Use pre-computed (unfiltered) periodograms
+      final freqs = eeg.spectrogramFreqs;
+      final psd = eeg.epochPeriodograms[epoch];
+      final minFreq = math.max(0.0, cfg.periodogramFreqMin);
+      final maxFreq = math.min(cfg.periodogramFreqMax, eeg.sampleRateHz / 2);
+      final filteredPsd = <double>[];
+      final filteredFreqs = <double>[];
+      for (var i = 0; i < freqs.length && i < psd.length; i++) {
+        if (freqs[i] >= minFreq && freqs[i] <= maxFreq) {
+          filteredFreqs.add(freqs[i]);
+          filteredPsd.add(psd[i]);
+        }
+      }
+      return (filteredPsd, filteredFreqs);
+    }
+
+    // Compute from (optionally filtered) signal
     const epochSeconds = 30;
     final srate = eeg.sampleRateHz;
     final start = epoch * (epochSeconds * srate).round();
-    final end = math.min(signal.length, start + (epochSeconds * srate).round());
-    if (start >= signal.length) return ([], []);
-    final (psd, freqs) = sp.welchPsd(signal.sublist(start, end), srate);
-    return (psd, freqs);
+    final end = math.min(
+      eeg.channelSamples.isNotEmpty ? eeg.channelSamples.first.length : 0,
+      start + (epochSeconds * srate).round(),
+    );
+    if (start >= end) return ([], []);
+
+    final segment = _displaySegmentForChannel(
+      eeg.channelSamples,
+      srate,
+      start,
+      end,
+      periodCfg,
+      cfg,
+      applyFilters: hasFilters,
+    );
+    if (segment.length < 4) return ([], []);
+
+    final (psd, freqs) = sp.welchPsd(segment, srate);
+    final minFreq = math.max(0.0, cfg.periodogramFreqMin);
+    final maxFreq = math.min(cfg.periodogramFreqMax, srate / 2);
+    final filteredPsd = <double>[];
+    final filteredFreqs = <double>[];
+    for (var i = 0; i < freqs.length && i < psd.length; i++) {
+      if (freqs[i] >= minFreq && freqs[i] <= maxFreq) {
+        filteredFreqs.add(freqs[i]);
+        filteredPsd.add(psd[i]);
+      }
+    }
+    return (filteredPsd, filteredFreqs);
   }
 
   /// Compute Morlet TF power for one epoch. Returns z-scored log10 power
@@ -1653,8 +1733,9 @@ class EegBackend {
   List<double> _fullSignalForConfig(
     List<List<double>> channels,
     AppConfig cfg,
-    int configIndex,
-  ) {
+    int configIndex, {
+    bool applyFilters = false,
+  }) {
     if (channels.isEmpty) return const [];
     final channelCfg = _configAt(cfg, configIndex, channels.length);
     final sourceIdx = _sourceIndexForConfig(
@@ -1665,7 +1746,7 @@ class EegBackend {
     );
     if (sourceIdx < 0 || sourceIdx >= channels.length) return const [];
     final refIdx = _referenceIndexForConfig(channelCfg, cfg, channels.length);
-    if (refIdx == null && !channelCfg.flipPolarity) {
+    if (refIdx == null && !channelCfg.flipPolarity && !applyFilters) {
       return channels[sourceIdx];
     }
     return _displaySegmentForChannel(
@@ -1675,7 +1756,7 @@ class EegBackend {
       channels[sourceIdx].length,
       channelCfg,
       cfg,
-      applyFilters: false,
+      applyFilters: applyFilters,
     );
   }
 
@@ -1874,13 +1955,14 @@ class EegBackend {
     final List<sp.BiquadSection> sos = [];
 
     if (cfg.filterHpEnabled &&
-        cfg.filterHpCutoff > 0 &&
-        cfg.filterHpCutoff < nyquist) {
+        cfg.filterHpCutoff > 0.01 &&
+        cfg.filterHpCutoff < nyquist - 0.1) {
+      final cutoff = cfg.filterHpCutoff.clamp(0.05, nyquist - 0.5);
       sos.addAll(
         sp.designCheby2SOS(
           order: cfg.filterHpOrder,
           rs: 60.0,
-          cutoff: cfg.filterHpCutoff,
+          cutoff: cutoff,
           sampleRate: sampleRate,
           btype: 'highpass',
         ),
@@ -1888,13 +1970,14 @@ class EegBackend {
     }
 
     if (cfg.filterLpEnabled &&
-        cfg.filterLpCutoff > 0 &&
+        cfg.filterLpCutoff > 0.1 &&
         cfg.filterLpCutoff < nyquist) {
+      final cutoff = cfg.filterLpCutoff.clamp(0.1, nyquist - 0.5);
       sos.addAll(
         sp.designCheby2SOS(
           order: cfg.filterLpOrder,
           rs: 60.0,
-          cutoff: cfg.filterLpCutoff,
+          cutoff: cutoff,
           sampleRate: sampleRate,
           btype: 'lowpass',
         ),
@@ -1904,11 +1987,12 @@ class EegBackend {
     if (cfg.filterNotchEnabled &&
         cfg.filterNotchCutoff > 1.0 &&
         cfg.filterNotchCutoff < nyquist - 1.0) {
+      final cutoff = cfg.filterNotchCutoff.clamp(1.0, nyquist - 1.0);
       sos.addAll(
         sp.designCheby2SOS(
           order: cfg.filterNotchOrder,
           rs: 60.0,
-          cutoff: cfg.filterNotchCutoff,
+          cutoff: cutoff,
           sampleRate: sampleRate,
           btype: 'bandstop',
         ),
@@ -1923,15 +2007,57 @@ class EegBackend {
     List<double> input,
     List<sp.BiquadSection> sos,
   ) {
-    var output = List<double>.from(input);
+    if (input.length < 4) return List<double>.from(input);
+
+    // Reflection-pad the signal to suppress edge transients,
+    // mirroring scipy.signal.filtfilt's approach.
+    // padLen = 3 × number_of_sos_sections (matches 3·order heuristic).
+    final padLen = math.min(input.length - 1, sos.length * 3);
+    final padded = List<double>.filled(input.length + 2 * padLen, 0.0);
+
+    // Reflect-pad the start: mirror the first padLen samples around input[0]
+    final firstVal = input.first;
+    for (var i = 0; i < padLen; i++) {
+      padded[padLen - 1 - i] = 2.0 * firstVal - input[i + 1];
+    }
+    // Copy original signal
+    for (var i = 0; i < input.length; i++) {
+      padded[padLen + i] = input[i];
+    }
+    // Reflect-pad the end: mirror the last padLen samples around input[last]
+    final lastVal = input.last;
+    final n = input.length;
+    for (var i = 0; i < padLen; i++) {
+      padded[padLen + n + i] = 2.0 * lastVal - input[n - 2 - i];
+    }
+
+    // Forward pass
+    var output = padded;
     for (final section in sos) {
+      if (!section.b0.isFinite ||
+          !section.b1.isFinite ||
+          !section.b2.isFinite ||
+          !section.a1.isFinite ||
+          !section.a2.isFinite) {
+        return List<double>.from(input);
+      }
       output = _applyBiquadSection(output, section);
     }
+    // Reverse pass (zero-phase)
     output = output.reversed.toList(growable: false);
     for (final section in sos) {
       output = _applyBiquadSection(output, section);
     }
-    return output.reversed.toList(growable: false);
+    output = output.reversed.toList(growable: false);
+
+    // Trim padding — return only the original-length segment
+    final result = output.sublist(padLen, padLen + input.length);
+    for (final x in result) {
+      if (!x.isFinite) {
+        return List<double>.from(input);
+      }
+    }
+    return result;
   }
 
   List<double> _applyBiquadSection(List<double> input, sp.BiquadSection c) {
@@ -2146,6 +2272,45 @@ class EegBackend {
       return completer.future;
     }
 
+    // Auto-detect the actual data range. If the user-specified [minVal,maxVal]
+    // doesn't overlap the data, fall back to the data's own percentile range
+    // to prevent blank images.
+    double effectiveMin = minVal;
+    double effectiveMax = maxVal;
+    {
+      // Sample values across the power matrix to get the actual range
+      final sampled = <double>[];
+      final step = math.max(1, nTimes ~/ 200); // sample ~200 time points
+      for (var f = 0; f < nFreqs; f += math.max(1, nFreqs ~/ 40)) {
+        final row = tfPower[f];
+        for (var t = 0; t < nTimes; t += step) {
+          final v = row[t];
+          if (v.isFinite) sampled.add(v);
+        }
+      }
+      if (sampled.isNotEmpty) {
+        sampled.sort();
+        final p2 = sampled[(sampled.length * 0.02).floor()];
+        final p98 = sampled[(sampled.length * 0.98).floor().clamp(0, sampled.length - 1)];
+        final dataMin = sampled.first;
+        final dataMax = sampled.last;
+        final dataRange = dataMax - dataMin;
+        
+        final overlapMin = math.max(effectiveMin, dataMin);
+        final overlapMax = math.min(effectiveMax, dataMax);
+        final overlapRange = math.max(0.0, overlapMax - overlapMin);
+        
+        if (overlapRange < 0.15 * dataRange ||
+            (effectiveMax - effectiveMin).abs() < 1e-6 ||
+            (effectiveMin == 0.0 && effectiveMax == 20.0 && dataMax < 6.0)) {
+          // No overlap, degenerate range, or highly compressed default range → auto-range
+          effectiveMin = p2;
+          effectiveMax = math.max(p2 + 1e-6, p98);
+        }
+      }
+    }
+
+    final range = effectiveMax - effectiveMin;
     final pixels = Uint8List(nFreqs * nTimes * 4);
     var pixelIdx = 0;
 
@@ -2154,7 +2319,7 @@ class EegBackend {
       final row = tfPower[flipF];
       for (var t = 0; t < nTimes; t++) {
         final val = row[t];
-        final norm = ((val - minVal) / (maxVal - minVal)).clamp(0.0, 1.0);
+        final norm = ((val - effectiveMin) / range).clamp(0.0, 1.0);
         final idx = (norm * 255).round();
         final color = sp.spectral[idx];
         final argb = color.toARGB32();
@@ -2261,13 +2426,10 @@ List<List<double>> _isolateComputeMorletTf(
 
   if (computeMorlet != null && freeMorlet != null) {
     final signalPtr = calloc<Float>(slice.length);
-    for (var i = 0; i < slice.length; i++) {
-      signalPtr[i] = slice[i];
-    }
+    signalPtr.asTypedList(slice.length).setAll(0, slice);
+
     final freqsPtr = calloc<Float>(freqs.length);
-    for (var i = 0; i < freqs.length; i++) {
-      freqsPtr[i] = freqs[i];
-    }
+    freqsPtr.asTypedList(freqs.length).setAll(0, freqs);
 
     final resultPtr = computeMorlet(
       signalPtr,
@@ -2283,11 +2445,13 @@ List<List<double>> _isolateComputeMorletTf(
 
     if (resultPtr != nullptr) {
       final res = resultPtr.ref;
+      final totalPowerElements = res.nFreqs * res.nSamples;
+      final nativePower = res.power.asTypedList(totalPowerElements);
       final rawPower = List.generate(res.nFreqs, (i) {
-        final row = <double>[];
-        for (var j = 0; j < res.nSamples; j++) {
-          row.add(res.power[i * res.nSamples + j]);
-        }
+        final start = i * res.nSamples;
+        final end = start + res.nSamples;
+        final row = Float64List(res.nSamples);
+        row.setAll(0, nativePower.sublist(start, end));
         return row;
       });
       freeMorlet(resultPtr);
@@ -2329,9 +2493,7 @@ _SpectrogramResultData _isolateComputeSpectrogram(
 
   if (computeSpectrogram != null && freeSpectrogram != null) {
     final signalPtr = calloc<Float>(signal.length);
-    for (var i = 0; i < signal.length; i++) {
-      signalPtr[i] = signal[i];
-    }
+    signalPtr.asTypedList(signal.length).setAll(0, signal);
 
     final resultPtr = computeSpectrogram(
       signalPtr,
@@ -2345,18 +2507,19 @@ _SpectrogramResultData _isolateComputeSpectrogram(
 
     if (resultPtr != nullptr) {
       final res = resultPtr.ref;
+      final totalPowerElements = res.nEpochs * res.nFreqs;
+      final nativePower = res.power.asTypedList(totalPowerElements);
       final power = List.generate(res.nEpochs, (i) {
-        final row = <double>[];
-        for (var j = 0; j < res.nFreqs; j++) {
-          row.add(res.power[i * res.nFreqs + j]);
-        }
+        final start = i * res.nFreqs;
+        final end = start + res.nFreqs;
+        final row = Float64List(res.nFreqs);
+        row.setAll(0, nativePower.sublist(start, end));
         return row;
       });
 
-      final freqs = <double>[];
-      for (var i = 0; i < res.nFreqs; i++) {
-        freqs.add(res.freqs[i]);
-      }
+      final nativeFreqs = res.freqs.asTypedList(res.nFreqs);
+      final freqs = Float64List(res.nFreqs);
+      freqs.setAll(0, nativeFreqs);
 
       freeSpectrogram(resultPtr);
       return _SpectrogramResultData(power, freqs);

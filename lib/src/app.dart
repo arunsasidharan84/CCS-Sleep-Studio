@@ -129,6 +129,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       }
 
       final activeConfig = autoCfg ?? AppConfig.defaultsForChannels(rawEeg.channelLabels, sampleRateHz: rawEeg.sampleRateHz);
+      // ignore: avoid_print
+      print('[ScoringNidra] Config ${autoCfg != null ? "LOADED" : "GENERATED"} '
+            'for ${_basename(path)}: ${activeConfig.channels.length} channels');
       if (autoCfg == null) {
         // Copy user preferences
         activeConfig.amplitudeRangeUv = _config.amplitudeRangeUv;
@@ -154,9 +157,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         activeConfig.referenceAmplitudeLineUv = _config.referenceAmplitudeLineUv;
       }
       activeConfig.bindLoadedChannels(rawEeg.channelLabels);
-      if (autoCfg == null) {
-        await saveAutoConfig(path, activeConfig);
-      }
+      // Always save after binding — persists channel index corrections
+      await saveAutoConfig(path, activeConfig);
 
       // Pre-compute night products. Per-epoch wavelets are computed lazily.
       _setStatus('Computing spectrogram and power summaries…');
@@ -1417,8 +1419,39 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         config: _config,
         channelLabels: v.channelLabels,
         onApply: (newCfg) {
-          _previewDisplayConfig(newCfg);
-          _setStatus('Filters applied');
+          setState(() {
+            _config = newCfg;
+          });
+          if (_activePath != null) {
+            saveAutoConfig(_activePath!, newCfg);
+          }
+          final eeg = _loadedEeg;
+          if (eeg != null) {
+            _backend.clearDisplayCache();
+            _setStatus('Applying filters and updating spectrogram…');
+            Future.microtask(() async {
+              final newEeg = await _backend.computeNightProducts(eeg, newCfg);
+              final newViewport = await _backend.viewportFromEeg(
+                newEeg,
+                currentEpoch: v.currentEpoch,
+                config: newCfg,
+                existingStages: v.stages,
+                existingStagesUncertain: v.stagesUncertain,
+                includeTimeFrequency: false,
+              );
+              setState(() {
+                _loadedEeg = newEeg;
+                _viewport = newViewport;
+                _status = 'Filters applied and spectrogram updated';
+              });
+              if (_config.tfEnabled) {
+                _scheduleTimeFrequencyRefresh(++_navigationSerial);
+              }
+            });
+          } else {
+            _previewDisplayConfig(newCfg);
+            _setStatus('Filters applied');
+          }
         },
       ),
     );
@@ -1655,6 +1688,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               final eeg = _loadedEeg;
               final v = _viewport;
               if (eeg != null && v != null) {
+                _backend.clearDisplayCache();
                 final defaultConfig = AppConfig.defaultsForChannels(
                   eeg.channelLabels,
                   sampleRateHz: eeg.sampleRateHz,

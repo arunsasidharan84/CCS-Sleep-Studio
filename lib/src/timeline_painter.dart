@@ -263,14 +263,16 @@ class SpectrogramPainter extends CustomPainter {
     _drawYAxisLabel(canvas, size, plotH, freqs);
 
     // Channel label
+    final spectChName = viewport.signalChannelLabels.isNotEmpty
+        ? viewport.signalChannelLabels[viewport.spectrogramChannelIndex.clamp(
+            0,
+            viewport.signalChannelLabels.length - 1,
+          )]
+        : 'Ch 1';
+    final labelText = viewport.spectrogramFiltered ? '$spectChName (Filtered)' : spectChName;
     _drawText(
       canvas,
-      viewport.signalChannelLabels.isNotEmpty
-          ? viewport.signalChannelLabels[viewport.spectrogramChannelIndex.clamp(
-              0,
-              viewport.signalChannelLabels.length - 1,
-            )]
-          : 'Ch 1',
+      labelText,
       Offset(_leftPad + drawWidth / 2, 8),
       style: _labelTextStyle,
       align: TextAlign.center,
@@ -795,9 +797,10 @@ class RectanglePowerPainter extends CustomPainter {
             viewport.signalChannelLabels.length - 1,
           )]
         : 'PSD';
+    final labelText = viewport.periodogramFiltered ? '$channelName (Filtered)' : channelName;
     _drawText(
       canvas,
-      channelName,
+      labelText,
       Offset(pad.left + plotW / 2, 5),
       style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
       align: TextAlign.center,
@@ -974,9 +977,10 @@ class TimeFrequencyPainter extends CustomPainter {
             viewport.signalChannelLabels.length - 1,
           )]
         : 'TF';
+    final labelText = viewport.tfFiltered ? '$chLabel (Filtered)' : chLabel;
     _drawText(
       canvas,
-      chLabel,
+      labelText,
       Offset(_leftPad + plotW / 2, 8),
       style: _labelTextStyle,
       align: TextAlign.center,

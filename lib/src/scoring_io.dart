@@ -76,19 +76,49 @@ Future<AppConfig?> tryLoadAutoConfig(String activePath) async {
   final dotIdx = activePath.lastIndexOf('.');
   final base = dotIdx >= 0 ? activePath.substring(0, dotIdx) : activePath;
   final configPath = '$base.config.json';
-  final file = File(configPath);
-  if (!file.existsSync()) return null;
+  var file = File(configPath);
+
+  // Also try an alternative naming convention: base_config.json
+  if (!file.existsSync()) {
+    final altPath = '${base}_config.json';
+    final altFile = File(altPath);
+    if (altFile.existsSync()) {
+      file = altFile;
+    } else {
+      // Filesystem might not have synced yet — retry once after a brief delay
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (file.existsSync()) {
+        // Found after brief delay
+      } else if (altFile.existsSync()) {
+        file = altFile;
+      } else {
+        return null;
+      }
+    }
+  }
+
   try {
     final content = await file.readAsString();
+    if (content.trim().isEmpty) {
+      // ignore: avoid_print
+      print('[ScoringNidra] Config file exists but is empty: ${file.path}');
+      return null;
+    }
     final json = jsonDecode(content);
     if (json is Map<String, dynamic>) {
+      // ignore: avoid_print
+      print('[ScoringNidra] Loaded config (Map format) from: ${file.path}');
       return AppConfig.fromJson(json);
     }
+    // ignore: avoid_print
+    print('[ScoringNidra] Loaded config (Python format) from: ${file.path}');
     return AppConfig.fromPythonJson(json, const []);
-  } catch (e) {
+  } catch (e, stack) {
     // Config load error is non-fatal — log in debug so issues are visible
     // ignore: avoid_print
-    print('[ScoringNidra] Config load error ($configPath): $e');
+    print('[ScoringNidra] Config load error (${file.path}): $e');
+    // ignore: avoid_print
+    print('[ScoringNidra] Stack: $stack');
   }
   return null;
 }
