@@ -1,7 +1,6 @@
 # ScoringNidra
 
-**ScoringNidra** is a high-performance, cross-platform sleep EEG viewer and scorer. It is a modern recreation of the Python-based [ScoringHero](https://github.com/arunsasidharan84/ScoringHero) repository, rebuilt from the ground up using **Flutter** for a premium, high-refresh-rate UI and **Rust** for native-speed signal processing.
-
+**ScoringNidra** is a high-performance, cross-platform sleep EEG viewer and scorer. It is a modern recreation of the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository, rebuilt from the ground up using **Flutter** for a more lightweight and responsive UI and **Rust** for native-speed signal processing.
 
 ---
 
