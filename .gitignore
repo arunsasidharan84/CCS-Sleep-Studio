@@ -14,3 +14,8 @@ rust_backend/target/
 # IDE state
 .idea/
 *.iml
+
+# Gemini/Antigravity artifacts
+brain/
+scratch/
+
