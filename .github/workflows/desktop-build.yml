@@ -69,7 +69,7 @@ jobs:
           name: sleep_eeg_desktop-macos
           path: dist/sleep_eeg_desktop-macos.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   build-windows:
     name: Windows
@@ -130,4 +130,4 @@ jobs:
           name: sleep_eeg_desktop-windows
           path: dist/sleep_eeg_desktop-windows.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
