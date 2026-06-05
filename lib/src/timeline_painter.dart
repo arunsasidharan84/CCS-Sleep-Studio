@@ -409,10 +409,11 @@ class SpectrogramPainter extends CustomPainter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class HypnogramPainter extends CustomPainter {
-  HypnogramPainter(this.viewport, {this.swaKernelSize = 1});
+  HypnogramPainter(this.viewport, {this.swaKernelSize = 1, this.comparisonStages});
 
   final EegViewport viewport;
   final int swaKernelSize; // 1 = no smoothing, up to ~101
+  final List<SleepStage>? comparisonStages;
 
   // Hypnogram Y axis: Wake=1, REM=0, N1=-1, N2=-2, N3=-3 (matching Python)
   static const _yMin = -4.0;
@@ -435,6 +436,7 @@ class HypnogramPainter extends CustomPainter {
     }
 
     _drawBackground(canvas, size);
+    _drawDisagreementBands(canvas, size, stages);
     _drawYAxisLabels(canvas, size);
     _drawHypnogramSteps(canvas, size, stages);
     _drawSwaOverlay(canvas, size);
@@ -442,6 +444,38 @@ class HypnogramPainter extends CustomPainter {
     _drawEpochIndicator(canvas, size);
     _drawXAxisTicks(canvas, size);
   }
+
+  void _drawDisagreementBands(Canvas canvas, Size size, List<SleepStage> stages) {
+    final cmp = comparisonStages;
+    if (cmp == null || cmp.isEmpty) return;
+
+    final n = stages.length;
+    final drawWidth = size.width - _leftPad;
+    final epochW = drawWidth / n;
+    final plotH = size.height - _bottomPad;
+
+    final bgPaint = Paint()..color = Colors.red.withOpacity(0.08);
+    final indicatorPaint = Paint()..color = Colors.red.shade700;
+
+    final yBotTop = _toCanvasY(-3.7, size.height);
+    final yBotBottom = _toCanvasY(-3.95, size.height);
+
+    for (var i = 0; i < n && i < cmp.length; i++) {
+      final s1 = stages[i];
+      final s2 = cmp[i];
+      if (s1 != SleepStage.unknown && s2 != SleepStage.unknown && s1 != s2) {
+        final x0 = _leftPad + i * epochW;
+        final x1 = x0 + epochW;
+
+        // 1. Light background highlight column (drawn behind)
+        canvas.drawRect(Rect.fromLTRB(x0, 0, x1, plotH), bgPaint);
+
+        // 2. High-contrast indicator strip at the bottom edge (below N3)
+        canvas.drawRect(Rect.fromLTRB(x0, yBotTop, x1, yBotBottom), indicatorPaint);
+      }
+    }
+  }
+
 
   void _drawEventOverlay(Canvas canvas, Size size) {
     final events = viewport.scoredEvents;
@@ -548,6 +582,25 @@ class HypnogramPainter extends CustomPainter {
         Rect.fromLTRB(x0, cyTop, x1, cyBottom),
         Paint()..color = color,
       );
+
+      // Uncertainty indicator overlay (diagonal slash + outline)
+      final isUncertain = i < viewport.stagesUncertain.length && viewport.stagesUncertain[i];
+      if (isUncertain) {
+        canvas.drawRect(
+          Rect.fromLTRB(x0, cyTop, x1, cyBottom),
+          Paint()
+            ..color = Colors.orange.shade700
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0,
+        );
+        canvas.drawLine(
+          Offset(x0, cyBottom),
+          Offset(x1, cyTop),
+          Paint()
+            ..color = Colors.orange.shade700
+            ..strokeWidth = 1.0,
+        );
+      }
     }
   }
 
@@ -655,7 +708,9 @@ class HypnogramPainter extends CustomPainter {
   bool shouldRepaint(HypnogramPainter old) =>
       old.viewport.stages != viewport.stages ||
       old.viewport.currentEpoch != viewport.currentEpoch ||
-      old.swaKernelSize != swaKernelSize;
+      old.swaKernelSize != swaKernelSize ||
+      old.comparisonStages != comparisonStages ||
+      !identical(old.viewport.stagesUncertain, viewport.stagesUncertain);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

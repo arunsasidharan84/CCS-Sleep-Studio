@@ -745,6 +745,43 @@ class EegBackend {
     return r09.loadR09(path);
   }
 
+  List<double> getDisplaySegmentForChannel({
+    required LoadedEeg eeg,
+    required int channelIndex,
+    required int start,
+    required int end,
+    required AppConfig config,
+    required bool applyFilters,
+  }) {
+    final visible = _visibleChannelProjection(eeg, config);
+    if (channelIndex < 0 || channelIndex >= visible.configs.length) {
+      if (channelIndex >= 0 && channelIndex < eeg.channelSamples.length) {
+        final channelCfg = _configForRawChannel(channelIndex, config, eeg.channelSamples.length);
+        return _displaySegmentForChannel(
+          eeg.channelSamples,
+          eeg.sampleRateHz,
+          start,
+          end,
+          channelCfg,
+          config,
+          applyFilters: applyFilters,
+        );
+      }
+      return const [];
+    }
+    final channelCfg = visible.configs[channelIndex];
+    return _displaySegmentForChannel(
+      eeg.channelSamples,
+      eeg.sampleRateHz,
+      start,
+      end,
+      channelCfg,
+      config,
+      applyFilters: applyFilters,
+    );
+  }
+
+
   // ─── Signal processing pipeline (runs after every file load) ──────────────
 
   /// Compute the full-night spectrogram, SWA, epoch periodograms, and TF norms.
@@ -1941,7 +1978,11 @@ class EegBackend {
   }
 
   bool _hasDisplayFilter(ChannelConfig cfg) {
-    return cfg.filterHpEnabled || cfg.filterLpEnabled || cfg.filterNotchEnabled;
+    return cfg.filterHpEnabled ||
+        cfg.filterLpEnabled ||
+        cfg.filterNotchEnabled ||
+        cfg.flipPolarity ||
+        (cfg.reReference != 'None' && cfg.reReference.isNotEmpty);
   }
 
   List<double> _applyDisplayFilters(
@@ -2126,7 +2167,7 @@ class EegBackend {
     final tfConfigIndex = _clampConfigIndex(cfg.tfChannelIndex, cfg);
     final tfCh = _tfSourceIndex(eeg, cfg);
     final tfCfg = _configAt(cfg, tfConfigIndex, eeg.channelSamples.length);
-    final signal = _fullSignalForConfig(eeg.channelSamples, cfg, tfConfigIndex);
+    final signal = _fullSignalForConfig(eeg.channelSamples, cfg, tfConfigIndex, applyFilters: true);
     final srate = eeg.sampleRateHz;
     final cacheKey = [
       identityHashCode(eeg),

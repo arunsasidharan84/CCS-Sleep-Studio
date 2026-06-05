@@ -149,7 +149,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   Widget build(BuildContext context) {
     final labels = _working.channels.map((channel) => channel.name).toList();
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: AlertDialog(
         title: const Text('Configuration Window'),
         contentPadding: EdgeInsets.zero,
@@ -169,6 +169,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
                   Tab(text: 'Spectrogram'),
                   Tab(text: 'Periodogram'),
                   Tab(text: 'Wavelet'),
+                  Tab(text: 'Filters'),
                 ],
               ),
               Expanded(
@@ -531,6 +532,76 @@ class _ConfigDialogState extends State<ConfigDialog> {
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    // Tab 7: Filters Settings
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                            child: Container(
+                              padding: const EdgeInsets.all(8.0),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.blue.shade100),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'ℹ High-pass, low-pass, or notch-filter a given EEG channel using a Chebyshev Type 2 filter. '
+                                      'Filters affect only the displayed EEG signal, not any power computations.',
+                                      style: TextStyle(fontSize: 12, color: Colors.black87),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          CheckboxListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('Apply changes to all channels'),
+                            value: _applyAllChannels,
+                            onChanged: (v) {
+                              setState(() {
+                                _applyAllChannels = v ?? false;
+                              });
+                            },
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: _FilterHeaderRow(),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: ListView.builder(
+                                itemCount: _working.channels.length,
+                                itemBuilder: (context, index) {
+                                  return _FilterChannelRow(
+                                    index: index,
+                                    config: _working.channels[index],
+                                    applyAllChannels: _applyAllChannels,
+                                    onChanged: () => setState(() {}),
+                                    onApplyAll: (updater) {
+                                      setState(() {
+                                        for (final channel in _working.channels) {
+                                          updater(channel);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),

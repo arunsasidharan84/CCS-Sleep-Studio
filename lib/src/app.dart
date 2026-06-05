@@ -694,38 +694,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       _setStatus('No comparison scoring loaded');
       return;
     }
-    final total = v.epochCount < comparison.length
-        ? v.epochCount
-        : comparison.length;
-    final disagreements = _disagreementCount(v.stages, comparison);
-    final agreement = total == 0
-        ? 0.0
-        : (total - disagreements) / total * 100.0;
-    final rows = <String>[];
-    for (final stage in SleepStage.values.where(
-      (s) => s != SleepStage.unknown,
-    )) {
-      final appCount = v.stages.take(total).where((s) => s == stage).length;
-      final cmpCount = comparison.take(total).where((s) => s == stage).length;
-      rows.add('${stage.label}: app $appCount | comparison $cmpCount');
-    }
+    final metrics = _StageComparisonMetrics.compute(v.stages, comparison);
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Comparison statistics'),
-        content: Text(
-          'Epochs compared: $total\n'
-          'Disagreements: $disagreements\n'
-          'Agreement: ${agreement.toStringAsFixed(1)}%\n\n'
-          '${rows.join('\n')}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+      builder: (context) => _ComparisonReportCardDialog(metrics: metrics),
     );
   }
 
@@ -1229,7 +1201,15 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         .round()
         .clamp(0, eeg.channelSamples[rawIdx].length);
     if (end <= start) return;
-    final samples = eeg.channelSamples[rawIdx].sublist(start, end);
+    final samples = _backend.getDisplaySegmentForChannel(
+      eeg: eeg,
+      channelIndex: selection.channel,
+      start: start,
+      end: end,
+      config: _config,
+      applyFilters: true,
+    );
+    if (samples.isEmpty) return;
     final label = rawIdx < v.channelLabels.length
         ? v.channelLabels[rawIdx]
         : 'Channel';
@@ -1625,16 +1605,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         label: 'Utilities',
         menus: [
           PlatformMenuItem(
-            label: 'Filter  [Ctrl+F]',
-            onSelected: _openFilterDialog,
-          ),
-          PlatformMenuItem(
-            label: 'Auto Score (GSSC)  [Ctrl+G]',
-            onSelected: () => _showPending(
-              'GSSC autoscoring — external function call pending',
-            ),
-          ),
-          PlatformMenuItem(
             label: 'K-Complex Detection (MT-KCD)  [Ctrl+K]',
             onSelected: _runKComplexDetection,
           ),
@@ -1738,6 +1708,203 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     ];
   }
 
+  Widget _buildInAppMenuBar() {
+    return Container(
+      color: Colors.white,
+      width: double.infinity,
+      child: MenuBar(
+        style: MenuStyle(
+          elevation: MaterialStateProperty.all(0),
+          backgroundColor: MaterialStateProperty.all(Colors.white),
+        ),
+        children: [
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => _openRecording(kind: 'edf'),
+                child: const Text('Load EDF file (.edf)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _openRecording(kind: 'edfvolt'),
+                child: const Text('Load EDF file (.edf) – scaled V to µV'),
+              ),
+              MenuItemButton(
+                onPressed: () => _openRecording(kind: 'mat'),
+                child: const Text('Load EEGLAB structure (.mat)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _openRecording(kind: 'r09'),
+                child: const Text('Load Zurich data file (.r09)'),
+              ),
+              const Divider(height: 1),
+              MenuItemButton(
+                onPressed: _closeCurrentFile,
+                child: const Text('Close Current File'),
+              ),
+            ],
+            child: const Text('Data'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => _loadScoring('scoringhero'),
+                child: const Text('Load Scoring Hero (.json)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _loadScoring('vis'),
+                child: const Text('Load Zurich Scoring (.vis)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _loadScoring('yasa'),
+                child: const Text('Load YASA Scoring (.txt)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _loadScoring('sleeptrip'),
+                child: const Text('Load Sleeptrip Scoring (.csv)'),
+              ),
+              MenuItemButton(
+                onPressed: _loadSleeptripEvents,
+                child: const Text('Load Sleeptrip Events (_events.csv)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _loadScoring('sleepyland'),
+                child: const Text('Load Sleepyland Scoring (.annot)'),
+              ),
+              MenuItemButton(
+                onPressed: () => _loadScoring('gssc'),
+                child: const Text('Load GSSC Scoring (.csv)'),
+              ),
+              const Divider(height: 1),
+              MenuItemButton(
+                onPressed: _saveScoring,
+                child: const Text('Save to…'),
+              ),
+              MenuItemButton(
+                onPressed: _exportSleepReport,
+                child: const Text('Export Sleep Report (PDF)'),
+              ),
+            ],
+            child: const Text('Scoring'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.unknown),
+                child: const Text('None  [Delete]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.wake),
+                child: const Text('Wake  [W]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.n1),
+                child: const Text('N1  [1]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.n2),
+                child: const Text('N2  [2]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.n3),
+                child: const Text('N3  [3]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.rem),
+                child: const Text('REM  [R]'),
+              ),
+              MenuItemButton(
+                onPressed: () => _scoreCurrentEpoch(SleepStage.inconclusive),
+                child: const Text('Inconclusive  [I]'),
+              ),
+              const Divider(height: 1),
+              MenuItemButton(
+                onPressed: _toggleUncertainty,
+                child: const Text('Toggle Uncertainty [Q]'),
+              ),
+            ],
+            child: const Text('Stages'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => _markEvent(0),
+                child: const Text('Artefact [A]'),
+              ),
+              for (var i = 1; i <= 12; i++)
+                MenuItemButton(
+                  onPressed: () => _markEvent(i),
+                  child: Text('Event $i [F$i]'),
+                ),
+              const Divider(height: 1),
+              MenuItemButton(
+                onPressed: _eraseEventsInSelections,
+                child: const Text('Erase events in drawn selection [Backspace]'),
+              ),
+              MenuItemButton(
+                onPressed: _deleteAllEvents,
+                child: const Text('Delete all events'),
+              ),
+            ],
+            child: const Text('Events'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: _runKComplexDetection,
+                child: const Text('K-Complex Detection (MT-KCD) [Ctrl+K]'),
+              ),
+              MenuItemButton(
+                onPressed: _runSpindleDetection,
+                child: const Text('Spindle Detection (MT-Spindle) [Ctrl+Shift+S]'),
+              ),
+              MenuItemButton(
+                onPressed: _zoomOnSelectedEeg,
+                child: const Text('Zoom on selected EEG [Z]'),
+              ),
+            ],
+            child: const Text('Utilities'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: _loadComparisonScoring,
+                child: const Text('Import scoring for comparison'),
+              ),
+              MenuItemButton(
+                onPressed: _removeComparisonScoring,
+                child: const Text('Remove comparison scoring'),
+              ),
+              MenuItemButton(
+                onPressed: _showComparisonStats,
+                child: const Text('Show summary statistics'),
+              ),
+            ],
+            child: const Text('Compare'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: _openConfigDialog,
+                child: const Text('Open Settings Dialog'),
+              ),
+            ],
+            child: const Text('Configuration'),
+          ),
+          SubmenuButton(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: _showSelectionHelp,
+                child: const Text('Signal selection box  [Ctrl+H]'),
+              ),
+            ],
+            child: const Text('Help'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -1791,6 +1958,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               backgroundColor: const Color(0xFFEDEDED),
               body: Column(
                 children: [
+                  if (!Platform.isMacOS)
+                    _buildInAppMenuBar(),
                   _Toolbar(
                     viewport: viewport,
                     onJump: _jumpToEpoch,
@@ -1806,6 +1975,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                     onConfig: _openConfigDialog,
                     swaSlider: _swaSlider,
                     onSwaSlider: (v) => setState(() => _swaSlider = v),
+                    onToggleUncertainty: _toggleUncertainty,
                   ),
                   Expanded(
                     child: viewport == null
@@ -1816,12 +1986,14 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                             swaSlider: _swaSlider,
                             onSwaSlider: (v) => setState(() => _swaSlider = v),
                             onSelectionEnd: _updateSelection,
+                            comparisonStages: _comparisonStages,
                           ),
                   ),
                   _StatusBar(
                     status: _status,
                     activePath: _activePath,
                     viewport: viewport,
+                    comparisonStages: _comparisonStages,
                   ),
                 ],
               ),
@@ -1853,6 +2025,7 @@ class _Toolbar extends StatefulWidget {
     required this.onConfig,
     required this.swaSlider,
     required this.onSwaSlider,
+    required this.onToggleUncertainty,
   });
 
   final EegViewport? viewport;
@@ -1869,6 +2042,7 @@ class _Toolbar extends StatefulWidget {
   final VoidCallback onConfig;
   final int swaSlider;
   final ValueChanged<int> onSwaSlider;
+  final VoidCallback onToggleUncertainty;
 
   @override
   State<_Toolbar> createState() => _ToolbarState();
@@ -2055,6 +2229,12 @@ class _ToolbarState extends State<_Toolbar> {
               const SizedBox(width: 8),
               const _Divider(),
               _ToolButton(
+                label: 'Toggle uncertain [Q]',
+                tooltip: 'Toggle uncertainty for current epoch',
+                enabled: enabled,
+                onPressed: widget.onToggleUncertainty,
+              ),
+              _ToolButton(
                 label: 'config',
                 tooltip: 'Open channel and display configuration',
                 enabled: enabled,
@@ -2080,6 +2260,7 @@ class _ScoringHeroSurface extends StatefulWidget {
     required this.swaSlider,
     required this.onSwaSlider,
     required this.onSelectionEnd,
+    this.comparisonStages,
   });
 
   final EegViewport viewport;
@@ -2094,6 +2275,7 @@ class _ScoringHeroSurface extends StatefulWidget {
     double? endUv,
   )
   onSelectionEnd;
+  final List<SleepStage>? comparisonStages;
 
   @override
   State<_ScoringHeroSurface> createState() => _ScoringHeroSurfaceState();
@@ -2215,6 +2397,7 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                     painter: HypnogramPainter(
                       widget.viewport,
                       swaKernelSize: 101 - widget.swaSlider,
+                      comparisonStages: widget.comparisonStages,
                     ),
                     onTapFraction: (fx) {
                       final epoch = (fx * widget.viewport.epochCount).floor();
@@ -2293,18 +2476,33 @@ class _StatusBar extends StatelessWidget {
     required this.status,
     required this.activePath,
     required this.viewport,
+    this.comparisonStages,
   });
 
   final String status;
   final String? activePath;
   final EegViewport? viewport;
+  final List<SleepStage>? comparisonStages;
 
   @override
   Widget build(BuildContext context) {
     final vp = viewport;
-    final epochText = vp == null
-        ? ''
-        : 'Epoch ${vp.currentEpoch + 1}/${vp.epochCount}  |  ${vp.currentStage.label}  |  ${vp.sampleRateHz.toStringAsFixed(0)} Hz';
+    String epochText = '';
+    if (vp != null) {
+      final currentIdx = vp.currentEpoch;
+      final currentStage = vp.currentStage;
+      final isUncertain = currentIdx < vp.stagesUncertain.length && vp.stagesUncertain[currentIdx];
+      final uncertainStr = isUncertain ? ' (Uncertain)' : '';
+
+      String comparisonStr = '';
+      final cmpStages = comparisonStages;
+      if (cmpStages != null && currentIdx < cmpStages.length) {
+        final cmpStage = cmpStages[currentIdx];
+        comparisonStr = '  |  Comparison: ${cmpStage.label}';
+      }
+
+      epochText = 'Epoch ${currentIdx + 1}/${vp.epochCount}  |  Current: ${currentStage.label}$uncertainStr$comparisonStr  |  ${vp.sampleRateHz.toStringAsFixed(0)} Hz';
+    }
     return Container(
       height: 24,
       decoration: const BoxDecoration(
@@ -2768,3 +2966,583 @@ Future<List<(double, double)>> _runSpindleIsolate(
     );
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scoring Comparison Metrics & Report Card Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StageComparisonMetrics {
+  _StageComparisonMetrics({
+    required this.totalEpochs,
+    required this.comparedEpochs,
+    required this.overallAgreement,
+    required this.cohensKappa,
+    required this.confusionMatrix,
+    required this.precision,
+    required this.recall,
+    required this.f1Score,
+  });
+
+  final int totalEpochs;
+  final int comparedEpochs;
+  final double overallAgreement;
+  final double cohensKappa;
+  final Map<SleepStage, Map<SleepStage, int>> confusionMatrix;
+  final Map<SleepStage, double> precision;
+  final Map<SleepStage, double> recall;
+  final Map<SleepStage, double> f1Score;
+
+  factory _StageComparisonMetrics.compute(
+    List<SleepStage> current,
+    List<SleepStage> comparison,
+  ) {
+    final stages = [
+      SleepStage.wake,
+      SleepStage.rem,
+      SleepStage.n1,
+      SleepStage.n2,
+      SleepStage.n3,
+    ];
+
+    final total = current.length < comparison.length
+        ? current.length
+        : comparison.length;
+
+    var validCount = 0;
+    var matches = 0;
+
+    final matrix = <SleepStage, Map<SleepStage, int>>{};
+    for (final s1 in stages) {
+      matrix[s1] = {};
+      for (final s2 in stages) {
+        matrix[s1]![s2] = 0;
+      }
+    }
+
+    for (var i = 0; i < total; i++) {
+      final sCurr = current[i];
+      final sComp = comparison[i];
+
+      if (!stages.contains(sCurr) || !stages.contains(sComp)) {
+        continue;
+      }
+
+      validCount++;
+      if (sCurr == sComp) {
+        matches++;
+      }
+      matrix[sCurr]![sComp] = (matrix[sCurr]![sComp] ?? 0) + 1;
+    }
+
+    final agreement = validCount == 0 ? 0.0 : (matches / validCount) * 100.0;
+
+    double kappa = 0.0;
+    if (validCount > 0) {
+      final po = matches / validCount;
+      double pe = 0.0;
+      for (final s in stages) {
+        var rowSum = 0;
+        for (final sComp in stages) {
+          rowSum += matrix[s]![sComp] ?? 0;
+        }
+        var colSum = 0;
+        for (final sCurr in stages) {
+          colSum += matrix[sCurr]![s] ?? 0;
+        }
+        pe += (rowSum / validCount) * (colSum / validCount);
+      }
+      if (pe < 1.0) {
+        kappa = (po - pe) / (1.0 - pe);
+      } else {
+        kappa = 1.0;
+      }
+    }
+
+    final prec = <SleepStage, double>{};
+    final rec = <SleepStage, double>{};
+    final f1 = <SleepStage, double>{};
+
+    for (final s in stages) {
+      final tp = matrix[s]![s] ?? 0;
+
+      var fp = 0;
+      for (final sComp in stages) {
+        if (sComp != s) {
+          fp += matrix[s]![sComp] ?? 0;
+        }
+      }
+
+      var fn = 0;
+      for (final sCurr in stages) {
+        if (sCurr != s) {
+          fn += matrix[sCurr]![s] ?? 0;
+        }
+      }
+
+      final p = (tp + fp) == 0 ? 0.0 : tp / (tp + fp);
+      final r = (tp + fn) == 0 ? 0.0 : tp / (tp + fn);
+      final f = (p + r) == 0 ? 0.0 : (2.0 * p * r) / (p + r);
+
+      prec[s] = p * 100.0;
+      rec[s] = r * 100.0;
+      f1[s] = f * 100.0;
+    }
+
+    return _StageComparisonMetrics(
+      totalEpochs: total,
+      comparedEpochs: validCount,
+      overallAgreement: agreement,
+      cohensKappa: kappa,
+      confusionMatrix: matrix,
+      precision: prec,
+      recall: rec,
+      f1Score: f1,
+    );
+  }
+}
+
+class _ComparisonReportCardDialog extends StatelessWidget {
+  const _ComparisonReportCardDialog({required this.metrics});
+
+  final _StageComparisonMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
+    Color getKappaColor(double kappa) {
+      if (kappa >= 0.8) return Colors.green.shade700;
+      if (kappa >= 0.6) return Colors.blue.shade700;
+      if (kappa >= 0.4) return Colors.orange.shade700;
+      return Colors.red.shade700;
+    }
+
+    String getKappaStrength(double kappa) {
+      if (kappa >= 0.8) return 'Almost Perfect';
+      if (kappa >= 0.6) return 'Substantial';
+      if (kappa >= 0.4) return 'Moderate';
+      if (kappa >= 0.2) return 'Fair';
+      if (kappa > 0) return 'Slight';
+      return 'Poor/None';
+    }
+
+    final kappaColor = getKappaColor(metrics.cohensKappa);
+    final kappaStrength = getKappaStrength(metrics.cohensKappa);
+
+    final stages = [
+      SleepStage.wake,
+      SleepStage.rem,
+      SleepStage.n1,
+      SleepStage.n2,
+      SleepStage.n3,
+    ];
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 800,
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.assessment, color: Colors.indigo, size: 28),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Scoring Comparison Report Card',
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const Divider(height: 24, thickness: 1),
+
+              GridView.count(
+                crossAxisCount: 3,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 2.2,
+                children: [
+                  _buildStatCard(
+                    title: 'Compared Epochs',
+                    value: '${metrics.comparedEpochs} / ${metrics.totalEpochs}',
+                    subtitle: 'Valid matched epochs',
+                    icon: Icons.list_alt,
+                    iconColor: Colors.grey.shade700,
+                  ),
+                  _buildStatCard(
+                    title: 'Overall Agreement',
+                    value: '${metrics.overallAgreement.toStringAsFixed(1)}%',
+                    subtitle: 'Total matching epochs',
+                    icon: Icons.check_circle_outline,
+                    iconColor: Colors.green.shade600,
+                  ),
+                  _buildStatCard(
+                    title: "Cohen's Kappa (κ)",
+                    value: metrics.cohensKappa.toStringAsFixed(3),
+                    subtitle: '$kappaStrength agreement',
+                    icon: Icons.psychology,
+                    iconColor: kappaColor,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 11,
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Confusion Matrix',
+                              style: textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueGrey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Current Scorer (Rows) vs. Comparison (Columns)',
+                              style: textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildConfusionMatrixTable(stages),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 13,
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Stage-Specific Metrics',
+                              style: textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueGrey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Precision, Recall (Sensitivity), and F1-Score',
+                              style: textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildStageMetricsTable(stages),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+  }) {
+    return Card(
+      elevation: 0,
+      color: Colors.grey.shade50,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfusionMatrixTable(List<SleepStage> stages) {
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700);
+
+    return Table(
+      border: TableBorder.all(color: Colors.grey.shade200, width: 1, borderRadius: BorderRadius.circular(4)),
+      columnWidths: const {
+        0: FlexColumnWidth(1.2),
+        1: FlexColumnWidth(1),
+        2: FlexColumnWidth(1),
+        3: FlexColumnWidth(1),
+        4: FlexColumnWidth(1),
+        5: FlexColumnWidth(1),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(color: Colors.grey.shade100),
+          children: [
+            const TableCell(child: SizedBox(height: 32, child: Center(child: Text('Cur \\ Cmp', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))))),
+            for (final s in stages)
+              TableCell(
+                child: Center(
+                  child: Text(s.shortLabel, style: headerStyle),
+                ),
+              ),
+          ],
+        ),
+        for (final sCurr in stages)
+          TableRow(
+            children: [
+              TableCell(
+                child: Container(
+                  height: 36,
+                  color: Colors.grey.shade50,
+                  alignment: Alignment.center,
+                  child: Text(sCurr.label, style: headerStyle),
+                ),
+              ),
+              for (final sComp in stages)
+                _buildConfusionCell(sCurr, sComp),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildConfusionCell(SleepStage sCurr, SleepStage sComp) {
+    final count = metrics.confusionMatrix[sCurr]?[sComp] ?? 0;
+    final isDiag = sCurr == sComp;
+
+    double opacity = 0.0;
+    Color cellColor = Colors.transparent;
+
+    if (count > 0) {
+      var maxInRow = 1;
+      metrics.confusionMatrix[sCurr]?.forEach((_, val) {
+        if (val > maxInRow) maxInRow = val;
+      });
+
+      opacity = count / maxInRow;
+      opacity = 0.05 + opacity * 0.75;
+      cellColor = isDiag
+          ? Colors.green.shade500.withOpacity(opacity)
+          : Colors.red.shade400.withOpacity(opacity);
+    }
+
+    return TableCell(
+      child: Container(
+        height: 36,
+        color: cellColor,
+        alignment: Alignment.center,
+        child: Text(
+          '$count',
+          style: TextStyle(
+            fontWeight: isDiag ? FontWeight.bold : FontWeight.normal,
+            color: count == 0
+                ? Colors.grey.shade400
+                : (opacity > 0.5 ? Colors.white : Colors.black87),
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStageMetricsTable(List<SleepStage> stages) {
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700);
+
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(1.2),
+        1: FlexColumnWidth(1),
+        2: FlexColumnWidth(1),
+        3: FlexColumnWidth(1),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1.5)),
+          ),
+          children: [
+            const TableCell(child: Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Stage', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)))),
+            TableCell(child: Center(child: Text('Precision', style: headerStyle))),
+            TableCell(child: Center(child: Text('Recall', style: headerStyle))),
+            TableCell(child: Center(child: Text('F1-Score', style: headerStyle))),
+          ],
+        ),
+        for (final s in stages)
+          TableRow(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+            ),
+            children: [
+              TableCell(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _colorForStage(s),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(s.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+              TableCell(
+                child: Center(
+                  child: Text(
+                    '${metrics.precision[s]?.toStringAsFixed(1)}%',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+              TableCell(
+                child: Center(
+                  child: Text(
+                    '${metrics.recall[s]?.toStringAsFixed(1)}%',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+              TableCell(
+                child: Center(
+                  child: Text(
+                    '${metrics.f1Score[s]?.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _colorForF1(metrics.f1Score[s] ?? 0),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Color _colorForStage(SleepStage stage) {
+    switch (stage) {
+      case SleepStage.wake:
+        return const Color(0xFF56bf8b);
+      case SleepStage.rem:
+        return const Color(0xFF8bbf56);
+      case SleepStage.n1:
+        return const Color(0xFFaabcce);
+      case SleepStage.n2:
+        return const Color(0xFF405c79);
+      case SleepStage.n3:
+        return const Color(0xFF0b1c2c);
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _colorForF1(double score) {
+    if (score >= 80.0) return Colors.green.shade700;
+    if (score >= 60.0) return Colors.blue.shade700;
+    if (score >= 40.0) return Colors.orange.shade700;
+    return Colors.red.shade700;
+  }
+}
+
