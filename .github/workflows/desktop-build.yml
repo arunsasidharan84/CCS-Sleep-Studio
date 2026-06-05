@@ -66,14 +66,13 @@ jobs:
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
             build/macos/Build/Products/Release/ScoringNidra.app \
-            dist/sleep_eeg_desktop-macos.zip
-
+            dist/ScoringNidra-macos.zip
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sleep_eeg_desktop-macos
-          path: dist/sleep_eeg_desktop-macos.zip
+          name: ScoringNidra-macos
+          path: dist/ScoringNidra-macos.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -121,20 +120,14 @@ jobs:
       - name: Build Windows app
         run: flutter build windows --release
 
-      - name: Package Windows app
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive `
-            -Path build\windows\x64\runner\Release\* `
-            -DestinationPath dist\sleep_eeg_desktop-windows.zip `
-            -Force
+      - name: Package Windows app (Inno Setup Installer)
+        run: iscc windows/installer.iss
 
-      - name: Upload Windows artifact
+      - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sleep_eeg_desktop-windows
-          path: dist/sleep_eeg_desktop-windows.zip
+          name: ScoringNidra-Installer
+          path: dist/ScoringNidra-Installer.exe
           if-no-files-found: error
           retention-days: 1
 
@@ -147,13 +140,13 @@ jobs:
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: sleep_eeg_desktop-macos
+          name: ScoringNidra-macos
           path: dist
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: sleep_eeg_desktop-windows
+          name: ScoringNidra-Installer
           path: dist
 
       - name: Generate Release Tag & Name
@@ -177,8 +170,8 @@ jobs:
           name: ${{ steps.release_info.outputs.title }}
           prerelease: ${{ steps.release_info.outputs.prerelease == 'true' }}
           files: |
-            dist/sleep_eeg_desktop-macos.zip
-            dist/sleep_eeg_desktop-windows.zip
+            dist/ScoringNidra-macos.zip
+            dist/ScoringNidra-Installer.exe
           draft: false
           make_latest: ${{ steps.release_info.outputs.tag != 'latest' && 'true' || 'false' }}
         env:
