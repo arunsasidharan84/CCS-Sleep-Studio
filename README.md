@@ -4,6 +4,17 @@
 
 ---
 
+## 📥 Download Pre-built Binaries
+
+You can download the latest compiled standalone binaries directly from the [GitHub Releases page](https://github.com/arunsasidharan84/ScoringNidra/releases):
+
+- **macOS (Universal ZIP)**: [Download for macOS](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/sleep_eeg_desktop-macos.zip)
+- **Windows (x64 ZIP)**: [Download for Windows](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/sleep_eeg_desktop-windows.zip)
+
+*Note: These links always point to the latest stable pre-built binaries compiled automatically.*
+
+---
+
 ## ⚡ Speed & Architectural Enhancements
 
 ScoringNidra is designed with a core focus on execution speed and seamless user experience, overcoming the bottlenecks of the original Python/PyQt implementation:
