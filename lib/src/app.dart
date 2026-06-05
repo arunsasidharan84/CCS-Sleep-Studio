@@ -1887,6 +1887,55 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                 onPressed: _openConfigDialog,
                 child: const Text('Open Settings Dialog'),
               ),
+              MenuItemButton(
+                onPressed: _saveConfig,
+                child: const Text('Save configuration as .json'),
+              ),
+              MenuItemButton(
+                onPressed: _loadConfig,
+                child: const Text('Load configuration from .json'),
+              ),
+              MenuItemButton(
+                onPressed: () {
+                  final eeg = _loadedEeg;
+                  final v = _viewport;
+                  if (eeg != null && v != null) {
+                    _backend.clearDisplayCache();
+                    final defaultConfig = AppConfig.defaultsForChannels(
+                      eeg.channelLabels,
+                      sampleRateHz: eeg.sampleRateHz,
+                    );
+                    setState(() {
+                      _config = defaultConfig;
+                    });
+                    _setStatus('Restoring default configuration…');
+                    Future.microtask(() async {
+                      final newEeg = await _backend.computeNightProducts(
+                        eeg,
+                        defaultConfig,
+                      );
+                      final newViewport = await _backend.viewportFromEeg(
+                        newEeg,
+                        currentEpoch: v.currentEpoch,
+                        config: defaultConfig,
+                        existingStages: v.stages,
+                        includeTimeFrequency: false,
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _loadedEeg = newEeg;
+                          _viewport = newViewport;
+                          _status = 'Default configuration restored';
+                        });
+                        if (_config.tfEnabled) {
+                          _scheduleTimeFrequencyRefresh(++_navigationSerial);
+                        }
+                      }
+                    });
+                  }
+                },
+                child: const Text('Restore default configuration'),
+              ),
             ],
             child: const Text('Configuration'),
           ),
