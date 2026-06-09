@@ -1,0 +1,418 @@
+name: Build desktop apps
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build Python standalone backend
+        run: |
+          pyinstaller --onefile --name autoscore-backend \
+            --collect-data gssc \
+            --add-data "backend/models:models" \
+            --add-data "backend/sleepgpt-main:sleepgpt-main" \
+            backend/cli.py
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bridge
+
+      - name: Build Rust backend (macOS dylib)
+        run: cargo build --release
+        working-directory: bridge
+
+      - name: Copy dylib into macOS runner bundle
+        run: |
+          mkdir -p frontend/macos/Runner
+          cp bridge/target/release/librust_sleep_eeg.dylib frontend/macos/Runner/
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-key: flutter-${{ runner.os }}-${{ hashFiles('frontend/pubspec.yaml') }}
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: frontend
+
+      - name: Analyze
+        run: flutter analyze
+        working-directory: frontend
+
+      - name: Test
+        run: flutter test
+        working-directory: frontend
+
+      # 1. Build and Package Lite version
+      - name: Build macOS app (Lite)
+        run: flutter build macos --release --dart-define=LITE_BUILD=true
+        working-directory: frontend
+
+      - name: Ad-hoc sign macOS app (Lite)
+        run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
+
+      - name: Package macOS app (Lite)
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            frontend/build/macos/Build/Products/Release/ScoringNidra.app \
+            dist/ScoringNidra-lite-macos.zip
+
+      # 2. Build and Package Full version
+      - name: Build macOS app (Full)
+        run: flutter build macos --release
+        working-directory: frontend
+
+      - name: Copy Python backend into macOS App bundle (Full)
+        run: |
+          cp dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
+
+      - name: Ad-hoc sign macOS app (Full)
+        run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
+
+      - name: Package macOS app (Full)
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            frontend/build/macos/Build/Products/Release/ScoringNidra.app \
+            dist/ScoringNidra-macos.zip
+
+      # 3. Upload Artifacts
+      - name: Upload macOS Full artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-macos
+          path: dist/ScoringNidra-macos.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload macOS Lite artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-lite-macos
+          path: dist/ScoringNidra-lite-macos.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  build-windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build Python standalone backend
+        shell: pwsh
+        run: |
+          pyinstaller --onefile --name autoscore-backend `
+            --collect-data gssc `
+            --add-data "backend/models;models" `
+            --add-data "backend/sleepgpt-main;sleepgpt-main" `
+            backend/cli.py
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bridge
+
+      - name: Build Rust backend (Windows DLL)
+        run: cargo build --release
+        working-directory: bridge
+
+      - name: Copy DLL into Windows runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path frontend\windows\runner
+          Copy-Item bridge\target\release\rust_sleep_eeg.dll frontend\windows\runner\
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-key: flutter-${{ runner.os }}-${{ hashFiles('frontend/pubspec.yaml') }}
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: frontend
+
+      - name: Analyze
+        run: flutter analyze
+        working-directory: frontend
+
+      - name: Test
+        run: flutter test
+        working-directory: frontend
+
+      # 1. Build and Package Lite version
+      - name: Build Windows app (Lite)
+        run: flutter build windows --release --dart-define=LITE_BUILD=true
+        working-directory: frontend
+
+      - name: Package Windows app (Lite Installer)
+        run: iscc /F"ScoringNidra-lite-Installer" frontend/windows/installer.iss
+
+      # 2. Build and Package Full version
+      - name: Build Windows app (Full)
+        run: flutter build windows --release
+        working-directory: frontend
+
+      - name: Copy Python backend into Windows runner build output (Full)
+        shell: pwsh
+        run: |
+          Copy-Item dist\autoscore-backend.exe frontend\build\windows\x64\runner\Release\
+
+      - name: Package Windows app (Full Installer)
+        run: iscc /F"ScoringNidra-Installer" frontend/windows/installer.iss
+
+      # 3. Upload Artifacts
+      - name: Upload Windows Full installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-Installer
+          path: frontend/dist/ScoringNidra-Installer.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Windows Lite installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-lite-Installer
+          path: frontend/dist/ScoringNidra-lite-Installer.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libblkid-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build Python standalone backend
+        run: |
+          pyinstaller --onefile --name autoscore-backend \
+            --collect-data gssc \
+            --add-data "backend/models:models" \
+            --add-data "backend/sleepgpt-main:sleepgpt-main" \
+            backend/cli.py
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bridge
+
+      - name: Build Rust backend (Linux so)
+        run: cargo build --release
+        working-directory: bridge
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-key: flutter-${{ runner.os }}-${{ hashFiles('frontend/pubspec.yaml') }}
+
+      - name: Enable Linux desktop support
+        run: flutter config --enable-linux-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: frontend
+
+      - name: Analyze
+        run: flutter analyze
+        working-directory: frontend
+
+      - name: Test
+        run: flutter test
+        working-directory: frontend
+
+      # 1. Build and Package Lite version
+      - name: Build Linux app (Lite)
+        run: flutter build linux --release --dart-define=LITE_BUILD=true
+        working-directory: frontend
+
+      - name: Copy Rust backend into Linux bundle (Lite)
+        run: |
+          cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
+
+      - name: Package Linux app (Lite)
+        run: |
+          mkdir -p dist
+          tar -czf dist/ScoringNidra-lite-linux.tar.gz -C frontend/build/linux/x64/release/bundle .
+
+      # 2. Build and Package Full version
+      - name: Build Linux app (Full)
+        run: flutter build linux --release
+        working-directory: frontend
+
+      - name: Copy Python and Rust backend into Linux bundle (Full)
+        run: |
+          cp dist/autoscore-backend frontend/build/linux/x64/release/bundle/
+          cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
+
+      - name: Package Linux app (Full)
+        run: |
+          mkdir -p dist
+          tar -czf dist/ScoringNidra-linux.tar.gz -C frontend/build/linux/x64/release/bundle .
+
+      # 3. Upload Artifacts
+      - name: Upload Linux Full artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-linux
+          path: dist/ScoringNidra-linux.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Linux Lite artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScoringNidra-lite-linux
+          path: dist/ScoringNidra-lite-linux.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Release Assets
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-macos
+          path: dist
+
+      - name: Download macOS Lite artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-lite-macos
+          path: dist
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-Installer
+          path: dist
+
+      - name: Download Windows Lite artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-lite-Installer
+          path: dist
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-linux
+          path: dist
+
+      - name: Download Linux Lite artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ScoringNidra-lite-linux
+          path: dist
+
+      - name: Generate Release Tag & Name
+        id: release_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "title=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "title=Latest Development Build" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.title }}
+          prerelease: ${{ steps.release_info.outputs.prerelease == 'true' }}
+          files: |
+            dist/ScoringNidra-macos.zip
+            dist/ScoringNidra-lite-macos.zip
+            dist/ScoringNidra-Installer.exe
+            dist/ScoringNidra-lite-Installer.exe
+            dist/ScoringNidra-linux.tar.gz
+            dist/ScoringNidra-lite-linux.tar.gz
+          draft: false
+          make_latest: ${{ steps.release_info.outputs.tag != 'latest' && 'true' || 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

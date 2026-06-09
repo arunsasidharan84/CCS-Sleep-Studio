@@ -1,0 +1,12 @@
+linformer-0.2.3.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+linformer-0.2.3.dist-info/LICENSE,sha256=As9u198X-U-vph5noInuUfqsAG2zX_oXPHDmdjwlPPY,1066
+linformer-0.2.3.dist-info/METADATA,sha256=vmQ_1kKSBWc-XzkWKQ22WkwEr7MpoCV9Dt8waLAA3mU,602
+linformer-0.2.3.dist-info/RECORD,,
+linformer-0.2.3.dist-info/WHEEL,sha256=oiQVh_5PnQM0E3gPdiz09WCNmwiHDMaGer_elqB3coM,92
+linformer-0.2.3.dist-info/top_level.txt,sha256=fbYWWXukZG6sJvHvFaSruUr0UVPUnGfG6NmaWaq9zMA,10
+linformer/__init__.py,sha256=6WHicIEuvSqxxcYSr6Rny6fg4s8wEdb7L7D9-3IUS_c,79
+linformer/__pycache__/__init__.cpython-312.pyc,,
+linformer/__pycache__/linformer.cpython-312.pyc,,
+linformer/__pycache__/reversible.cpython-312.pyc,,
+linformer/linformer.py,sha256=n6fzJGjV7jort1rPd-iPySIQJ4vJC0u5Win5TfAwxMk,5885
+linformer/reversible.py,sha256=KSffGLjGL2pBtrpEIa1i_KFCcSIagrsZpEBpb-6Hj9A,6103

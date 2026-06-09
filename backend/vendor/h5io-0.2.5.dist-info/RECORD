@@ -1,0 +1,14 @@
+h5io-0.2.5.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+h5io-0.2.5.dist-info/METADATA,sha256=vbzc6zda_d1gX94vMP-L8AA0ufjZwnZU8pNL7C6P0L4,3960
+h5io-0.2.5.dist-info/RECORD,,
+h5io-0.2.5.dist-info/WHEEL,sha256=CmyFI0kx5cdEMTLiONQRbGQwjIoR1aIYB7eCAQ4KPJ0,91
+h5io-0.2.5.dist-info/licenses/LICENSE.txt,sha256=wHVSKirz_hUSRxkXlxYFZoJnZhcgMOng8eXdmaAaVNk,1514
+h5io-0.2.5.dist-info/top_level.txt,sha256=nMVFu7H0ZApu8_rHJAHwuV10ox6O6_X8cYSE8alSWCY,5
+h5io/__init__.py,sha256=H8-oWEq_QHpLl7RQW1KYR6fzmc9rRXzRQi15BtoKxgI,358
+h5io/__pycache__/__init__.cpython-312.pyc,,
+h5io/__pycache__/_h5io.cpython-312.pyc,,
+h5io/_h5io.py,sha256=l_kaO4XUJjeab37Ic7zIXIp143SpYy-hLsIyi_GFbx0,34032
+h5io/tests/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+h5io/tests/__pycache__/__init__.cpython-312.pyc,,
+h5io/tests/__pycache__/test_io.cpython-312.pyc,,
+h5io/tests/test_io.py,sha256=EbjKgmU9STv6kog6E4KjMTxuFDi5iLawnRuWJ7H_E5c,21548

@@ -1,0 +1,276 @@
+"""Private functions to handle tabular data."""
+
+# Authors: The MNE-BIDS developers
+# SPDX-License-Identifier: BSD-3-Clause
+
+import codecs
+import re
+from collections import OrderedDict
+from copy import deepcopy
+
+import numpy as np
+from mne.utils import logger
+
+from mne_bids._fileio import _open_lock
+
+# Match digit,digit not adjacent to other word chars; rewrites
+# European-locale decimal commas (e.g. "0,5") to "0.5" without touching
+# strings like "EEG, channel 1" or "10,000" inside non-numeric cells.
+_DECIMAL_COMMA_RE = re.compile(r"(?<!\w)(\d+),(\d+)(?!\w)")
+
+
+def _normalize_tsv_cell(value):
+    """Strip whitespace and normalize decimal commas in a TSV cell."""
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if "," not in stripped:
+        return stripped
+    return _DECIMAL_COMMA_RE.sub(r"\1.\2", stripped)
+
+
+def _detect_file_encoding(fname, chunk_size=65536):
+    """Detect the text encoding of a file from its first chunk.
+
+    Checks for a BOM and otherwise tests UTF-8 validity on a single chunk
+    (default 64 KiB), falling back to ``latin-1``. Avoids reading the full
+    file: enough to catch non-UTF-8 bytes in typical BIDS TSV files (e.g.
+    ``µV`` in ``channels.tsv``).
+    """
+    with open(fname, "rb") as f:
+        chunk = f.read(chunk_size)
+    if chunk.startswith(codecs.BOM_UTF8):
+        return "utf-8-sig"
+    if chunk.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return "utf-16"
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    try:
+        decoder.decode(chunk, final=False)
+        return "utf-8"
+    except UnicodeDecodeError:
+        return "latin-1"
+
+
+def _combine_rows(data1, data2, drop_column=None):
+    """Add two OrderedDict's together and optionally drop repeated data.
+
+    Parameters
+    ----------
+    data1 : collections.OrderedDict
+        Original OrderedDict.
+    data2 : collections.OrderedDict
+        New OrderedDict to be added to the original.
+    drop_column : str, optional
+        Name of the column to check for duplicate values in.
+        Any duplicates found will be dropped from the original data array (ie.
+        most recent value are kept).
+
+    Returns
+    -------
+    data : collections.OrderedDict
+        The new combined data.
+    """
+    data = deepcopy(data1)
+    # next extend the values in data1 with values in data2
+    for key, value in data2.items():
+        data[key].extend(value)
+
+    # Make sure that if there are any columns in data1 that didn't get new
+    # data they are populated with "n/a"'s.
+    for key in set(data1.keys()) - set(data2.keys()):
+        data[key].extend(["n/a"] * len(next(iter(data2.values()))))
+
+    if drop_column is None:
+        return data
+
+    # Find any repeated values and remove all but the most recent value.
+    n_rows = len(data[drop_column])
+    _, idxs = np.unique(data[drop_column][::-1], return_index=True)
+    for key in data:
+        data[key] = [data[key][n_rows - 1 - idx] for idx in idxs]
+
+    return data
+
+
+def _contains_row(data, row_data):
+    """Determine whether the specified row data exists in the OrderedDict.
+
+    Parameters
+    ----------
+    data : collections.OrderedDict
+        OrderedDict to check.
+    row_data : dict
+        Dictionary with column names as keys, and values being the column value
+        to match within a row.
+
+    Returns
+    -------
+    bool
+        True if `row_data` exists in `data`.
+
+    Note
+    ----
+    This function will return True if the supplied `row_data` contains less
+    columns than the number of columns in the existing data but there is still
+    a match for the partial row data.
+
+    """
+    mask = None
+    for key, row_value in row_data.items():
+        # if any of the columns don't even exist in the keys
+        # this data_value will return False
+        data_value = np.array(data.get(key))
+
+        # Cast row_value to the same dtype as data_value to avoid a NumPy
+        # FutureWarning, see
+        # https://github.com/mne-tools/mne-bids/pull/372
+        if data_value.size > 0:
+            row_value = np.array(row_value, dtype=data_value.dtype)
+        column_mask = np.isin(data_value, row_value)
+        mask = column_mask if mask is None else (mask & column_mask)
+    return np.any(mask)
+
+
+def _drop(data, values, column):
+    """Remove rows from the OrderedDict.
+
+    Parameters
+    ----------
+    data : collections.OrderedDict
+        Data to drop values from.
+    values : list
+        List of values to drop. Any row containing this value in the specified
+        column will be dropped.
+    column : string
+        Name of the column to check for the existence of `value` in.
+
+    Returns
+    -------
+    new_data : collections.OrderedDict
+        Copy of the original data with 0 or more rows dropped.
+
+    """
+    new_data = deepcopy(data)
+    new_data_col = np.array(new_data[column])
+
+    # Cast `values` to the same dtype as `new_data_col` to avoid a NumPy
+    # FutureWarning, see
+    # https://github.com/mne-tools/mne-bids/pull/372
+    dtype = new_data_col.dtype
+    if new_data_col.shape == (0,):
+        dtype = np.array(values).dtype
+    values = np.array(values, dtype=dtype)
+
+    mask = np.isin(new_data_col, values, invert=True)
+    for key in new_data.keys():
+        new_data[key] = np.array(new_data[key])[mask].tolist()
+    return new_data
+
+
+def _from_tsv(fname, dtypes=None):
+    """Read a tsv file into an OrderedDict.
+
+    Parameters
+    ----------
+    fname : str
+        Path to the file being loaded.
+    dtypes : list, optional
+        List of types to cast the values loaded as. This is specified column by
+        column.
+        Defaults to None. In this case all the data is loaded as strings.
+
+    Returns
+    -------
+    data_dict : collections.OrderedDict
+        Keys are the column names, and values are the column data.
+
+    """
+    from .utils import warn  # avoid circular import
+
+    encoding = _detect_file_encoding(fname)
+    if not encoding.startswith("utf-8"):
+        logger.info(f"Reading non-UTF-8 TSV as {encoding}: '{fname}'")
+    data = np.loadtxt(
+        fname, dtype=str, delimiter="\t", ndmin=2, comments=None, encoding=encoding
+    )
+    # Handle empty files - data may be empty or only have a header
+    if data.size == 0:
+        warn(f"TSV file is empty: '{fname}'")
+        return OrderedDict()
+
+    # If data is 1-dimensional (only header), make it 2D
+    data = np.atleast_2d(data)
+
+    column_names = data[0, :].tolist()  # cast to list to avoid `np.str_()` keys in dict
+    info = data[1:, :]
+    data_dict = OrderedDict()
+    if dtypes is None:
+        dtypes = [str] * info.shape[1]
+    if not isinstance(dtypes, list | tuple):
+        dtypes = [dtypes] * info.shape[1]
+    if not len(dtypes) == info.shape[1]:
+        raise ValueError(
+            "dtypes length mismatch. "
+            f"Provided: {len(dtypes)}, Expected: {info.shape[1]}"
+        )
+    empty_cols = 0
+    for i, name in enumerate(column_names):
+        cells = np.array([_normalize_tsv_cell(v) for v in info[:, i].tolist()])
+        values = cells.astype(dtypes[i]).tolist()
+        data_dict[name] = values
+        if len(values) == 0:
+            empty_cols += 1
+
+    if empty_cols == len(column_names):
+        warn(f"TSV file is empty: '{fname}'")
+
+    return data_dict
+
+
+def _to_tsv(data, fname, *, lock=True):
+    """Write an OrderedDict into a tsv file.
+
+    Parameters
+    ----------
+    data : collections.OrderedDict
+        Ordered dictionary containing data to be written to a tsv file.
+    fname : str
+        Path to the file being written.
+    """
+    n_rows = len(data[list(data.keys())[0]])
+    output = _tsv_to_str(data, n_rows)
+
+    with _open_lock(fname, "w", encoding="utf-8", lock=lock) as f:
+        f.write(output)
+        f.write("\n")
+
+
+def _tsv_to_str(data, rows=5):
+    """Return a string representation of the OrderedDict.
+
+    Parameters
+    ----------
+    data : collections.OrderedDict
+        OrderedDict to return string representation of.
+    rows : int, optional
+        Maximum number of rows of data to output.
+
+    Returns
+    -------
+    str
+        String representation of the first `rows` lines of `data`.
+
+    """
+    col_names = list(data.keys())
+    n_rows = len(data[col_names[0]])
+    output = list()
+    # write headings.
+    output.append("\t".join(col_names))
+
+    # write column data.
+    max_rows = min(n_rows, rows)
+    for idx in range(max_rows):
+        row_data = list(str(data[key][idx]) for key in data)
+        output.append("\t".join(row_data))
+
+    return "\n".join(output)

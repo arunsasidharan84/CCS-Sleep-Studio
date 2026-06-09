@@ -1,0 +1,111 @@
+Metadata-Version: 2.2
+Name: sleepecg
+Version: 0.5.9
+Summary: A package for sleep stage classification using ECG data
+Author-email: Florian Hofer <hofaflo@gmail.com>, Clemens Brunner <clemens.brunner@gmail.com>
+License: BSD 3-Clause
+Project-URL: homepage, https://github.com/cbrnr/sleepecg
+Project-URL: documentation, https://sleepecg.readthedocs.io/en/latest/
+Project-URL: repository, https://github.com/cbrnr/sleepecg
+Project-URL: changelog, https://github.com/cbrnr/sleepecg/blob/main/CHANGELOG.md
+Keywords: sleep,ecg,qrs,peak
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: pyyaml>=6.0.0
+Requires-Dist: requests>=2.32.3
+Requires-Dist: scipy>=1.13.0
+Requires-Dist: tqdm>=4.66.0
+Provides-Extra: full
+Requires-Dist: edfio>=0.4.4; extra == "full"
+Requires-Dist: joblib>=1.4.2; extra == "full"
+Requires-Dist: matplotlib>=3.9.2; extra == "full"
+Requires-Dist: numba>=0.61.0; extra == "full"
+Requires-Dist: tensorflow>=2.17.0; python_version < "3.13" and extra == "full"
+Requires-Dist: wfdb>=4.2.0; extra == "full"
+Provides-Extra: dev
+Requires-Dist: sleepecg[doc]; extra == "dev"
+Requires-Dist: sleepecg[full]; extra == "dev"
+Requires-Dist: mypy>=0.991; extra == "dev"
+Requires-Dist: pre-commit>=2.13.0; extra == "dev"
+Requires-Dist: pytest>=6.2.0; extra == "dev"
+Requires-Dist: pytest-cov>=6.0.0; extra == "dev"
+Requires-Dist: ruff>=0.4.0; extra == "dev"
+Requires-Dist: setuptools>=72.1.0; extra == "dev"
+Provides-Extra: doc
+Requires-Dist: mkdocs-material>=9.5.0; extra == "doc"
+Requires-Dist: mkdocstrings-python>=1.11.1; extra == "doc"
+Provides-Extra: cibw
+Requires-Dist: edfio>=0.4.4; extra == "cibw"
+Requires-Dist: numba>=0.61.0; platform_machine != "aarch64" and extra == "cibw"
+Requires-Dist: wfdb>=4.2.0; extra == "cibw"
+
+![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fcbrnr%2Fsleepecg%2Frefs%2Fheads%2Fmain%2Fpyproject.toml&logo=python&logoColor=white)
+[![PyPI](https://img.shields.io/pypi/v/sleepecg)](https://pypi.org/project/sleepecg/)
+[![Docs](https://readthedocs.org/projects/sleepecg/badge/?version=latest)](https://sleepecg.readthedocs.io/en/stable/index.html)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.05411/status.svg)](https://doi.org/10.21105/joss.05411)
+[![License](https://img.shields.io/github/license/cbrnr/sleepecg)](LICENSE)
+
+## SleepECG
+
+SleepECG provides tools for sleep stage classification when [EEG](https://en.wikipedia.org/wiki/Electroencephalography) signals are not available. Based only on [ECG](https://en.wikipedia.org/wiki/Electrocardiography), SleepECG provides functions for
+
+- downloading and reading open polysomnography datasets,
+- detecting heartbeats from ECG signals, and
+- classifying sleep stages (which includes preprocessing, feature extraction, and classification).
+
+
+### Documentation
+
+Documentation for SleepECG is available on [Read the Docs](https://sleepecg.readthedocs.io/en/stable/index.html). Check out the [changelog](https://github.com/cbrnr/sleepecg/blob/main/CHANGELOG.md) to learn what we added, changed, or fixed.
+
+
+### Installation
+
+SleepECG is available on PyPI and can be installed with [pip](https://pip.pypa.io/en/stable/):
+
+```
+pip install sleepecg
+```
+
+SleepECG with all optional dependencies can be installed with the following command:
+
+```
+pip install "sleepecg[full]"
+```
+
+If you want the latest development version, use the following command:
+
+```
+pip install git+https://github.com/cbrnr/sleepecg
+```
+
+
+### Example
+
+The following example detects heartbeats in a short ECG (a one-dimensional NumPy array):
+
+```python
+import numpy as np
+from sleepecg import detect_heartbeats, get_toy_ecg
+
+ecg, fs = get_toy_ecg()  # 5 min of ECG data at 360 Hz
+beats = detect_heartbeats(ecg, fs)  # indices of detected heartbeats
+```
+
+
+### Contributing
+
+The [contributing guide](https://github.com/cbrnr/sleepecg/blob/main/CONTRIBUTING.md) contains detailed instructions on how to contribute to SleepECG.

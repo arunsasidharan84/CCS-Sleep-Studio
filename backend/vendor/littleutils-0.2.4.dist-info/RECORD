@@ -1,0 +1,10 @@
+littleutils-0.2.4.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+littleutils-0.2.4.dist-info/LICENSE,sha256=3-FPh5jEAMvMhbtFNqaGxvzzCGs0RsP3xwVKK81zymo,1066
+littleutils-0.2.4.dist-info/METADATA,sha256=1RI-hhH9HAgPzlIACX58AczPWggG87z85Pm9Yof47aY,679
+littleutils-0.2.4.dist-info/RECORD,,
+littleutils-0.2.4.dist-info/WHEEL,sha256=y4mX-SOX4fYIkonsAGA5N0Oy-8_gI4FXw5HNI1xqvWg,91
+littleutils-0.2.4.dist-info/top_level.txt,sha256=8hCeiqBQROKETBmu-B628SwCeyvVOozosShG3S0_QpI,12
+littleutils/__init__.py,sha256=prRGuURGrZe0OOt7P5pzS0Wxi23o_XKQemDt8tkVYR0,21419
+littleutils/__pycache__/__init__.cpython-312.pyc,,
+littleutils/__pycache__/version.cpython-312.pyc,,
+littleutils/version.py,sha256=qfsPKGSX4YbTkJ_mvg4kfAF60Sx0Ol77KSinJilpkVw,21

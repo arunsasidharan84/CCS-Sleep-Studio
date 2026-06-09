@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: yasa
+Version: 0.6.3
+Summary: YASA: Analysis of polysomnography recordings.
+Home-page: https://github.com/raphaelvallat/yasa/
+Download-URL: https://github.com/raphaelvallat/yasa/
+Author: Raphael Vallat
+Author-email: raphaelvallat9@gmail.com
+Maintainer: Raphael Vallat
+Maintainer-email: raphaelvallat9@gmail.com
+License: BSD (3-clause)
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS
+License-File: LICENSE
+Requires-Dist: numpy>=1.16.5
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Requires-Dist: mne>=0.23
+Requires-Dist: numba
+Requires-Dist: outdated
+Requires-Dist: antropy
+Requires-Dist: scikit-learn
+Requires-Dist: tensorpac>=0.6.5
+Requires-Dist: pyriemann>=0.2.7
+Requires-Dist: sleepecg>=0.5.0
+Requires-Dist: lspopt
+Requires-Dist: ipywidgets
+Requires-Dist: joblib
+Requires-Dist: lightgbm
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: download-url
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: requires-dist
+Dynamic: summary
+
+YASA (Yet Another Spindle Algorithm) : an open-source Python package to analyze polysomnographic sleep recordings.

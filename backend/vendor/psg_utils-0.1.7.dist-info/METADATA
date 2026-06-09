@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: psg-utils
+Version: 0.1.7
+Summary: A collection of Python utility classes and functions for loading and processing Polysomnography (PSG) sleep study data.
+Home-page: https://github.com/perslev/psg-utils
+Author: Mathias Perslev
+Author-email: map@di.ku.dk
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.21.5
+Requires-Dist: h5py>=2.10.0
+Requires-Dist: mne>=0.23.0
+Requires-Dist: pandas>=1.3.2
+Requires-Dist: psutil>=5.8.0
+Requires-Dist: matplotlib>=3.4.3
+Requires-Dist: wfdb>=3.4.0
+Requires-Dist: scikit_learn>=1.0.2
+Requires-Dist: requests>=2.27.1
+
+# PSG Data Python Utilities
+A collection of Python utility classes and functions for loading and processing Polysomnography (PSG) sleep study data.

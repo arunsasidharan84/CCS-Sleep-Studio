@@ -1,0 +1,114 @@
+# This files stores hyperparameters for the building and fitting of a model
+# in the models library.
+#
+# Components prefixed CB are for callback hyperparameter settings
+
+CB_tb: &TB
+  # tensorboard
+  nickname: "tb"
+  class_name: "TensorBoard"
+  kwargs: {log_dir: './tensorboard'}
+
+CB_es: &ES
+  # Early stopping
+  nickname: "es"
+  class_name: "EarlyStopping"
+  kwargs: {monitor: 'val_dice', min_delta: 0,
+           patience: 80, verbose: 1 , mode: 'max'}
+
+CB_mcp: &MCP
+  # Model checkpoint
+  nickname: "mcp"
+  class_name: "ModelCheckpoint"
+  kwargs: {filepath: "./model/@epoch_{epoch:02d}_val_dice_{val_dice:.5f}.h5",
+           monitor: "val_dice", save_best_only: false, save_weights_only: true,
+           verbose: 1, mode: "max"}
+
+CB_timer: &TIMER
+  # Train timer callback
+  nickname: "timer"
+  class_name: "TrainTimer"
+  pass_logger: True
+  kwargs: {verbose: True}
+
+CB_csv: &CSV
+  # keras.CSVLogger
+  nickname: "csv"
+  class_name: "CSVLogger"
+  kwargs: {filename: "logs/training.csv", separator: ",", append: true}
+
+datasets:
+  # Add dataset IDs --> relative paths here
+  dataset_1: dataset_configurations/dataset_1.yaml
+
+build:
+  #
+  # Hyperparameters passed to the Model.build and __init__ methods
+  #
+  model_class_name: "UTime"
+  activation: elu
+  depth: 4
+  pools: [10, 8, 6, 4]
+  kernel_size: 5
+  dilation: 2
+  transition_window: 1
+  complexity_factor: 2
+  n_classes: 5
+
+augmenters:
+  #
+  # On-the-fly augmentation?
+  # Leave empty or delete entirely if not
+  #
+  [
+  {cls_name: "GlobalGaussianNoise",
+   kwargs: {sigma: 0.1, apply_prob: 0.2}},
+  {cls_name: "RegionalGaussianNoise",
+   kwargs: {sigma: 0.2,
+            min_region_fraction: 0.001,
+            max_region_fraction: 0.50,
+            log_sample: True,
+            apply_prob: 0.2}},
+  {cls_name: "GlobalElasticDeformations",
+   kwargs: {alpha: [0, 35],
+            sigma: [3, 30],
+            apply_prob: 0.2}},
+  {cls_name: "RegionalErase",
+   kwargs: {min_region_fraction: 0.001,
+            max_region_fraction: 0.3,
+            log_sample: True,
+            apply_prob: 0.2}}
+  ]
+
+fit:
+  #
+  # Hyperparameters passed to the Trainer object
+  #
+  balanced_sampling: True
+  use_multiprocessing: False
+  channel_mixture: False
+  margin: 17
+
+  # Loss function(s)
+  loss: [SparseCategoricalCrossentropy]
+  # loss_kwargs:  # OBS: passed to all losses
+  #   name: my_loss
+
+  # Metric function(s)
+  metrics: [SparseCategoricalAccuracy]
+  # metric_kwargs:  # OBS: passed to all metrics
+  #   name: my_metric
+
+  # Ignore 'out-of-bounds' classes in loss computation (e.g. to ignore 'UNKNOWN'/'MOVEMENT' other rare classes)
+  # Comment out or set to Null/False to not ignore any classes
+  ignore_out_of_bounds_classes: true
+
+  # Optimization
+  batch_size: 12
+  n_epochs: 2000
+  verbose: true
+  optimizer: "Adam"
+  optimizer_kwargs: {learning_rate: 5.0e-06, decay: 0.0, beta_1: 0.9, beta_2: 0.999, epsilon: 1.0e-8}
+
+  # Callbacks
+  callbacks: [*TB, *MCP, *TIMER, *CSV, *ES]

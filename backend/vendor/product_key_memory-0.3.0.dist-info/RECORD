@@ -1,0 +1,11 @@
+product_key_memory-0.3.0.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+product_key_memory-0.3.0.dist-info/METADATA,sha256=jvjAIqSkBIhq9mITpRBuLyfFE8BlV-L-CFWzKs9Kc9g,4887
+product_key_memory-0.3.0.dist-info/RECORD,,
+product_key_memory-0.3.0.dist-info/WHEEL,sha256=qtCwoSJWgHk21S1Kb4ihdzI2rlJ1ZKaIurTj_ngOhyQ,87
+product_key_memory-0.3.0.dist-info/licenses/LICENSE,sha256=As9u198X-U-vph5noInuUfqsAG2zX_oXPHDmdjwlPPY,1066
+product_key_memory/__init__.py,sha256=3NvpqfWT7GtKxN8XpYr740KgnsNXafEtQNH7MwSOn-k,134
+product_key_memory/__pycache__/__init__.cpython-312.pyc,,
+product_key_memory/__pycache__/product_key_memory.cpython-312.pyc,,
+product_key_memory/__pycache__/transformer.cpython-312.pyc,,
+product_key_memory/product_key_memory.py,sha256=CponUqGKAko-PMJY4-TSYfzOF3_PPDNPgPyRFSHszIg,7294
+product_key_memory/transformer.py,sha256=8puAKg-0xM1WXDw_pEy8xhy2VCS4ISONIglp43ydb4g,4435

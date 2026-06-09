@@ -1,0 +1,11 @@
+axial_positional_embedding-0.3.12.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+axial_positional_embedding-0.3.12.dist-info/METADATA,sha256=CT_Tty5Jkl_Q4aC6-nrg4Q7sDW31DPlyfYS8sQvRBVI,4257
+axial_positional_embedding-0.3.12.dist-info/RECORD,,
+axial_positional_embedding-0.3.12.dist-info/WHEEL,sha256=qtCwoSJWgHk21S1Kb4ihdzI2rlJ1ZKaIurTj_ngOhyQ,87
+axial_positional_embedding-0.3.12.dist-info/licenses/LICENSE,sha256=As9u198X-U-vph5noInuUfqsAG2zX_oXPHDmdjwlPPY,1066
+axial_positional_embedding/__init__.py,sha256=gkR4uGQ7WEJLWOHNFrmbIWc5hnuDVFIkXJGytj2Q0Zk,255
+axial_positional_embedding/__pycache__/__init__.cpython-312.pyc,,
+axial_positional_embedding/__pycache__/axial_positional_embedding.cpython-312.pyc,,
+axial_positional_embedding/__pycache__/continuous_axial_positional_embedding.cpython-312.pyc,,
+axial_positional_embedding/axial_positional_embedding.py,sha256=c5yjHST4kin8bAjHfzVJbfoe9kyy3y1kKpGJLjTq-CI,2661
+axial_positional_embedding/continuous_axial_positional_embedding.py,sha256=cU_gOpMlbzYfHExXvwjMpFPhLgXKvQfXZ8LQUS9L3yw,4593

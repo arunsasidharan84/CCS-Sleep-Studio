@@ -1,0 +1,64 @@
+chambon2018:
+  model: physioex.train.networks.chambon2018:Chambon2018Net
+  preprocessing : raw
+  target_transform: physioex.train.networks.utils.target_transform:get_mid_label
+
+seqsleepnet:
+  model: physioex.train.networks.seqsleepnet:SeqSleepNet
+  preprocessing : xsleepnet
+  target_transform: null
+
+sleeptransformer:
+  model: physioex.train.networks.sleeptransformer:SleepTransformer
+  preprocessing : xsleepnet
+  target_transform: null
+
+micetransformer:
+  model: physioex.train.networks.sleeptransformer:MiceTransformer
+  preprocessing : xsleepnet_mouse
+  target_transform: null
+
+tinysleepnet:
+  model: physioex.train.networks.tinysleepnet:TinySleepNet
+  preprocessing : raw
+  target_transform: null
+
+seqsexnet:
+  model: physioex.train.networks.seqsexnet:SeqSexNet
+  preprocessing : raw
+  target_transform: null
+  model_kwargs:
+    learning_rate : .000001
+    weight_decay :  .0000001
+    n_classes: 2
+
+protosleepnet:
+  model: physioex.train.networks.prototype:ProtoSleepNet
+  preprocessing : xsleepnet
+  target_transform: null
+  model_kwargs:
+    learning_rate : .00001
+    N : 1
+    S : 2
+    n_prototypes : 50
+
+
+
+default:
+  model : null
+
+  model_kwargs : 
+    n_classes: 5
+    sf : 100
+    in_channels: null
+    sequence_length : null
+  
+    loss: physioex.train.networks.utils.loss:CrossEntropyLoss
+    loss_kwargs: {}
+
+    learning_rate : .0001
+    weight_decay :  .000001
+  preprocessing : null
+  target_transform : null
+
+

@@ -1,0 +1,1432 @@
+# Authors: Cédric Rommel <cedric.rommel@inria.fr>
+#          Alexandre Gramfort <alexandre.gramfort@inria.fr>
+#          Gustavo Rodrigues <gustavenrique01@gmail.com>
+#          Bruna Lopes <brunajaflopes@gmail.com>
+#          Sarthak Tayal <sarthaktayal2@gmail.com>
+#
+# License: BSD (3-clause)
+
+from __future__ import annotations
+
+from numbers import Real
+from typing import Literal
+
+import numpy as np
+import numpy.typing as npt
+import torch
+from mne.filter import notch_filter
+from scipy.interpolate import Rbf
+from sklearn.utils import check_random_state
+from torch.fft import fft, ifft
+from torch.nn.functional import one_hot, pad
+
+
+def identity(X: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Identity operation.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+    """
+    return X, y
+
+
+def time_reverse(X: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Flip the time axis of each input.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+    """
+    return torch.flip(X, [-1]), y
+
+
+def sign_flip(X: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Flip the sign axis of each input.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+    """
+    return -X, y
+
+
+def _new_random_fft_phase_odd(
+    batch_size: int,
+    c: int,
+    n: int,
+    device: torch.device,
+    random_state: int | np.random.RandomState | None,
+) -> torch.Tensor:
+    rng = check_random_state(random_state)
+    random_phase = torch.from_numpy(
+        2j * np.pi * rng.random((batch_size, c, (n - 1) // 2))
+    ).to(device)
+    return torch.cat(
+        [
+            torch.zeros((batch_size, c, 1), device=device),
+            random_phase,
+            -torch.flip(random_phase, [-1]),
+        ],
+        dim=-1,
+    )
+
+
+def _new_random_fft_phase_even(
+    batch_size: int,
+    c: int,
+    n: int,
+    device: torch.device,
+    random_state: int | np.random.RandomState | None,
+) -> torch.Tensor:
+    rng = check_random_state(random_state)
+    random_phase = torch.from_numpy(
+        2j * np.pi * rng.random((batch_size, c, n // 2 - 1))
+    ).to(device)
+    return torch.cat(
+        [
+            torch.zeros((batch_size, c, 1), device=device),
+            random_phase,
+            torch.zeros((batch_size, c, 1), device=device),
+            -torch.flip(random_phase, [-1]),
+        ],
+        dim=-1,
+    )
+
+
+_new_random_fft_phase = {0: _new_random_fft_phase_even, 1: _new_random_fft_phase_odd}
+
+
+def ft_surrogate(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    phase_noise_magnitude: float,
+    channel_indep: bool,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """FT surrogate augmentation of a single EEG channel, as proposed in [1]_.
+
+    Function copied from https://github.com/cliffordlab/sleep-convolutions-tf
+    and modified.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    phase_noise_magnitude : float
+        Float between 0 and 1 setting the range over which the phase
+        perturbation is uniformly sampled:
+        [0, `phase_noise_magnitude` * 2 * `pi`].
+    channel_indep : bool
+        Whether to sample phase perturbations independently for each channel or
+        not. It is advised to set it to False when spatial information is
+        important for the task, like in BCI.
+    random_state : int | numpy.random.Generator, optional
+        Used to draw the phase perturbation. Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Schwabedal, J. T., Snyder, J. C., Cakmak, A., Nemati, S., &
+       Clifford, G. D. (2018). Addressing Class Imbalance in Classification
+       Problems of Noisy Signals by using Fourier Transform Surrogates. arXiv
+       preprint arXiv:1806.08675.
+    """
+    assert (
+        isinstance(
+            phase_noise_magnitude, (Real, torch.FloatTensor, torch.cuda.FloatTensor)
+        )
+        and 0 <= phase_noise_magnitude <= 1
+    ), f"eps must be a float between 0 and 1. Got {phase_noise_magnitude}."
+
+    f = fft(X.double(), dim=-1)
+    device = X.device
+
+    n = f.shape[-1]
+    random_phase = _new_random_fft_phase[n % 2](
+        f.shape[0],
+        f.shape[-2] if channel_indep else 1,
+        n,
+        device=device,
+        random_state=random_state,
+    )
+    if not channel_indep:
+        random_phase = torch.tile(random_phase, (1, f.shape[-2], 1))
+    if isinstance(phase_noise_magnitude, torch.Tensor):
+        phase_noise_magnitude = phase_noise_magnitude.to(device)
+    f_shifted = f * torch.exp(phase_noise_magnitude * random_phase)
+    shifted = ifft(f_shifted, dim=-1)
+    transformed_X = shifted.real.float()
+
+    return transformed_X, y
+
+
+def _pick_channels_randomly(
+    X: torch.Tensor, p_pick: float, random_state: int | np.random.RandomState | None
+) -> torch.Tensor:
+    rng = check_random_state(random_state)
+    batch_size, n_channels, _ = X.shape
+    # allows to use the same RNG
+    unif_samples = torch.as_tensor(
+        rng.uniform(0, 1, size=(batch_size, n_channels)),
+        dtype=torch.float,
+        device=X.device,
+    )
+    # equivalent to a 0s and 1s mask
+    return torch.sigmoid(1000 * (unif_samples - p_pick))
+
+
+def channels_dropout(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    p_drop: float,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Randomly set channels to flat signal.
+
+    Part of the CMSAugment policy proposed in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    p_drop : float
+        Float between 0 and 1 setting the probability of dropping each channel.
+    random_state : int | numpy.random.Generator, optional
+        Seed to be used to instantiate numpy random number generator instance.
+        Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Saeed, A., Grangier, D., Pietquin, O., & Zeghidour, N. (2020).
+       Learning from Heterogeneous EEG Signals with Differentiable Channel
+       Reordering. arXiv preprint arXiv:2010.13694.
+    """
+    mask = _pick_channels_randomly(X, p_drop, random_state=random_state)
+    return X * mask.unsqueeze(-1), y
+
+
+def _make_permutation_matrix(
+    X: torch.Tensor, mask: torch.Tensor, random_state: int | np.random.Generator | None
+) -> torch.Tensor:
+    rng = check_random_state(random_state)
+    batch_size, n_channels, _ = X.shape
+    hard_mask = mask.round()
+    batch_permutations = torch.empty(
+        batch_size, n_channels, n_channels, device=X.device
+    )
+    for b, mask in enumerate(hard_mask):
+        channels_to_shuffle = torch.arange(n_channels, device=X.device)
+        channels_to_shuffle = channels_to_shuffle[mask.bool()]
+        reordered_channels = torch.tensor(
+            rng.permutation(channels_to_shuffle.cpu()), device=X.device
+        )
+        channels_permutation = torch.arange(n_channels, device=X.device)
+        channels_permutation[channels_to_shuffle] = reordered_channels
+        batch_permutations[b, ...] = one_hot(channels_permutation)
+    return batch_permutations
+
+
+def channels_shuffle(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    p_shuffle: float,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Randomly shuffle channels in EEG data matrix.
+
+    Part of the CMSAugment policy proposed in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    p_shuffle : float | None
+        Float between 0 and 1 setting the probability of including the channel
+        in the set of permutted channels.
+    random_state : int | numpy.random.Generator, optional
+        Seed to be used to instantiate numpy random number generator instance.
+        Used to sample which channels to shuffle and to carry the shuffle.
+        Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Saeed, A., Grangier, D., Pietquin, O., & Zeghidour, N. (2020).
+       Learning from Heterogeneous EEG Signals with Differentiable Channel
+       Reordering. arXiv preprint arXiv:2010.13694.
+    """
+    if p_shuffle == 0:
+        return X, y
+    mask = _pick_channels_randomly(X, 1 - p_shuffle, random_state)
+    batch_permutations = _make_permutation_matrix(X, mask, random_state)
+    return torch.matmul(batch_permutations, X), y
+
+
+def gaussian_noise(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    std: float,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Randomly add white Gaussian noise to all channels.
+
+    Suggested e.g. in [1]_, [2]_ and [3]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    std : float
+        Standard deviation to use for the additive noise.
+    random_state : int | numpy.random.Generator, optional
+        Seed to be used to instantiate numpy random number generator instance.
+        Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Wang, F., Zhong, S. H., Peng, J., Jiang, J., & Liu, Y. (2018). Data
+       augmentation for eeg-based emotion recognition with deep convolutional
+       neural networks. In International Conference on Multimedia Modeling
+       (pp. 82-93).
+    .. [2] Cheng, J. Y., Goh, H., Dogrusoz, K., Tuzel, O., & Azemi, E. (2020).
+       Subject-aware contrastive learning for biosignals. arXiv preprint
+       arXiv:2007.04871.
+    .. [3] Mohsenvand, M. N., Izadi, M. R., & Maes, P. (2020). Contrastive
+       Representation Learning for Electroencephalogram Classification. In
+       Machine Learning for Health (pp. 238-253). PMLR.
+    """
+    rng = check_random_state(random_state)
+    if isinstance(std, torch.Tensor):
+        std = std.to(X.device)
+    noise = (
+        torch.from_numpy(
+            rng.normal(loc=np.zeros(X.shape), scale=1),
+        )
+        .float()
+        .to(X.device)
+        * std
+    )
+    transformed_X = X + noise
+    return transformed_X, y
+
+
+def channels_permute(
+    X: torch.Tensor, y: torch.Tensor, permutation: list[int]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Permute EEG channels according to fixed permutation matrix.
+
+    Suggested e.g. in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    permutation : list
+        List of integers defining the new channels order.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Deiss, O., Biswal, S., Jin, J., Sun, H., Westover, M. B., & Sun, J.
+       (2018). HAMLET: interpretable human and machine co-learning technique.
+       arXiv preprint arXiv:1803.09702.
+    """
+    return X[..., permutation, :], y
+
+
+def smooth_time_mask(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    mask_start_per_sample: torch.Tensor,
+    mask_len_samples: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Smoothly replace a contiguous part of all channels by zeros.
+
+    Originally proposed in [1]_ and [2]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    mask_start_per_sample : torch.tensor
+        Tensor of integers containing the position (in last dimension) where to
+        start masking the signal. Should have the same size as the first
+        dimension of X (i.e. one start position per example in the batch).
+    mask_len_samples : int
+        Number of consecutive samples to zero out.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Cheng, J. Y., Goh, H., Dogrusoz, K., Tuzel, O., & Azemi, E. (2020).
+       Subject-aware contrastive learning for biosignals. arXiv preprint
+       arXiv:2007.04871.
+    .. [2] Mohsenvand, M. N., Izadi, M. R., & Maes, P. (2020). Contrastive
+       Representation Learning for Electroencephalogram Classification. In
+       Machine Learning for Health (pp. 238-253). PMLR.
+    """
+    batch_size, n_channels, seq_len = X.shape
+    t = torch.arange(seq_len, device=X.device).float()
+    t = t.repeat(batch_size, n_channels, 1)
+    mask_start_per_sample = mask_start_per_sample.view(-1, 1, 1)
+    s = 1000 / seq_len
+    mask = (
+        (
+            torch.sigmoid(s * -(t - mask_start_per_sample))
+            + torch.sigmoid(s * (t - mask_start_per_sample - mask_len_samples))
+        )
+        .float()
+        .to(X.device)
+    )
+    return X * mask, y
+
+
+def bandstop_filter(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    sfreq: float,
+    bandwidth: float,
+    freqs_to_notch: npt.ArrayLike | None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply a band-stop filter with desired bandwidth at the desired frequency.
+
+    position.
+
+    Suggested e.g. in [1]_ and [2]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    sfreq : float
+        Sampling frequency of the signals to be filtered.
+    bandwidth : float
+        Bandwidth of the filter, i.e. distance between the low and high cut
+        frequencies.
+    freqs_to_notch : array-like | None
+        Array of floats of size ``(batch_size,)`` containing the center of the
+        frequency band to filter out for each sample in the batch. Frequencies
+        should be greater than ``bandwidth/2 + transition`` and lower than
+        ``sfreq/2 - bandwidth/2 - transition`` (where ``transition = 1 Hz``).
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Cheng, J. Y., Goh, H., Dogrusoz, K., Tuzel, O., & Azemi, E. (2020).
+       Subject-aware contrastive learning for biosignals. arXiv preprint
+       arXiv:2007.04871.
+    .. [2] Mohsenvand, M. N., Izadi, M. R., & Maes, P. (2020). Contrastive
+       Representation Learning for Electroencephalogram Classification. In
+       Machine Learning for Health (pp. 238-253). PMLR.
+    """
+    if bandwidth == 0 or freqs_to_notch is None:
+        return X, y
+    transformed_X = X.clone()
+    for c, (sample, notched_freq) in enumerate(zip(transformed_X, freqs_to_notch)):
+        sample = sample.cpu().numpy().astype(np.float64)
+        transformed_X[c] = torch.as_tensor(
+            notch_filter(
+                sample,
+                Fs=sfreq,
+                freqs=notched_freq,
+                method="fir",
+                notch_widths=bandwidth,
+                verbose=False,
+            )
+        )
+    return transformed_X, y
+
+
+def _analytic_transform(x: torch.Tensor) -> torch.Tensor:
+    if torch.is_complex(x):
+        raise ValueError("x must be real.")
+
+    N = x.shape[-1]
+    f = fft(x, N, dim=-1)
+    h = torch.zeros_like(f)
+    if N % 2 == 0:
+        h[..., 0] = h[..., N // 2] = 1
+        h[..., 1 : N // 2] = 2
+    else:
+        h[..., 0] = 1
+        h[..., 1 : (N + 1) // 2] = 2
+
+    return ifft(f * h, dim=-1)
+
+
+def _nextpow2(n: int) -> int:
+    """Return the first integer N such that 2**N >= abs(n)."""
+    return int(np.ceil(np.log2(np.abs(n))))
+
+
+def _frequency_shift(X: torch.Tensor, fs: float, f_shift: float) -> torch.Tensor:
+    """
+    Shift the specified signal by the specified frequency.
+
+    See https://gist.github.com/lebedov/4428122
+    """
+    # Pad the signal with zeros to prevent the FFT invoked by the transform
+    # from slowing down the computation:
+    n_channels, N_orig = X.shape[-2:]
+    N_padded = 2 ** _nextpow2(N_orig)
+    t = torch.arange(N_padded, device=X.device) / fs
+    padded = pad(X, (0, N_padded - N_orig))
+    analytical = _analytic_transform(padded)
+    if isinstance(f_shift, torch.Tensor):
+        _f_shift = f_shift
+    elif isinstance(f_shift, (float, int, np.ndarray, list)):
+        _f_shift = torch.as_tensor(f_shift).float()
+    else:
+        raise ValueError(f"Invalid f_shift type: {type(f_shift)}")
+    f_shift_stack = _f_shift.repeat(N_padded, n_channels, 1)
+    reshaped_f_shift = f_shift_stack.permute(
+        *torch.arange(f_shift_stack.ndim - 1, -1, -1)
+    )
+    shifted = analytical * torch.exp(2j * np.pi * reshaped_f_shift * t)
+    return shifted[..., :N_orig].real.float()
+
+
+def frequency_shift(
+    X: torch.Tensor, y: torch.Tensor, delta_freq: float, sfreq: float
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Adds a shift in the frequency domain to all channels.
+
+    Note that here, the shift is the same for all channels of a single example.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    delta_freq : float
+        The amplitude of the frequency shift (in Hz).
+    sfreq : float
+        Sampling frequency of the signals to be transformed.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+    """
+    transformed_X = _frequency_shift(
+        X=X,
+        fs=sfreq,
+        f_shift=delta_freq,
+    )
+    return transformed_X, y
+
+
+def _torch_normalize_vectors(rr: torch.Tensor) -> torch.Tensor:
+    """Normalize surface vertices."""
+    norm = torch.linalg.norm(rr, axis=1, keepdim=True)
+    mask = norm > 0
+    norm[~mask] = 1  # in case norm is zero, divide by 1
+    new_rr = rr / norm
+    return new_rr
+
+
+def _torch_legval(
+    x: torch.Tensor, c: torch.Tensor, tensor: bool = True
+) -> torch.Tensor:
+    """
+    Evaluate a Legendre series at points x.
+
+    If `c` is of length `n + 1`, this function returns the value:
+    .. math:: p(x) = c_0 * L_0(x) + c_1 * L_1(x) + ... + c_n * L_n(x)
+    The parameter `x` is converted to an array only if it is a tuple or a
+    list, otherwise it is treated as a scalar. In either case, either `x`
+    or its elements must support multiplication and addition both with
+    themselves and with the elements of `c`.
+    If `c` is a 1-D array, then `p(x)` will have the same shape as `x`.  If
+    `c` is multidimensional, then the shape of the result depends on the
+    value of `tensor`. If `tensor` is true the shape will be c.shape[1:] +
+    x.shape. If `tensor` is false the shape will be c.shape[1:]. Note that
+    scalars have shape (,).
+    Trailing zeros in the coefficients will be used in the evaluation, so
+    they should be avoided if efficiency is a concern.
+
+    Parameters
+    ----------
+    x : array_like, compatible object
+        If `x` is a list or tuple, it is converted to an ndarray, otherwise
+        it is left unchanged and treated as a scalar. In either case, `x`
+        or its elements must support addition and multiplication with
+        with themselves and with the elements of `c`.
+    c : array_like
+        Array of coefficients ordered so that the coefficients for terms of
+        degree n are contained in c[n]. If `c` is multidimensional the
+        remaining indices enumerate multiple polynomials. In the two
+        dimensional case the coefficients may be thought of as stored in
+        the columns of `c`.
+    tensor : boolean, optional
+        If True, the shape of the coefficient array is extended with ones
+        on the right, one for each dimension of `x`. Scalars have dimension 0
+        for this action. The result is that every column of coefficients in
+        `c` is evaluated for every element of `x`. If False, `x` is broadcast
+        over the columns of `c` for the evaluation.  This keyword is useful
+        when `c` is multidimensional. The default value is True.
+        .. versionadded:: 1.7.0
+
+    Returns
+    -------
+    values : ndarray, algebra_like
+        The shape of the return value is described above.
+
+    See Also
+    --------
+    legval2d, leggrid2d, legval3d, leggrid3d
+
+    Notes
+    -----
+    Code copied and modified from Numpy:
+    https://github.com/numpy/numpy/blob/v1.20.0/numpy/polynomial/legendre.py#L835-L920
+
+    Copyright (c) 2005-2021, NumPy Developers.
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are
+    met:
+        * Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above
+        copyright notice, this list of conditions and the following
+        disclaimer in the documentation and/or other materials provided
+        with the distribution.
+        * Neither the name of the NumPy Developers nor the names of any
+        contributors may be used to endorse or promote products derived
+        from this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+    """
+    c = torch.as_tensor(c)
+    c = c.double()
+    if isinstance(x, (tuple, list)):
+        x = torch.as_tensor(x)
+    if isinstance(x, torch.Tensor) and tensor:
+        c = c.view(c.shape + (1,) * x.ndim)
+
+    c = c.to(x.device)
+
+    if len(c) == 1:
+        c0 = c[0]
+        c1 = 0
+    elif len(c) == 2:
+        c0 = c[0]
+        c1 = c[1]
+    else:
+        nd = len(c)
+        c0 = c[-2]
+        c1 = c[-1]
+        for i in range(3, len(c) + 1):
+            tmp = c0
+            nd = nd - 1
+            c0 = c[-i] - (c1 * (nd - 1)) / nd
+            c1 = tmp + (c1 * x * (2 * nd - 1)) / nd
+    return c0 + c1 * x
+
+
+def _torch_calc_g(
+    cosang: torch.Tensor, stiffness: float = 4, n_legendre_terms: int = 50
+) -> torch.Tensor:
+    """Calculate spherical spline g function between points on a sphere.
+
+    Parameters
+    ----------
+    cosang : array-like of float, shape(n_channels, n_channels)
+        cosine of angles between pairs of points on a spherical surface. This
+        is equivalent to the dot product of unit vectors.
+    stiffness : float
+        stiffness of the spline.
+    n_legendre_terms : int
+        number of Legendre terms to evaluate.
+
+    Returns
+    -------
+    G : np.ndrarray of float, shape(n_channels, n_channels)
+        The G matrix.
+
+    Notes
+    -----
+    Code copied and modified from MNE-Python:
+    https://github.com/mne-tools/mne-python/blob/bdaa1d460201a3bc3cec95b67fc2b8d31a933652/mne/channels/interpolation.py#L35
+
+    Copyright © 2011-2019, authors of MNE-Python
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+        * Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright
+        notice, this list of conditions and the following disclaimer in the
+        documentation and/or other materials provided with the distribution.
+        * Neither the name of the copyright holder nor the names of its
+        contributors may be used to endorse or promote products derived from
+        this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+    FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+    DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+    OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+    DAMAGE.
+    """
+    factors = [
+        (2 * n + 1) / (n**stiffness * (n + 1) ** stiffness * 4 * np.pi)
+        for n in range(1, n_legendre_terms + 1)
+    ]
+    return _torch_legval(cosang, [0] + factors)
+
+
+def _torch_make_interpolation_matrix(
+    pos_from: torch.Tensor, pos_to: torch.Tensor, alpha: float = 1e-5
+) -> torch.Tensor:
+    """Compute interpolation matrix based on spherical splines.
+
+    Implementation based on [1]_
+
+    Parameters
+    ----------
+    pos_from : torch.Tensor of float, shape(n_good_sensors, 3)
+        The positions to interpolate from.
+    pos_to : torch.Tensor of float, shape(n_bad_sensors, 3)
+        The positions to interpolate.
+    alpha : float
+        Regularization parameter. Defaults to 1e-5.
+
+    Returns
+    -------
+    interpolation : torch.Tensor of float, shape(len(pos_from), len(pos_to))
+        The interpolation matrix that maps good signals to the location
+        of bad signals.
+
+    Notes
+    -----
+    Code copied and modified from MNE-Python:
+    https://github.com/mne-tools/mne-python/blob/bdaa1d460201a3bc3cec95b67fc2b8d31a933652/mne/channels/interpolation.py#L59
+
+    Copyright © 2011-2019, authors of MNE-Python
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+        * Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright
+        notice, this list of conditions and the following disclaimer in the
+        documentation and/or other materials provided with the distribution.
+        * Neither the name of the copyright holder nor the names of its
+        contributors may be used to endorse or promote products derived from
+        this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+    FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+    DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+    OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+    DAMAGE.
+
+    References
+    ----------
+    [1] Perrin, F., Pernier, J., Bertrand, O. and Echallier, JF. (1989).
+        Spherical splines for scalp potential and current density mapping.
+        Electroencephalography Clinical Neurophysiology, Feb; 72(2):184-7.
+    """
+    pos_from = pos_from.clone()
+    pos_to = pos_to.clone()
+    n_from = pos_from.shape[0]
+    n_to = pos_to.shape[0]
+
+    # normalize sensor positions to sphere
+    pos_from = _torch_normalize_vectors(pos_from)
+    pos_to = _torch_normalize_vectors(pos_to)
+
+    # cosine angles between source positions
+    cosang_from = torch.matmul(pos_from, pos_from.T)
+    cosang_to_from = torch.matmul(pos_to, pos_from.T)
+    G_from = _torch_calc_g(cosang_from)
+    G_to_from = _torch_calc_g(cosang_to_from)
+    assert G_from.shape == (n_from, n_from)
+    assert G_to_from.shape == (n_to, n_from)
+
+    if alpha is not None:
+        G_from.flatten()[:: len(G_from) + 1] += alpha
+
+    device = G_from.device
+    C = torch.vstack(
+        [
+            torch.hstack([G_from, torch.ones((n_from, 1), device=device)]),
+            torch.hstack(
+                [
+                    torch.ones((1, n_from), device=device),
+                    torch.as_tensor([[0]], device=device),
+                ]
+            ),
+        ]
+    )
+
+    try:
+        C_inv = torch.linalg.inv(C)
+    except torch._C._LinAlgError:
+        # There is a stability issue with pinv since torch v1.8.0
+        # see https://github.com/pytorch/pytorch/issues/75494
+        C_inv = torch.linalg.pinv(C.cpu()).to(device)
+
+    interpolation = torch.hstack(
+        [G_to_from, torch.ones((n_to, 1), device=device)]
+    ).matmul(C_inv[:, :-1])
+    assert interpolation.shape == (n_to, n_from)
+    return interpolation
+
+
+def _rotate_signals(
+    X: torch.Tensor,
+    rotations: list[torch.Tensor],
+    sensors_positions_matrix: torch.Tensor,
+    spherical: bool = True,
+) -> torch.Tensor:
+    sensors_positions_matrix = sensors_positions_matrix.to(X.device)
+    rot_sensors_matrices = [
+        rotation.matmul(sensors_positions_matrix) for rotation in rotations
+    ]
+    if spherical:
+        interpolation_matrix = torch.stack(
+            [
+                torch.as_tensor(
+                    _torch_make_interpolation_matrix(
+                        sensors_positions_matrix.T, rot_sensors_matrix.T
+                    ),
+                    device=X.device,
+                ).float()
+                for rot_sensors_matrix in rot_sensors_matrices
+            ]
+        )
+        return torch.matmul(interpolation_matrix, X)
+    else:
+        transformed_X = X.clone()
+        sensors_positions = list(sensors_positions_matrix)
+        for s, rot_sensors_matrix in enumerate(rot_sensors_matrices):
+            rot_sensors_positions = list(rot_sensors_matrix.T)
+            for time in range(X.shape[-1]):
+                interpolator_t = Rbf(*sensors_positions, X[s, :, time])
+                transformed_X[s, :, time] = torch.from_numpy(
+                    interpolator_t(*rot_sensors_positions)
+                )
+        return transformed_X
+
+
+def _make_rotation_matrix(
+    axis: Literal["x", "y", "z"],
+    angle: float | int | np.ndarray | list | torch.Tensor,
+    degrees: bool = True,
+) -> torch.Tensor:
+    assert axis in ["x", "y", "z"], "axis should be either x, y or z."
+    if isinstance(angle, torch.Tensor):
+        _angle = angle
+    elif isinstance(angle, (float, int, np.ndarray, list)):
+        _angle = torch.as_tensor(angle)
+    else:
+        raise ValueError(f"Invalid angle type: {type(angle)}")
+
+    if degrees:
+        _angle = _angle * np.pi / 180
+
+    device = _angle.device
+    zero = torch.zeros(1, device=device)
+    rot = torch.stack(
+        [
+            torch.as_tensor([1, 0, 0], device=device),
+            torch.hstack([zero, torch.cos(_angle), -torch.sin(_angle)]),
+            torch.hstack([zero, torch.sin(_angle), torch.cos(_angle)]),
+        ]
+    )
+    if axis == "x":
+        return rot
+    elif axis == "y":
+        rot = rot[[2, 0, 1], :]
+        return rot[:, [2, 0, 1]]
+    else:
+        rot = rot[[1, 2, 0], :]
+        return rot[:, [1, 2, 0]]
+
+
+def sensors_rotation(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    sensors_positions_matrix: torch.Tensor,
+    axis: Literal["x", "y", "z"],
+    angles: npt.ArrayLike,
+    spherical_splines: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Interpolates EEG signals over sensors rotated around the desired axis.
+
+    with the desired angle.
+
+    Suggested in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    sensors_positions_matrix : torch.Tensor
+        Matrix giving the positions of each sensor in a 3D cartesian coordinate
+        system. Should have shape (3, n_channels), where n_channels is the
+        number of channels. Standard 10-20 positions can be obtained from
+        ``mne`` through::
+
+         >>> ten_twenty_montage = mne.channels.make_standard_montage(
+         ...    'standard_1020'
+         ... ).get_positions()['ch_pos']
+    axis : 'x' | 'y' | 'z'
+        Axis around which to rotate.
+    angles : array-like
+        Array of float of shape ``(batch_size,)`` containing the rotation
+        angles (in degrees) for each element of the input batch.
+    spherical_splines : bool
+        Whether to use spherical splines for the interpolation or not. When
+        `False`, standard scipy.interpolate.Rbf (with quadratic kernel) will be
+        used (as in the original paper).
+
+    References
+    ----------
+    .. [1] Krell, M. M., & Kim, S. K. (2017). Rotational data augmentation for
+       electroencephalographic data. In 2017 39th Annual International
+       Conference of the IEEE Engineering in Medicine and Biology Society
+       (EMBC) (pp. 471-474).
+    """
+    rots = [_make_rotation_matrix(axis, angle, degrees=True) for angle in angles]
+    rotated_X = _rotate_signals(X, rots, sensors_positions_matrix, spherical_splines)
+    return rotated_X, y
+
+
+def mixup(
+    X: torch.Tensor, y: torch.Tensor, lam: torch.Tensor, idx_perm: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mixes two channels of EEG data.
+
+    See [1]_ for details.
+    Implementation based on [2]_.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG data in form ``batch_size, n_channels, n_times``
+    y : torch.Tensor
+        Target of length ``batch_size``
+    lam : torch.Tensor
+        Values between 0 and 1 setting the linear interpolation between
+        examples.
+    idx_perm : torch.Tensor
+        Permuted indices of example that are mixed into original examples.
+
+    Returns
+    -------
+    tuple
+        ``X``, ``y``. Where ``X`` is augmented and ``y`` is a tuple  of length
+        3 containing the labels of the two mixed channels and the mixing
+        coefficient.
+
+    References
+    ----------
+    .. [1] Hongyi Zhang, Moustapha Cisse, Yann N. Dauphin, David Lopez-Paz
+        (2018). mixup: Beyond Empirical Risk Minimization. In 2018
+        International Conference on Learning Representations (ICLR)
+        Online: https://arxiv.org/abs/1710.09412
+    .. [2] https://github.com/facebookresearch/mixup-cifar10/blob/master/train.py
+    """
+    device = X.device
+    batch_size, n_channels, n_times = X.shape
+
+    X_mix = torch.zeros((batch_size, n_channels, n_times)).to(device)
+    y_a = torch.arange(batch_size).to(device)
+    y_b = torch.arange(batch_size).to(device)
+
+    for idx in range(batch_size):
+        X_mix[idx] = lam[idx] * X[idx] + (1 - lam[idx]) * X[idx_perm[idx]]
+        y_a[idx] = y[idx]
+        y_b[idx] = y[idx_perm[idx]]
+
+    return X_mix, (y_a, y_b, lam)
+
+
+def segmentation_reconstruction(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    n_segments: int,
+    data_classes: list[tuple[int, torch.Tensor]],
+    rand_indices: npt.ArrayLike,
+    idx_shuffle: npt.ArrayLike,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Segment and reconstruct EEG data from [1]_.
+
+    See [1]_ for details.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    n_segments : int
+        Number of segments to use in the batch.
+    data_classes : list[tuple[int, torch.Tensor]]
+        List of tuples. Each tuple contains the class index and the corresponding EEG data.
+    rand_indices : array-like
+        Array of indices that indicates which trial to use in each segment.
+    idx_shuffle : array-like
+        Array of indices to shuffle the new generated trials.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Lotte, F. (2015). Signal processing approaches to minimize or
+        suppress calibration time in oscillatory activity-based brain–computer
+        interfaces. Proceedings of the IEEE, 103(6), 871-890.
+    """
+
+    # Initialize lists to store augmented data and corresponding labels
+    aug_data: list[torch.Tensor] = []
+    aug_label: list[torch.Tensor] = []
+
+    # Iterate through each class to separate and augment data
+    for class_index, X_class in data_classes:
+        # Determine class-specific dimensions
+        # Store the augmented data and the corresponding class labels
+        n_trials, n_channels, window_size = X_class.shape
+        # Segment Size
+        segment_size = window_size // n_segments
+        # Initialize an empty tensor for augmented data
+        X_aug = torch.zeros_like(X_class)
+        # Generate random indices within the class-specific dataset
+        rand_idx = rand_indices[class_index]
+        for idx_segment in range(n_segments):
+            start = idx_segment * segment_size
+            end = (idx_segment + 1) * segment_size
+
+            # Perform the data augmentation
+            X_aug[np.arange(n_trials), :, start:end] = X_class[
+                rand_idx[:, idx_segment], :, start:end
+            ]
+        aug_data.append(X_aug)
+        aug_label.append(torch.full((n_trials,), class_index))
+    # Concatenate the augmented data and labels
+    concat_aug_data = torch.cat(aug_data, dim=0)
+    concat_aug_data = concat_aug_data.to(dtype=X.dtype, device=X.device)
+    concat_aug_data = concat_aug_data[idx_shuffle]
+
+    if y is not None:
+        concat_label = torch.cat(aug_label, dim=0)
+        concat_label = concat_label.to(dtype=y.dtype, device=y.device)
+        concat_label = concat_label[idx_shuffle]
+        return concat_aug_data, concat_label
+
+    return concat_aug_data, None
+
+
+def mask_encoding(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    time_start: torch.Tensor,
+    segment_length: int,
+    n_segments: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mark encoding from Ding et al (2024) from [ding2024]_.
+
+    Replaces a contiguous part (or parts) of all channels by zeros
+    (if more than one segment, it may overlap).
+
+    Implementation based on [ding2024]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    time_start : torch.Tensor
+        Tensor of integers containing the position (in last dimension) where to
+        start masking the signal. Should have "n_segments" times the size of the first
+        dimension of X (i.e. "n_segments" start positions per example in the batch).
+    segment_length : int
+        Length of each segment to zero out.
+    n_segments : int
+        Number of segments to zero out in each example.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [ding2024] Ding, Wenlong, et al. A Novel Data Augmentation Approach
+       Using Mask Encoding for Deep Learning-Based Asynchronous SSVEP-BCI.
+       IEEE Transactions on Neural Systems and Rehabilitation Engineering
+       32 (2024): 875-886.
+    """
+
+    batch_indices = torch.arange(X.shape[0]).repeat_interleave(n_segments)
+    start_indices = time_start.flatten()
+    mask_indices = start_indices[:, None] + torch.arange(segment_length)
+
+    # Create a boolean mask with the same shape as X
+    mask = torch.zeros_like(X, dtype=torch.bool)
+    for batch_index, grouped_mask_indices in zip(batch_indices, mask_indices):
+        mask[batch_index, :, grouped_mask_indices] = True
+
+    # Apply the mask to set the values to 0
+    X[mask] = 0
+
+    return X, y  # Return the masked tensor and labels
+
+
+def channels_rereference(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Randomly re-reference channels in EEG data matrix.
+
+    Part of the augmentations proposed in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    random_state : int | numpy.random.Generator, optional
+        Seed to be used to instantiate numpy random number generator instance.
+        Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Mohsenvand, M.N., Izadi, M.R. &amp; Maes, P.. (2020). Contrastive
+        Representation Learning for Electroencephalogram Classification. Proceedings
+        of the Machine Learning for Health NeurIPS Workshop, in Proceedings of Machine
+        Learning Research 136:238-253
+    """
+
+    rng = check_random_state(random_state)
+    batch_size, n_channels, _ = X.shape
+
+    ch = rng.randint(0, n_channels, size=batch_size)
+
+    X_ch = X[torch.arange(batch_size), ch, :]
+    X = X - X_ch.unsqueeze(1)
+    X[torch.arange(batch_size), ch, :] = -X_ch
+
+    return X, y
+
+
+def amplitude_scale(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    scale: tuple,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Rescale amplitude of each channel based on a random sampled scaling value.
+
+    Part of the augmentations proposed in [1]_
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EEG input example or batch.
+    y : torch.Tensor
+        EEG labels for the example or batch.
+    scale : tuple of floats
+        Interval ``(low, high)`` from which the per (sample, channel)
+        scaling value is uniformly sampled.
+    random_state : int | numpy.random.RandomState | None, optional
+        Seed used to instantiate the numpy random number generator that
+        draws the scaling values. Defaults to None.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Transformed labels.
+
+    References
+    ----------
+    .. [1] Mohsenvand, M.N., Izadi, M.R. &amp; Maes, P.. (2020). Contrastive
+        Representation Learning for Electroencephalogram Classification. Proceedings
+        of the Machine Learning for Health NeurIPS Workshop, in Proceedings of Machine
+        Learning Research 136:238-253
+    """
+
+    # use the same numpy rng path as the rest of this module. the previous
+    # torch.Generator + manual_seed path crashed on None and on the
+    # numpy RandomState that Transform passes in via self.rng.
+    rng = check_random_state(random_state)
+    batch_size, n_channels, _ = X.shape
+
+    l, h = scale
+    s = torch.as_tensor(
+        rng.uniform(low=l, high=h, size=(batch_size, n_channels, 1)),
+        device=X.device,
+        dtype=X.dtype,
+    )
+
+    X = s * X
+
+    return X, y
+
+
+def band_rotation(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    num_bands: int = 2,
+    electrodes_per_band: int = 16,
+    band_offsets: tuple[int, ...] = (-1, 0, 1),
+    max_temporal_jitter: int = 0,
+    circular_jitter: bool = True,
+    random_state: int | np.random.RandomState | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-band electrode rotation + inter-band temporal jitter.
+
+    Models small wristband rotation between sessions and relative timing
+    noise between two arms.  Introduced in [Sivakumar2024]_ for the
+    emg2qwerty CTC keystroke decoding task: each electrode band gets its
+    own circular roll along the channel axis (``Uniform(band_offsets)``
+    positions), and band 1 also gets a sample-level temporal shift
+    (``Uniform(-max_temporal_jitter, +max_temporal_jitter)``) along the
+    time axis.
+
+    Channel layout assumes ``(B, num_bands * electrodes_per_band, T)`` with
+    bands contiguous along the channel axis.  Same offset / shift is
+    applied to every sample in the batch (one set of parameters per call).
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        EMG input batch of shape ``(B, C, T)`` with
+        ``C == num_bands * electrodes_per_band``.
+    y : torch.Tensor
+        Labels (returned unchanged).
+    num_bands : int, optional
+        Number of electrode bands (e.g. ``2`` for left + right wristband).
+        Must be ``>= 1``.  Defaults to 2.
+    electrodes_per_band : int, optional
+        Electrodes per band (e.g. ``16``).  Must be ``>= 1``.  Defaults
+        to 16.
+    band_offsets : tuple of int, optional
+        Per-band roll values to sample from uniformly.  ``(-1, 0, 1)``
+        covers ±1-electrode misalignment.  Must be non-empty.  Defaults
+        to ``(-1, 0, 1)``.
+    max_temporal_jitter : int, optional
+        Max ±-sample temporal shift applied to band 1 only when
+        ``num_bands >= 2``.  Defaults to 0 (disabled).  Must be ``>= 0``.
+    circular_jitter : bool, optional
+        If True (the default, paper-faithful), the temporal jitter is a
+        circular ``torch.roll`` — samples shifted off one edge wrap to
+        the other.  If False, the gap left by the shift is zero-padded
+        and the shifted-off samples are dropped, avoiding wrap-around
+        discontinuity at the cost of a small zeroed margin.  Has no
+        effect when ``max_temporal_jitter == 0``.
+    random_state : int | numpy.random.RandomState, optional
+        Seed / generator for sampling rotation + jitter values.
+
+    Returns
+    -------
+    torch.Tensor
+        Transformed inputs.
+    torch.Tensor
+        Labels (unchanged).
+
+    References
+    ----------
+    .. [Sivakumar2024] Sivakumar, V., Seely, J., Du, A., Bittner, S. R.,
+       Berenzweig, A., Bolarinwa, A., Gramfort, A., & Mandel, M. I. (2024).
+       "emg2qwerty: A Large Dataset with Baselines for Touch Typing using
+       Surface Electromyography." *NeurIPS Datasets and Benchmarks Track*.
+    """
+    if num_bands < 1:
+        raise ValueError(f"num_bands must be >= 1, got {num_bands}")
+    if electrodes_per_band < 1:
+        raise ValueError(f"electrodes_per_band must be >= 1, got {electrodes_per_band}")
+    # Normalise to a tuple before truth-testing so callers can pass any
+    # sequence-like (incl. ``np.ndarray``) without hitting numpy's
+    # ambiguous-truth-value error on ``if not band_offsets``.
+    band_offsets = tuple(band_offsets)
+    if not band_offsets:
+        raise ValueError("band_offsets must be non-empty")
+    if not all(isinstance(o, (int, np.integer)) for o in band_offsets):
+        raise ValueError(f"band_offsets must contain integers, got {band_offsets!r}")
+    if max_temporal_jitter < 0:
+        raise ValueError(f"max_temporal_jitter must be >= 0, got {max_temporal_jitter}")
+    expected_channels = num_bands * electrodes_per_band
+    if X.shape[1] != expected_channels:
+        raise ValueError(
+            f"X.shape[1]={X.shape[1]} != num_bands * electrodes_per_band="
+            f"{expected_channels}"
+        )
+
+    rng = check_random_state(random_state)
+    band_offsets_arr = np.asarray(band_offsets)
+    out = X.clone()
+
+    # Per-band channel-axis rolls.  A vectorized ``torch.gather`` was
+    # benchmarked and is ~16 % slower for the typical ``num_bands == 2``
+    # case on CPU (the index tensor is larger than what two contiguous
+    # rolls touch); the gather only wins past ``num_bands >= 8``.
+    for b in range(num_bands):
+        offset = int(rng.choice(band_offsets_arr))
+        if offset:
+            sl = slice(b * electrodes_per_band, (b + 1) * electrodes_per_band)
+            out[:, sl, :] = torch.roll(out[:, sl, :], offset, dims=1)
+
+    # Inter-band temporal jitter — paper recipe applies it to band 1 only.
+    if max_temporal_jitter > 0 and num_bands >= 2:
+        shift = int(rng.randint(-max_temporal_jitter, max_temporal_jitter + 1))
+        if shift:
+            sl = slice(electrodes_per_band, 2 * electrodes_per_band)
+            band1 = out[:, sl, :]
+            if circular_jitter:
+                # Paper-faithful circular shift; wraps end-of-window
+                # samples to the start (and vice versa).
+                out[:, sl, :] = torch.roll(band1, shift, dims=2)
+            else:
+                # Crop-and-pad shift: drop samples that fall off one end,
+                # zero-pad the gap on the other.  Avoids the wrap-around
+                # discontinuity at the cost of a ``|shift|``-sample margin.
+                shifted = torch.zeros_like(band1)
+                if shift > 0:
+                    shifted[:, :, shift:] = band1[:, :, :-shift]
+                else:  # shift < 0
+                    shifted[:, :, :shift] = band1[:, :, -shift:]
+                out[:, sl, :] = shifted
+
+    return out, y

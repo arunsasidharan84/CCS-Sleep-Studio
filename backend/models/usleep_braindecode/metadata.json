@@ -1,0 +1,14 @@
+{
+  "best_valid_bal_acc": 0.30380346704902544,
+  "chance_level": 0.2,
+  "display_metric_key": "best_valid_bal_acc",
+  "display_metric_name": "balanced accuracy",
+  "display_split_name": "held-out recording",
+  "epochs_ran": 45,
+  "epochs_requested": 100,
+  "final_valid_bal_acc": 0.20136778407717495,
+  "patience": 10,
+  "short_run_epochs": 3,
+  "tutorial": "plot_sleep_staging_usleep",
+  "use_safetensors": false
+}

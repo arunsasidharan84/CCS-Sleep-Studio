@@ -1,0 +1,13 @@
+numpy
+pandas
+scipy
+scikit-learn
+lightgbm
+mne
+yasa
+antropy
+joblib
+safetensors
+torch
+matplotlib
+gssc

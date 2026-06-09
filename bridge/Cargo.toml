@@ -1,0 +1,21 @@
+[package]
+name = "rust_sleep_eeg"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+biquad = "0.5"
+matfile = "0.5"
+num-complex = "0.4"
+rayon = "1.10"
+rustfft = "6.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+approx = "0.5"

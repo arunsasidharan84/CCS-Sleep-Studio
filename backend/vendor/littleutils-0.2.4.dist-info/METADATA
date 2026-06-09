@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: littleutils
+Version: 0.2.4
+Summary: Small personal collection of python utility functions
+Home-page: https://github.com/alexmojaki/littleutils
+Author: Alex Hall
+Author-email: alex.mojaki@gmail.com
+License: MIT
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+License-File: LICENSE
+
