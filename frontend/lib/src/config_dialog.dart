@@ -56,6 +56,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
     // Copy the configuration fields
     _working = AppConfig(
       spectrogramChannelIndex: widget.config.spectrogramChannelIndex,
+      swaChannelIndex: widget.config.swaChannelIndex,
       periodogramChannelIndex: widget.config.periodogramChannelIndex,
       tfChannelIndex: widget.config.tfChannelIndex,
       amplitudeRangeUv: widget.config.amplitudeRangeUv,
@@ -71,6 +72,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
       tfDisplayMode: widget.config.tfDisplayMode,
       tfFrequencyScale: widget.config.tfFrequencyScale,
       tfShowRidge: widget.config.tfShowRidge,
+      tfAutoScale: widget.config.tfAutoScale,
       tfPowerMin: widget.config.tfPowerMin,
       tfPowerMax: widget.config.tfPowerMax,
       stackChannels: widget.config.stackChannels,
@@ -290,8 +292,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
                               children: [
                                 const SizedBox(
                                   width: 160,
-                                  child: Text('Show SWA Plot',
-                                      style: TextStyle(fontSize: 12)),
+                                  child: Text(
+                                    'Show SWA Plot',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
                                 ),
                                 Checkbox(
                                   value: _working.showSwaPlot,
@@ -440,9 +444,11 @@ class _ConfigDialogState extends State<ConfigDialog> {
                                   },
                                   onRemove: () {
                                     setState(() {
-                                      final removed = _working.channels.removeAt(i);
+                                      final removed = _working.channels
+                                          .removeAt(i);
                                       for (final channel in _working.channels) {
-                                        if (channel.reReference == removed.name) {
+                                        if (channel.reReference ==
+                                            removed.name) {
                                           channel.reReference = 'None';
                                         }
                                       }
@@ -488,6 +494,16 @@ class _ConfigDialogState extends State<ConfigDialog> {
                             onChanged: (v) => setState(
                               () => _working.spectrogramChannelIndex = v,
                             ),
+                          ),
+                          _ChannelDropdown(
+                            label: 'SWA channel',
+                            channelLabels: labels,
+                            value: _working.swaChannelIndex.clamp(
+                              0,
+                              labels.length - 1,
+                            ),
+                            onChanged: (v) =>
+                                setState(() => _working.swaChannelIndex = v),
                           ),
                           _NumberRow(
                             label: 'Frequency min (Hz)',
@@ -605,19 +621,26 @@ class _ConfigDialogState extends State<ConfigDialog> {
                                 'dB (median baseline)',
                                 'Z-Standardized Power',
                               ],
-                              onChanged: (v) => setState(
-                                () => _working.tfDisplayMode = v,
-                              ),
+                              onChanged: (v) =>
+                                  setState(() => _working.tfDisplayMode = v),
+                            ),
+                            _SwitchRow(
+                              label: 'Autoscale once per recording',
+                              value: _working.tfAutoScale,
+                              onChanged: (v) =>
+                                  setState(() => _working.tfAutoScale = v),
                             ),
                             _NumberRow(
                               label: 'Scale min',
                               controller: _tfPowerMinCtrl,
+                              enabled: !_working.tfAutoScale,
                               onChanged: (v) => _working.tfPowerMin =
                                   v ?? _working.tfPowerMin,
                             ),
                             _NumberRow(
                               label: 'Scale max',
                               controller: _tfPowerMaxCtrl,
+                              enabled: !_working.tfAutoScale,
                               onChanged: (v) => _working.tfPowerMax =
                                   v ?? _working.tfPowerMax,
                             ),
@@ -638,7 +661,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
                       child: Column(
                         children: [
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12.0,
+                              vertical: 4.0,
+                            ),
                             child: Container(
                               padding: const EdgeInsets.all(8.0),
                               decoration: BoxDecoration(
@@ -648,13 +674,20 @@ class _ConfigDialogState extends State<ConfigDialog> {
                               ),
                               child: const Row(
                                 children: [
-                                  Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue,
+                                    size: 18,
+                                  ),
                                   SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       'ℹ High-pass, low-pass, or notch-filter a given EEG channel using a Chebyshev Type 2 filter. '
                                       'Filters affect only the displayed EEG signal, not any power computations.',
-                                      style: TextStyle(fontSize: 12, color: Colors.black87),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -663,7 +696,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
                           ),
                           CheckboxListTile(
                             dense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
                             title: const Text('Apply changes to all channels'),
                             value: _applyAllChannels,
                             onChanged: (v) {
@@ -678,7 +713,9 @@ class _ConfigDialogState extends State<ConfigDialog> {
                           ),
                           Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: ListView.builder(
                                 itemCount: _working.channels.length,
                                 itemBuilder: (context, index) {
@@ -689,7 +726,8 @@ class _ConfigDialogState extends State<ConfigDialog> {
                                     onChanged: () => setState(() {}),
                                     onApplyAll: (updater) {
                                       setState(() {
-                                        for (final channel in _working.channels) {
+                                        for (final channel
+                                            in _working.channels) {
                                           updater(channel);
                                         }
                                       });
@@ -835,6 +873,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   AppConfig _copyConfig(AppConfig cfg) {
     return AppConfig(
       spectrogramChannelIndex: cfg.spectrogramChannelIndex,
+      swaChannelIndex: cfg.swaChannelIndex,
       periodogramChannelIndex: cfg.periodogramChannelIndex,
       tfChannelIndex: cfg.tfChannelIndex,
       amplitudeRangeUv: cfg.amplitudeRangeUv,
@@ -850,6 +889,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
       tfDisplayMode: cfg.tfDisplayMode,
       tfFrequencyScale: cfg.tfFrequencyScale,
       tfShowRidge: cfg.tfShowRidge,
+      tfAutoScale: cfg.tfAutoScale,
       tfPowerMin: cfg.tfPowerMin,
       tfPowerMax: cfg.tfPowerMax,
       stackChannels: cfg.stackChannels,
@@ -931,11 +971,13 @@ class _NumberRow extends StatelessWidget {
     required this.label,
     required this.controller,
     required this.onChanged,
+    this.enabled = true,
   });
 
   final String label;
   final TextEditingController controller;
   final void Function(double?) onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -951,6 +993,7 @@ class _NumberRow extends StatelessWidget {
             width: 180,
             child: TextFormField(
               controller: controller,
+              enabled: enabled,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
                 signed: true,
@@ -1001,10 +1044,7 @@ class _SwitchRow extends StatelessWidget {
             width: 180,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Switch(
-                value: value,
-                onChanged: onChanged,
-              ),
+              child: Switch(value: value, onChanged: onChanged),
             ),
           ),
         ],
@@ -1129,7 +1169,11 @@ class _ChannelConfigTile extends StatelessWidget {
               children: [
                 Text(
                   '${index + 1}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
                 ),
               ],
             ),
@@ -1149,7 +1193,9 @@ class _ChannelConfigTile extends StatelessWidget {
                         child: Icon(
                           Icons.keyboard_arrow_up,
                           size: 12,
-                          color: onMoveUp == null ? Colors.black12 : Colors.black45,
+                          color: onMoveUp == null
+                              ? Colors.black12
+                              : Colors.black45,
                         ),
                       ),
                       InkWell(
@@ -1157,7 +1203,9 @@ class _ChannelConfigTile extends StatelessWidget {
                         child: Icon(
                           Icons.keyboard_arrow_down,
                           size: 12,
-                          color: onMoveDown == null ? Colors.black12 : Colors.black45,
+                          color: onMoveDown == null
+                              ? Colors.black12
+                              : Colors.black45,
                         ),
                       ),
                     ],
@@ -1195,7 +1243,10 @@ class _ChannelConfigTile extends StatelessWidget {
                       vertical: 6,
                     ),
                   ),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                   onChanged: (v) {
                     config.name = v;
                     onChanged();
@@ -1266,12 +1317,30 @@ class _ChannelConfigTile extends StatelessWidget {
                   ),
                   style: const TextStyle(fontSize: 12, color: Colors.black87),
                   items: const [
-                    DropdownMenuItem(value: 'Black', child: Text('Black', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'Blue', child: Text('Blue', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'Green', child: Text('Green', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'Magenta', child: Text('Magenta', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'Orange', child: Text('Orange', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'Cyan', child: Text('Cyan', style: TextStyle(fontSize: 12))),
+                    DropdownMenuItem(
+                      value: 'Black',
+                      child: Text('Black', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Blue',
+                      child: Text('Blue', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Green',
+                      child: Text('Green', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Magenta',
+                      child: Text('Magenta', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Orange',
+                      child: Text('Orange', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Cyan',
+                      child: Text('Cyan', style: TextStyle(fontSize: 12)),
+                    ),
                   ],
                   onChanged: (v) {
                     if (v == null) return;
@@ -1305,7 +1374,10 @@ class _ChannelConfigTile extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: Colors.black87),
                   isExpanded: true,
                   items: [
-                    const DropdownMenuItem(value: 'None', child: Text('None', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(
+                      value: 'None',
+                      child: Text('None', style: TextStyle(fontSize: 12)),
+                    ),
                     for (final channel in allChannels)
                       if (!identical(channel, config))
                         DropdownMenuItem(
@@ -1351,7 +1423,11 @@ class _ChannelConfigTile extends StatelessWidget {
             width: 42,
             child: InkWell(
               onTap: onRemove,
-              child: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 16,
+                color: Colors.redAccent,
+              ),
             ),
           ),
         ],
@@ -1555,8 +1631,6 @@ class _StringDropdown extends StatelessWidget {
   }
 }
 
-
-
 class _InlineNumberField extends StatefulWidget {
   const _InlineNumberField({
     required this.label,
@@ -1738,6 +1812,7 @@ class _FilterDialogState extends State<FilterDialog> {
     super.initState();
     _working = AppConfig(
       spectrogramChannelIndex: widget.config.spectrogramChannelIndex,
+      swaChannelIndex: widget.config.swaChannelIndex,
       periodogramChannelIndex: widget.config.periodogramChannelIndex,
       tfChannelIndex: widget.config.tfChannelIndex,
       amplitudeRangeUv: widget.config.amplitudeRangeUv,
@@ -1753,6 +1828,7 @@ class _FilterDialogState extends State<FilterDialog> {
       tfDisplayMode: widget.config.tfDisplayMode,
       tfFrequencyScale: widget.config.tfFrequencyScale,
       tfShowRidge: widget.config.tfShowRidge,
+      tfAutoScale: widget.config.tfAutoScale,
       tfPowerMin: widget.config.tfPowerMin,
       tfPowerMax: widget.config.tfPowerMax,
       stackChannels: widget.config.stackChannels,
@@ -1979,16 +2055,15 @@ class _FilterChannelRow extends StatelessWidget {
                   child: _CompactNumberField(
                     value: config.filterHpOrder.toDouble(),
                     decimals: 0,
-                    onChanged:
-                        (v) => _update(
-                          (c) => c.filterHpOrder = v.round().clamp(1, 10),
-                        ),
+                    onChanged: (v) => _update(
+                      (c) => c.filterHpOrder = v.round().clamp(1, 10),
+                    ),
                   ),
                 ),
                 Checkbox(
                   value: config.filterHpEnabled,
-                  onChanged:
-                      (v) => _update((c) => c.filterHpEnabled = v ?? false),
+                  onChanged: (v) =>
+                      _update((c) => c.filterHpEnabled = v ?? false),
                 ),
               ],
             ),
@@ -2012,16 +2087,15 @@ class _FilterChannelRow extends StatelessWidget {
                   child: _CompactNumberField(
                     value: config.filterLpOrder.toDouble(),
                     decimals: 0,
-                    onChanged:
-                        (v) => _update(
-                          (c) => c.filterLpOrder = v.round().clamp(1, 10),
-                        ),
+                    onChanged: (v) => _update(
+                      (c) => c.filterLpOrder = v.round().clamp(1, 10),
+                    ),
                   ),
                 ),
                 Checkbox(
                   value: config.filterLpEnabled,
-                  onChanged:
-                      (v) => _update((c) => c.filterLpEnabled = v ?? false),
+                  onChanged: (v) =>
+                      _update((c) => c.filterLpEnabled = v ?? false),
                 ),
               ],
             ),
@@ -2045,16 +2119,15 @@ class _FilterChannelRow extends StatelessWidget {
                   child: _CompactNumberField(
                     value: config.filterNotchOrder.toDouble(),
                     decimals: 0,
-                    onChanged:
-                        (v) => _update(
-                          (c) => c.filterNotchOrder = v.round().clamp(1, 10),
-                        ),
+                    onChanged: (v) => _update(
+                      (c) => c.filterNotchOrder = v.round().clamp(1, 10),
+                    ),
                   ),
                 ),
                 Checkbox(
                   value: config.filterNotchEnabled,
-                  onChanged:
-                      (v) => _update((c) => c.filterNotchEnabled = v ?? false),
+                  onChanged: (v) =>
+                      _update((c) => c.filterNotchEnabled = v ?? false),
                 ),
               ],
             ),

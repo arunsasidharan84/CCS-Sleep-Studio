@@ -6,9 +6,9 @@ from __future__ import annotations
 import os
 import sys
 
-try:
+if __package__:
     from .runtime_bootstrap import configure_runtime
-except ImportError:
+else:
     from runtime_bootstrap import configure_runtime
 
 configure_runtime()
@@ -25,10 +25,10 @@ except Exception:
 import argparse
 from pathlib import Path
 
-try:
+if __package__:
     from .scorer import scan_channels, score_file
     from .algorithms import available_algorithms
-except ImportError:
+else:
     from scorer import scan_channels, score_file
     from algorithms import available_algorithms
 

@@ -160,6 +160,7 @@ typedef _RunCommandStreamDart =
 class AppConfig {
   AppConfig({
     this.spectrogramChannelIndex = 0,
+    this.swaChannelIndex = 0,
     this.periodogramChannelIndex = 0,
     this.tfChannelIndex = 0,
     this.amplitudeRangeUv = 75.0,
@@ -175,6 +176,7 @@ class AppConfig {
     this.tfDisplayMode = 'dB (median baseline)',
     this.tfFrequencyScale = 'Linear',
     this.tfShowRidge = false,
+    this.tfAutoScale = true,
     this.tfPowerMin = -10.0,
     this.tfPowerMax = 15.0,
     this.stackChannels = false,
@@ -194,6 +196,7 @@ class AppConfig {
   });
 
   int spectrogramChannelIndex;
+  int swaChannelIndex;
   int periodogramChannelIndex;
   int tfChannelIndex;
   double amplitudeRangeUv;
@@ -213,6 +216,7 @@ class AppConfig {
   String tfDisplayMode;
   String tfFrequencyScale;
   bool tfShowRidge;
+  bool tfAutoScale;
   double tfPowerMin;
   double tfPowerMax;
 
@@ -234,6 +238,7 @@ class AppConfig {
   Map<String, dynamic> toJson() {
     return {
       'spectrogramChannelIndex': spectrogramChannelIndex,
+      'swaChannelIndex': swaChannelIndex,
       'periodogramChannelIndex': periodogramChannelIndex,
       'tfChannelIndex': tfChannelIndex,
       'amplitudeRangeUv': amplitudeRangeUv,
@@ -249,6 +254,7 @@ class AppConfig {
       'tfDisplayMode': tfDisplayMode,
       'tfFrequencyScale': tfFrequencyScale,
       'tfShowRidge': tfShowRidge,
+      'tfAutoScale': tfAutoScale,
       'tfPowerMin': tfPowerMin,
       'tfPowerMax': tfPowerMax,
       'stackChannels': stackChannels,
@@ -290,6 +296,10 @@ class AppConfig {
 
     return AppConfig(
       spectrogramChannelIndex: safeInt(json['spectrogramChannelIndex'], 0),
+      swaChannelIndex: safeInt(
+        json['swaChannelIndex'],
+        safeInt(json['spectrogramChannelIndex'], 0),
+      ),
       periodogramChannelIndex: safeInt(json['periodogramChannelIndex'], 0),
       tfChannelIndex: safeInt(json['tfChannelIndex'], 0),
       amplitudeRangeUv: (json['amplitudeRangeUv'] as num?)?.toDouble() ?? 75.0,
@@ -311,6 +321,7 @@ class AppConfig {
       tfDisplayMode: json['tfDisplayMode'] as String? ?? 'dB (median baseline)',
       tfFrequencyScale: json['tfFrequencyScale'] as String? ?? 'Linear',
       tfShowRidge: safeBool(json['tfShowRidge'], false),
+      tfAutoScale: safeBool(json['tfAutoScale'], true),
       tfPowerMin: (json['tfPowerMin'] as num?)?.toDouble() ?? 0.0,
       tfPowerMax: (json['tfPowerMax'] as num?)?.toDouble() ?? 20.0,
       stackChannels: safeBool(json['stackChannels'], false),
@@ -347,6 +358,9 @@ class AppConfig {
           channels.isNotEmpty && spectrogramChannelIndex < channels.length
           ? channels[spectrogramChannelIndex].name
           : '',
+      'SWA_channel': channels.isNotEmpty && swaChannelIndex < channels.length
+          ? channels[swaChannelIndex].name
+          : '',
       'Periodogram_channel':
           channels.isNotEmpty && periodogramChannelIndex < channels.length
           ? channels[periodogramChannelIndex].name
@@ -364,6 +378,7 @@ class AppConfig {
       'Periodogram_display_mode': periodogramDisplayMode,
       'Wavelet_panel_visible': tfEnabled,
       'Wavelet_show_ridge': tfShowRidge,
+      'Wavelet_autoscale': tfAutoScale,
       'Wavelet_display_mode': tfDisplayMode,
       'Wavelet_power_limits': {
         tfDisplayMode: [tfPowerMin, tfPowerMax],
@@ -406,6 +421,7 @@ class AppConfig {
       }
 
       final specCh = global['Channel_for_spectogram'] as String?;
+      final swaCh = global['SWA_channel'] as String?;
       final periodCh = global['Periodogram_channel'] as String?;
       final tfCh = global['Wavelet_channel'] as String?;
       final amp = global['Reference_amplitude_line_muV'] as num?;
@@ -414,6 +430,10 @@ class AppConfig {
       final tfVis = _boolValue(global['Wavelet_panel_visible'], fallback: true);
       final tfScale = global['Wavelet_frequency_scale'] as String? ?? 'Linear';
       final tfRidge = _boolValue(global['Wavelet_show_ridge']);
+      final tfAutoScale = _boolValue(
+        global['Wavelet_autoscale'],
+        fallback: true,
+      );
       final stack = _boolValue(global['Stack_channels']);
       final robust = _boolValue(global['Robust_z_standardize']);
       final periodogramMode =
@@ -491,6 +511,7 @@ class AppConfig {
 
       return AppConfig(
         spectrogramChannelIndex: indexOfChannel(specCh),
+        swaChannelIndex: indexOfChannel(swaCh ?? specCh),
         periodogramChannelIndex: indexOfChannel(periodCh),
         tfChannelIndex: indexOfChannel(tfCh),
         amplitudeRangeUv:
@@ -500,6 +521,7 @@ class AppConfig {
         tfDisplayMode: tfDisplay,
         tfFrequencyScale: tfScale,
         tfShowRidge: tfRidge,
+        tfAutoScale: tfAutoScale,
         tfPowerMin: tfMin,
         tfPowerMax: tfMax,
         tfFreqMin: tfFreqMin,
@@ -560,6 +582,7 @@ class AppConfig {
   }) {
     return AppConfig(
       spectrogramChannelIndex: 0,
+      swaChannelIndex: 0,
       periodogramChannelIndex: 0,
       tfChannelIndex: 0,
       amplitudeRangeUv: 75.0,
@@ -687,6 +710,7 @@ class AppConfig {
         0,
         channels.length - 1,
       );
+      swaChannelIndex = swaChannelIndex.clamp(0, channels.length - 1);
       periodogramChannelIndex = periodogramChannelIndex.clamp(
         0,
         channels.length - 1,
@@ -833,6 +857,7 @@ class EegBackend {
   final _tfCacheOrder = <String>[];
   final _tfImageCache = <String, ui.Image>{};
   final _tfImageCacheOrder = <String>[];
+  final _tfScaleCache = <String, ({double min, double max})>{};
 
   /// Clears the waveform display point cache. Call this when filter or
   /// channel display settings change to ensure stale cached waveforms
@@ -1045,6 +1070,7 @@ class EegBackend {
       config.periodogramChannelIndex,
       config,
     );
+    final swaConfigIndex = _clampConfigIndex(config.swaChannelIndex, config);
     final spectSignal = _fullSignalForConfig(
       raw.channelSamples,
       srate,
@@ -1059,6 +1085,15 @@ class EegBackend {
       periodConfigIndex,
       applyFilters: true,
     );
+    final swaSignal = swaConfigIndex == spectConfigIndex
+        ? spectSignal
+        : _fullSignalForConfig(
+            raw.channelSamples,
+            srate,
+            config,
+            swaConfigIndex,
+            applyFilters: true,
+          );
     final spectSource = _sourceIndexForConfig(
       _configAt(config, spectConfigIndex, raw.channelSamples.length),
       config,
@@ -1073,8 +1108,13 @@ class EegBackend {
     final power = spectResult.power;
     final freqs = spectResult.freqs;
 
-    // 2. SWA
-    final swa = sp.computeSwa(power, freqs);
+    // 2. SWA, optionally from a channel independent of the spectrogram.
+    final swaSpectResult = swaConfigIndex == spectConfigIndex
+        ? spectResult
+        : await Isolate.run(
+            () => _isolateComputeSpectrogram(swaSignal, srate, epochSeconds, 1),
+          );
+    final swa = sp.computeSwa(swaSpectResult.power, swaSpectResult.freqs);
 
     // 3. Per-epoch Welch periodograms (for RectanglePower panel)
     final periodResult = await Isolate.run(
@@ -1170,6 +1210,7 @@ class EegBackend {
         : eeg.epochTfPower.isNotEmpty && safeEpoch < eeg.epochTfPower.length
         ? eeg.epochTfPower[safeEpoch]
         : await _timeFrequencyForEpoch(eeg, safeEpoch, cfg);
+    final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;
     if (tfPower.isNotEmpty) {
@@ -1183,17 +1224,13 @@ class EegBackend {
         eeg.tfFreqs.last.toStringAsFixed(3),
         cfg.tfDisplayMode,
         cfg.tfFrequencyScale,
-        cfg.tfPowerMin.toStringAsFixed(2),
-        cfg.tfPowerMax.toStringAsFixed(2),
+        tfLimits.min.toStringAsFixed(2),
+        tfLimits.max.toStringAsFixed(2),
       ].join(':');
 
       tfImage = _tfImageCache[imageKey];
       if (tfImage == null) {
-        tfImage = await _tfPowerToImage(
-          tfPower,
-          cfg.tfPowerMin,
-          cfg.tfPowerMax,
-        );
+        tfImage = await _tfPowerToImage(tfPower, tfLimits.min, tfLimits.max);
         _rememberCacheValue(
           _tfImageCache,
           _tfImageCacheOrder,
@@ -1262,8 +1299,8 @@ class EegBackend {
       visibleChannelSourceIndices: visibleChannels.indices,
       visibleChannelColors: visibleChannels.colors,
       tfDisplayMode: cfg.tfDisplayMode,
-      tfPowerMin: cfg.tfPowerMin,
-      tfPowerMax: cfg.tfPowerMax,
+      tfPowerMin: tfLimits.min,
+      tfPowerMax: tfLimits.max,
       periodogramFreqMin: cfg.periodogramFreqMin,
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
@@ -1327,6 +1364,7 @@ class EegBackend {
       // Fallback: compute on demand (slow, only if pre-cache failed)
       tfPower = await _timeFrequencyForEpoch(eeg, safeEpoch, cfg);
     }
+    final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;
     if (tfPower.isNotEmpty) {
@@ -1340,17 +1378,13 @@ class EegBackend {
         eeg.tfFreqs.last.toStringAsFixed(3),
         cfg.tfDisplayMode,
         cfg.tfFrequencyScale,
-        cfg.tfPowerMin.toStringAsFixed(2),
-        cfg.tfPowerMax.toStringAsFixed(2),
+        tfLimits.min.toStringAsFixed(2),
+        tfLimits.max.toStringAsFixed(2),
       ].join(':');
 
       tfImage = _tfImageCache[imageKey];
       if (tfImage == null) {
-        tfImage = await _tfPowerToImage(
-          tfPower,
-          cfg.tfPowerMin,
-          cfg.tfPowerMax,
-        );
+        tfImage = await _tfPowerToImage(tfPower, tfLimits.min, tfLimits.max);
         _rememberCacheValue(
           _tfImageCache,
           _tfImageCacheOrder,
@@ -1396,8 +1430,8 @@ class EegBackend {
       clearSelection: true, // clear any selection when moving epoch
       clearEventSelections: old.currentEpoch != safeEpoch,
       tfDisplayMode: cfg.tfDisplayMode,
-      tfPowerMin: cfg.tfPowerMin,
-      tfPowerMax: cfg.tfPowerMax,
+      tfPowerMin: tfLimits.min,
+      tfPowerMax: tfLimits.max,
       periodogramFreqMin: cfg.periodogramFreqMin,
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
@@ -1479,6 +1513,7 @@ class EegBackend {
         tfPower = old.currentEpoch == safeEpoch ? old.tfPower : const [];
       }
     }
+    final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;
     if (tfPower.isNotEmpty) {
@@ -1492,8 +1527,8 @@ class EegBackend {
         eeg.tfFreqs.last.toStringAsFixed(3),
         cfg.tfDisplayMode,
         cfg.tfFrequencyScale,
-        cfg.tfPowerMin.toStringAsFixed(2),
-        cfg.tfPowerMax.toStringAsFixed(2),
+        tfLimits.min.toStringAsFixed(2),
+        tfLimits.max.toStringAsFixed(2),
       ].join(':');
       tfImage =
           _tfImageCache[imageKey] ??
@@ -1535,8 +1570,8 @@ class EegBackend {
       clearSelection: true,
       clearEventSelections: old.currentEpoch != safeEpoch,
       tfDisplayMode: cfg.tfDisplayMode,
-      tfPowerMin: cfg.tfPowerMin,
-      tfPowerMax: cfg.tfPowerMax,
+      tfPowerMin: tfLimits.min,
+      tfPowerMax: tfLimits.max,
       periodogramFreqMin: cfg.periodogramFreqMin,
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
@@ -1596,6 +1631,7 @@ class EegBackend {
             old.currentEpoch < eeg.epochTfPower.length
         ? eeg.epochTfPower[old.currentEpoch]
         : await _timeFrequencyForEpoch(eeg, old.currentEpoch, cfg);
+    final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;
     if (tfPower.isNotEmpty) {
@@ -1609,17 +1645,13 @@ class EegBackend {
         eeg.tfFreqs.last.toStringAsFixed(3),
         cfg.tfDisplayMode,
         cfg.tfFrequencyScale,
-        cfg.tfPowerMin.toStringAsFixed(2),
-        cfg.tfPowerMax.toStringAsFixed(2),
+        tfLimits.min.toStringAsFixed(2),
+        tfLimits.max.toStringAsFixed(2),
       ].join(':');
 
       tfImage = _tfImageCache[imageKey];
       if (tfImage == null) {
-        tfImage = await _tfPowerToImage(
-          tfPower,
-          cfg.tfPowerMin,
-          cfg.tfPowerMax,
-        );
+        tfImage = await _tfPowerToImage(tfPower, tfLimits.min, tfLimits.max);
         _rememberCacheValue(
           _tfImageCache,
           _tfImageCacheOrder,
@@ -1641,8 +1673,8 @@ class EegBackend {
         eeg.channelSamples.length,
       ).name,
       tfDisplayMode: cfg.tfDisplayMode,
-      tfPowerMin: cfg.tfPowerMin,
-      tfPowerMax: cfg.tfPowerMax,
+      tfPowerMin: tfLimits.min,
+      tfPowerMax: tfLimits.max,
       spectrogramImage: eeg.spectrogramImage,
       spectrogramChannelIndex: eeg.spectrogramChannelIndex,
       spectrogramChannelLabel: _configAt(
@@ -2731,49 +2763,7 @@ class EegBackend {
       return completer.future;
     }
 
-    // Auto-detect the actual data range. If the user-specified [minVal,maxVal]
-    // doesn't overlap the data, fall back to the data's own percentile range
-    // to prevent blank images.
-    double effectiveMin = minVal;
-    double effectiveMax = maxVal;
-    {
-      // Sample values across the power matrix to get the actual range
-      final sampled = <double>[];
-      final step = math.max(1, nTimes ~/ 200); // sample ~200 time points
-      for (var f = 0; f < nFreqs; f += math.max(1, nFreqs ~/ 40)) {
-        final row = tfPower[f];
-        for (var t = 0; t < nTimes; t += step) {
-          final v = row[t];
-          if (v.isFinite) sampled.add(v);
-        }
-      }
-      if (sampled.isNotEmpty) {
-        sampled.sort();
-        final p2 = sampled[(sampled.length * 0.02).floor()];
-        final p98 =
-            sampled[(sampled.length * 0.98).floor().clamp(
-              0,
-              sampled.length - 1,
-            )];
-        final dataMin = sampled.first;
-        final dataMax = sampled.last;
-        final dataRange = dataMax - dataMin;
-
-        final overlapMin = math.max(effectiveMin, dataMin);
-        final overlapMax = math.min(effectiveMax, dataMax);
-        final overlapRange = math.max(0.0, overlapMax - overlapMin);
-
-        if (overlapRange < 0.15 * dataRange ||
-            (effectiveMax - effectiveMin).abs() < 1e-6 ||
-            (effectiveMin == 0.0 && effectiveMax == 20.0 && dataMax < 6.0)) {
-          // No overlap, degenerate range, or highly compressed default range → auto-range
-          effectiveMin = p2;
-          effectiveMax = math.max(p2 + 1e-6, p98);
-        }
-      }
-    }
-
-    final range = effectiveMax - effectiveMin;
+    final range = math.max(maxVal - minVal, 1e-6);
     final pixels = Uint8List(nFreqs * nTimes * 4);
     var pixelIdx = 0;
 
@@ -2782,7 +2772,7 @@ class EegBackend {
       final row = tfPower[flipF];
       for (var t = 0; t < nTimes; t++) {
         final val = row[t];
-        final norm = ((val - effectiveMin) / range).clamp(0.0, 1.0);
+        final norm = ((val - minVal) / range).clamp(0.0, 1.0);
         final idx = (norm * 255).round();
         final color = sp.spectral[idx];
         final argb = color.toARGB32();
@@ -2802,6 +2792,45 @@ class EegBackend {
       (ui.Image img) => completer.complete(img),
     );
     return completer.future;
+  }
+
+  ({double min, double max}) _effectiveTfPowerLimits(
+    LoadedEeg eeg,
+    AppConfig config,
+    List<List<double>> power,
+  ) {
+    if (!config.tfAutoScale || power.isEmpty) {
+      return (
+        min: config.tfPowerMin,
+        max: math.max(config.tfPowerMin + 1e-6, config.tfPowerMax),
+      );
+    }
+    final key = [
+      identityHashCode(eeg),
+      _tfSourceIndex(eeg, config),
+      config.tfDisplayMode,
+      config.tfFrequencyScale,
+    ].join(':');
+    return _tfScaleCache.putIfAbsent(key, () {
+      final sampled = <double>[];
+      final nTimes = power.first.length;
+      final timeStep = math.max(1, nTimes ~/ 200);
+      final freqStep = math.max(1, power.length ~/ 40);
+      for (var f = 0; f < power.length; f += freqStep) {
+        for (var t = 0; t < power[f].length; t += timeStep) {
+          final value = power[f][t];
+          if (value.isFinite) sampled.add(value);
+        }
+      }
+      if (sampled.isEmpty) {
+        return (min: config.tfPowerMin, max: config.tfPowerMax);
+      }
+      sampled.sort();
+      final lower = sampled[(sampled.length * 0.02).floor()];
+      final upper =
+          sampled[(sampled.length * 0.98).floor().clamp(0, sampled.length - 1)];
+      return (min: lower, max: math.max(lower + 1e-6, upper));
+    });
   }
 
   Future<ui.Image> _spectrogramPowerToImage(

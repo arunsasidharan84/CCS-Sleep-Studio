@@ -37,9 +37,13 @@ jobs:
         run: |
           pyinstaller --onefile --name autoscore-backend \
             --collect-data gssc \
+            --collect-all mne \
+            --collect-all yasa \
+            --collect-all lspopt \
+            --collect-all lightgbm \
             --add-data "backend/models:models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
-            backend/cli.py
+            backend_entry.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -152,9 +156,13 @@ jobs:
         run: |
           pyinstaller --onefile --name autoscore-backend `
             --collect-data gssc `
+            --collect-all mne `
+            --collect-all yasa `
+            --collect-all lspopt `
+            --collect-all lightgbm `
             --add-data "backend/models;models" `
             --add-data "backend/sleepgpt-main;sleepgpt-main" `
-            backend/cli.py
+            backend_entry.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -259,9 +267,13 @@ jobs:
         run: |
           pyinstaller --onefile --name autoscore-backend \
             --collect-data gssc \
+            --collect-all mne \
+            --collect-all yasa \
+            --collect-all lspopt \
+            --collect-all lightgbm \
             --add-data "backend/models:models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
-            backend/cli.py
+            backend_entry.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

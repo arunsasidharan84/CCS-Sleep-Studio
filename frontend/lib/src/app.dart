@@ -151,6 +151,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         activeConfig.tfFreqMax = _config.tfFreqMax;
         activeConfig.spectrogramFreqMin = _config.spectrogramFreqMin;
         activeConfig.spectrogramFreqMax = _config.spectrogramFreqMax;
+        activeConfig.swaChannelIndex = _config.swaChannelIndex;
         activeConfig.periodogramFreqMin = _config.periodogramFreqMin;
         activeConfig.periodogramFreqMax = _config.periodogramFreqMax;
         activeConfig.spectrogramPowerMin = _config.spectrogramPowerMin;
@@ -159,6 +160,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         activeConfig.tfDisplayMode = _config.tfDisplayMode;
         activeConfig.tfFrequencyScale = _config.tfFrequencyScale;
         activeConfig.tfShowRidge = _config.tfShowRidge;
+        activeConfig.tfAutoScale = _config.tfAutoScale;
         activeConfig.tfPowerMin = _config.tfPowerMin;
         activeConfig.tfPowerMax = _config.tfPowerMax;
         activeConfig.stackChannels = _config.stackChannels;

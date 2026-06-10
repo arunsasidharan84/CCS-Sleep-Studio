@@ -11,9 +11,9 @@ from __future__ import annotations
 import os
 import sys
 
-try:
+if __package__:
     from .runtime_bootstrap import configure_runtime
-except ImportError:
+else:
     from runtime_bootstrap import configure_runtime
 
 configure_runtime()
@@ -611,9 +611,9 @@ def score_file(
         log=log,
     )
 
-    try:
+    if __package__:
         from .algorithms import available_algorithms
-    except ImportError:
+    else:
         from algorithms import available_algorithms
 
     algorithms = available_algorithms()

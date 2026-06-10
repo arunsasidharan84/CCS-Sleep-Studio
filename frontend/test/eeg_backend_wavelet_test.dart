@@ -102,6 +102,45 @@ void main() {
     expect(refreshed.tfPower, isNotEmpty);
   });
 
+  test('computes SWA from its independently configured channel', () async {
+    final backend = EegBackend();
+    const sampleRate = 64.0;
+    final sampleCount = (sampleRate * 66).round();
+    final channels = [
+      List<double>.generate(sampleCount, (i) {
+        final t = i / sampleRate;
+        return 20.0 * math.sin(2.0 * math.pi * 2.0 * t);
+      }),
+      List<double>.generate(sampleCount, (i) {
+        final t = i / sampleRate;
+        return 20.0 * math.sin(2.0 * math.pi * 12.0 * t);
+      }),
+    ];
+    final config =
+        AppConfig.defaultsForChannels(const [
+            'F3',
+            'O2',
+          ], sampleRateHz: sampleRate)
+          ..spectrogramChannelIndex = 1
+          ..swaChannelIndex = 0;
+    final raw = LoadedEeg(
+      sampleRateHz: sampleRate,
+      channelLabels: const ['F3', 'O2'],
+      channelSamples: channels,
+      sourceDescription: 'synthetic independent SWA channel',
+    );
+
+    final lowFrequencySwa = await backend.computeNightProducts(raw, config);
+    config.swaChannelIndex = 1;
+    final highFrequencySwa = await backend.computeNightProducts(raw, config);
+
+    expect(lowFrequencySwa.swaPerEpoch, isNotEmpty);
+    expect(
+      lowFrequencySwa.swaPerEpoch.first,
+      greaterThan(highFrequencySwa.swaPerEpoch.first * 100),
+    );
+  });
+
   test(
     'accepts legacy filtered configs using the loaded sample rate',
     () async {
@@ -202,5 +241,74 @@ void main() {
     expect(navigated.periodogramChannelLabel, 'O2');
     expect(navigated.tfChannelLabel, 'F3-O2');
     expect(navigated.tfPower, isNotEmpty);
+  });
+
+  test('autoscale is captured once and remains fixed across epochs', () async {
+    final backend = EegBackend();
+    const sampleRate = 64.0;
+    final samples = List<double>.generate((sampleRate * 66).round(), (i) {
+      final t = i / sampleRate;
+      final amplitude = t < 33 ? 5.0 : 100.0;
+      return amplitude * math.sin(2.0 * math.pi * 8.0 * t);
+    });
+    final config = AppConfig.defaultsForChannels(const [
+      'C3-M2',
+    ], sampleRateHz: sampleRate)..tfFreqMax = 30.0;
+    final raw = LoadedEeg(
+      sampleRateHz: sampleRate,
+      channelLabels: const ['C3-M2'],
+      channelSamples: [samples],
+      sourceDescription: 'varying amplitude',
+    );
+
+    final eeg = await backend.computeNightProducts(raw, config);
+    final initial = await backend.viewportFromEeg(
+      eeg,
+      currentEpoch: 0,
+      config: config,
+      includeTimeFrequency: true,
+    );
+    final next = await backend.rebuildViewportForEpoch(
+      initial,
+      eeg,
+      1,
+      config: config,
+    );
+
+    expect(initial.tfPowerMin, isNot(config.tfPowerMin));
+    expect(next.tfPowerMin, initial.tfPowerMin);
+    expect(next.tfPowerMax, initial.tfPowerMax);
+  });
+
+  test('manual wavelet scale uses configured limits', () async {
+    final backend = EegBackend();
+    const sampleRate = 64.0;
+    final samples = List<double>.generate((sampleRate * 36).round(), (i) {
+      final t = i / sampleRate;
+      return 20.0 * math.sin(2.0 * math.pi * 8.0 * t);
+    });
+    final config =
+        AppConfig.defaultsForChannels(const ['C3-M2'], sampleRateHz: sampleRate)
+          ..tfFreqMax = 30.0
+          ..tfAutoScale = false
+          ..tfPowerMin = -4.0
+          ..tfPowerMax = 7.0;
+    final raw = LoadedEeg(
+      sampleRateHz: sampleRate,
+      channelLabels: const ['C3-M2'],
+      channelSamples: [samples],
+      sourceDescription: 'manual scale',
+    );
+
+    final eeg = await backend.computeNightProducts(raw, config);
+    final viewport = await backend.viewportFromEeg(
+      eeg,
+      currentEpoch: 0,
+      config: config,
+      includeTimeFrequency: true,
+    );
+
+    expect(viewport.tfPowerMin, -4.0);
+    expect(viewport.tfPowerMax, 7.0);
   });
 }

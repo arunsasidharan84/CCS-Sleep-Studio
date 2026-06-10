@@ -95,10 +95,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-try:
+if __package__:
     from .scorer import scan_channels
     from .algorithms import available_algorithms
-except ImportError:
+else:
     from scorer import scan_channels
     from algorithms import available_algorithms
 
