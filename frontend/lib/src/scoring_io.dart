@@ -317,10 +317,27 @@ Future<ScoringLoadResult?> importScoringDialog(
   }
 
   try {
-    final inferredType = filetype == 'any' ? _inferScoringType(path) : filetype;
-    final loadResult = await _parseScoringFile(path, inferredType, epochCount);
+    final detection = filetype == 'any'
+        ? await detectScoringFormat(path)
+        : ScoringFormatDetection(
+            parserType: filetype,
+            displayName: _displayNameForScoringType(filetype),
+          );
+    final parsed = await _parseScoringFile(
+      path,
+      detection.parserType,
+      epochCount,
+    );
+    final loadResult = ScoringLoadResult(
+      parsed.stages,
+      parsed.stagesUncertain,
+      stagesConfidence: parsed.stagesConfidence,
+      sourceFormat: detection.displayName,
+    );
     onStatus(
-      'Loaded scoring from ${_basename(path)} — ${loadResult.stages.where((s) => s.isScored).length}/${loadResult.stages.length} epochs scored',
+      'Detected ${detection.displayName}; loaded ${_basename(path)} — '
+      '${loadResult.stages.where((s) => s.isScored).length}/'
+      '${loadResult.stages.length} epochs scored',
     );
     return loadResult;
   } catch (e) {
@@ -329,14 +346,111 @@ Future<ScoringLoadResult?> importScoringDialog(
   }
 }
 
-String _inferScoringType(String path) {
+class ScoringFormatDetection {
+  const ScoringFormatDetection({
+    required this.parserType,
+    required this.displayName,
+  });
+
+  final String parserType;
+  final String displayName;
+}
+
+Future<ScoringFormatDetection> detectScoringFormat(String path) async {
   final lower = path.toLowerCase();
-  if (lower.endsWith('.edf')) return 'edf_anno';
-  if (lower.endsWith('.txt')) return 'yasa';
-  if (lower.endsWith('.csv')) return 'sleeptrip';
-  if (lower.endsWith('.vis')) return 'vis';
-  if (lower.endsWith('.annot')) return 'sleepyland';
-  return 'scoringhero';
+  if (lower.endsWith('.edf')) {
+    return const ScoringFormatDetection(
+      parserType: 'edf_anno',
+      displayName: 'EDF+ annotations',
+    );
+  }
+  if (lower.endsWith('.vis')) {
+    return const ScoringFormatDetection(
+      parserType: 'vis',
+      displayName: 'Zurich VIS',
+    );
+  }
+  if (lower.endsWith('.annot')) {
+    return const ScoringFormatDetection(
+      parserType: 'sleepyland',
+      displayName: 'Sleepyland annotation',
+    );
+  }
+  if (lower.endsWith('.json')) {
+    return const ScoringFormatDetection(
+      parserType: 'scoringhero',
+      displayName: 'ScoringHero JSON',
+    );
+  }
+
+  final preview = await _readTextPreview(path);
+  final previewLower = preview.toLowerCase();
+  if (lower.endsWith('.txt')) {
+    if (previewLower.contains('signal id: schlafprofil') ||
+        previewLower.contains('events list:')) {
+      return const ScoringFormatDetection(
+        parserType: 'yasa',
+        displayName: 'Somnomedics text',
+      );
+    }
+    if (RegExp(r'sleep stage\s+', caseSensitive: false).hasMatch(preview) &&
+        preview.contains(',')) {
+      return const ScoringFormatDetection(
+        parserType: 'yasa',
+        displayName: 'Polyman text',
+      );
+    }
+    return const ScoringFormatDetection(
+      parserType: 'yasa',
+      displayName: 'YASA stage list',
+    );
+  }
+  if (lower.endsWith('.csv')) {
+    final firstLine = preview
+        .split(RegExp(r'\r?\n'))
+        .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
+        .toLowerCase();
+    final headers = firstLine.split(',').map((value) => value.trim()).toList();
+    if (headers.isNotEmpty &&
+        headers.first == 'epoch' &&
+        headers.indexOf('stage') == 2) {
+      return const ScoringFormatDetection(
+        parserType: 'gssc',
+        displayName: 'GSSC CSV',
+      );
+    }
+    return const ScoringFormatDetection(
+      parserType: 'sleeptrip',
+      displayName: 'Sleeptrip CSV',
+    );
+  }
+
+  throw FormatException(
+    'Could not detect scoring format for ${_basename(path)}.',
+  );
+}
+
+Future<String> _readTextPreview(String path) async {
+  final file = File(path);
+  final length = await file.length();
+  final end = length.clamp(0, 65536).toInt();
+  final bytes = await file
+      .openRead(0, end)
+      .fold<List<int>>(<int>[], (buffer, chunk) => buffer..addAll(chunk));
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+String _displayNameForScoringType(String filetype) {
+  return switch (filetype) {
+    'scoringhero' => 'ScoringHero JSON',
+    'edf_anno' => 'EDF+ annotations',
+    'yasa' => 'YASA-compatible text',
+    'sleeptrip' => 'Sleeptrip CSV',
+    'vis' => 'Zurich VIS',
+    'sleepyland' => 'Sleepyland annotation',
+    'gssc' => 'GSSC CSV',
+    _ => filetype,
+  };
 }
 
 Future<ScoringLoadResult> _parseScoringFile(
@@ -904,10 +1018,12 @@ class ScoringLoadResult {
   final List<SleepStage> stages;
   final List<bool> stagesUncertain;
   final List<double?> stagesConfidence;
+  final String sourceFormat;
   ScoringLoadResult(
     this.stages,
     this.stagesUncertain, {
     this.stagesConfidence = const [],
+    this.sourceFormat = '',
   });
 }
 

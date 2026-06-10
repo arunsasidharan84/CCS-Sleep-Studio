@@ -668,7 +668,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
 
   // ─── Scoring I/O ──────────────────────────────────────────────────────────
 
-  Future<void> _loadScoring(String filetype) async {
+  Future<void> _loadScoring() async {
     final v = _viewport;
     if (v == null) {
       _setStatus('Load an EDF first');
@@ -676,7 +676,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     }
     final result = await importScoringDialog(
       v.epochCount,
-      filetype,
+      'any',
       onStatus: _setStatus,
     );
     if (result != null) {
@@ -1018,7 +1018,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     setState(() {
       _comparisonStages = result.stages;
       _status =
-          'Loaded comparison scoring — ${_disagreementCount(v.stages, result.stages)} disagreements';
+          'Loaded ${result.sourceFormat} comparison — '
+          '${_disagreementCount(v.stages, result.stages)} disagreements';
     });
   }
 
@@ -1853,32 +1854,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         label: 'Scoring',
         menus: [
           PlatformMenuItem(
-            label: 'Load Scoring Hero (.json)',
-            onSelected: () => _loadScoring('scoringhero'),
-          ),
-          PlatformMenuItem(
-            label: 'Load Zurich Scoring (.vis)',
-            onSelected: () => _loadScoring('vis'),
-          ),
-          PlatformMenuItem(
-            label: 'Load YASA Scoring (.txt)',
-            onSelected: () => _loadScoring('yasa'),
-          ),
-          PlatformMenuItem(
-            label: 'Load Sleeptrip Scoring (.csv)',
-            onSelected: () => _loadScoring('sleeptrip'),
+            label: 'Import scoring… (auto-detect format)',
+            onSelected: _loadScoring,
           ),
           PlatformMenuItem(
             label: 'Load Sleeptrip Events (_events.csv)',
             onSelected: _loadSleeptripEvents,
-          ),
-          PlatformMenuItem(
-            label: 'Load Sleepyland Scoring (.annot)',
-            onSelected: () => _loadScoring('sleepyland'),
-          ),
-          PlatformMenuItem(
-            label: 'Load GSSC Scoring (.csv)',
-            onSelected: () => _loadScoring('gssc'),
           ),
           if (!buildLite) ...[
             PlatformMenuItem(
@@ -1978,7 +1959,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         label: 'Compare',
         menus: [
           PlatformMenuItem(
-            label: 'Import scoring for comparison',
+            label: 'Import comparison scoring… (auto-detect format)',
             onSelected: _loadComparisonScoring,
           ),
           PlatformMenuItem(
@@ -2104,32 +2085,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           SubmenuButton(
             menuChildren: [
               MenuItemButton(
-                onPressed: () => _loadScoring('scoringhero'),
-                child: const Text('Load Scoring Hero (.json)'),
-              ),
-              MenuItemButton(
-                onPressed: () => _loadScoring('vis'),
-                child: const Text('Load Zurich Scoring (.vis)'),
-              ),
-              MenuItemButton(
-                onPressed: () => _loadScoring('yasa'),
-                child: const Text('Load YASA Scoring (.txt)'),
-              ),
-              MenuItemButton(
-                onPressed: () => _loadScoring('sleeptrip'),
-                child: const Text('Load Sleeptrip Scoring (.csv)'),
+                onPressed: _loadScoring,
+                child: const Text('Import scoring… (auto-detect format)'),
               ),
               MenuItemButton(
                 onPressed: _loadSleeptripEvents,
                 child: const Text('Load Sleeptrip Events (_events.csv)'),
-              ),
-              MenuItemButton(
-                onPressed: () => _loadScoring('sleepyland'),
-                child: const Text('Load Sleepyland Scoring (.annot)'),
-              ),
-              MenuItemButton(
-                onPressed: () => _loadScoring('gssc'),
-                child: const Text('Load GSSC Scoring (.csv)'),
               ),
               if (!buildLite) ...[
                 MenuItemButton(
@@ -2235,7 +2196,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             menuChildren: [
               MenuItemButton(
                 onPressed: _loadComparisonScoring,
-                child: const Text('Import scoring for comparison'),
+                child: const Text('Import comparison scoring… (auto-detect format)'),
               ),
               MenuItemButton(
                 onPressed: _removeComparisonScoring,
@@ -4449,4 +4410,3 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
     );
   }
 }
-

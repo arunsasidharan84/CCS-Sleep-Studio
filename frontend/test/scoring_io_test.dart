@@ -7,8 +7,10 @@ import 'package:scoring_nidra/src/scoring_io.dart';
 void main() {
   test('loads YASA one-stage-per-line text', () async {
     final file = await _tempScoringFile('yasa', '\nW\nN1\nN2\nN3\nR\n');
+    final detection = await detectScoringFormat(file.path);
     final result = await loadScoringFileDirectly(file.path, 'yasa', 5);
 
+    expect(detection.displayName, 'YASA stage list');
     expect(result.stages, [
       SleepStage.wake,
       SleepStage.n1,
@@ -29,8 +31,10 @@ Rate: 30 s
 10:37:00,000; Wake
 10:37:30,000; REM
 ''');
+    final detection = await detectScoringFormat(file.path);
     final result = await loadScoringFileDirectly(file.path, 'yasa', 4);
 
+    expect(detection.displayName, 'Somnomedics text');
     expect(result.stages, [
       SleepStage.unknown,
       SleepStage.n2,
@@ -47,8 +51,10 @@ ${includeHeader ? 'Date, Time, Recording onset, Duration, Annotation, Linked cha
 20-Sep-2025, 21:45:30, 90, 60, Sleep stage 2,
 20-Sep-2025, 21:46:30, 150, 30, Sleep stage R,
 ''');
+      final detection = await detectScoringFormat(file.path);
       final result = await loadScoringFileDirectly(file.path, 'yasa', 6);
 
+      expect(detection.displayName, 'Polyman text');
       expect(result.stages, [
         SleepStage.wake,
         SleepStage.wake,
@@ -67,7 +73,9 @@ ${includeHeader ? 'Date, Time, Recording onset, Duration, Annotation, Linked cha
     );
     if (!file.existsSync()) return;
 
+    final detection = await detectScoringFormat(file.path);
     final result = await loadScoringFileDirectly(file.path, 'edf_anno', 50);
+    expect(detection.displayName, 'EDF+ annotations');
     expect(result.stages.take(5), [
       SleepStage.wake,
       SleepStage.n1,
@@ -76,12 +84,35 @@ ${includeHeader ? 'Date, Time, Recording onset, Duration, Annotation, Linked cha
       SleepStage.n1,
     ]);
   });
+
+  test('distinguishes Sleeptrip and GSSC CSV formats', () async {
+    final sleeptrip = await _tempScoringFile(
+      'sleeptrip',
+      'epoch,start,end,stage\n1,0,30,N2\n',
+      extension: 'csv',
+    );
+    final gssc = await _tempScoringFile(
+      'gssc',
+      'Epoch,Start,Stage\n1,0,2\n',
+      extension: 'csv',
+    );
+
+    expect(
+      (await detectScoringFormat(sleeptrip.path)).displayName,
+      'Sleeptrip CSV',
+    );
+    expect((await detectScoringFormat(gssc.path)).displayName, 'GSSC CSV');
+  });
 }
 
-Future<File> _tempScoringFile(String name, String content) async {
+Future<File> _tempScoringFile(
+  String name,
+  String content, {
+  String extension = 'txt',
+}) async {
   final file = File(
     '${Directory.systemTemp.path}/scoring_nidra_${name}_'
-    '${DateTime.now().microsecondsSinceEpoch}.txt',
+    '${DateTime.now().microsecondsSinceEpoch}.$extension',
   );
   return file.writeAsString(content);
 }
