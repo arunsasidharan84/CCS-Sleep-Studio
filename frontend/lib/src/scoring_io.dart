@@ -168,8 +168,13 @@ Future<void> _writeJsonScoring(
   final entries = <Map<String, dynamic>>[];
   for (var i = 0; i < stages.length; i++) {
     final stage = stages[i];
-    final isUncertain = stagesUncertain != null && i < stagesUncertain.length && stagesUncertain[i];
-    final confVal = stagesConfidence != null && i < stagesConfidence.length ? stagesConfidence[i] : null;
+    final isUncertain =
+        stagesUncertain != null &&
+        i < stagesUncertain.length &&
+        stagesUncertain[i];
+    final confVal = stagesConfidence != null && i < stagesConfidence.length
+        ? stagesConfidence[i]
+        : null;
     entries.add({
       'epoch': i + 1,
       'start': i * epochSeconds.toDouble(),
@@ -373,34 +378,68 @@ Future<List<SleepStage>> _loadYasaScoring(String path, int epochCount) async {
   final lines = content.split(RegExp(r'\r?\n'));
   final nonSpaceLines = lines.map((l) => l.trim()).toList();
 
-  // Detect if it is Polyman CSV format
-  bool isCommaSeparated = false;
-  for (final line in nonSpaceLines) {
-    if (line.isEmpty) continue;
-    if (line.contains(',')) {
-      isCommaSeparated = true;
-      break;
-    }
+  final firstDataLine = nonSpaceLines.firstWhere(
+    (line) => line.isNotEmpty,
+    orElse: () => '',
+  );
+  if (firstDataLine.startsWith('Signal ID:') ||
+      nonSpaceLines.any((line) => line.startsWith('Events list:'))) {
+    return _loadSomnomedicsTxtScoring(nonSpaceLines, epochCount);
   }
 
-  if (isCommaSeparated) {
+  if (nonSpaceLines.any(
+    (line) => RegExp(r'Sleep stage\s+', caseSensitive: false).hasMatch(line),
+  )) {
     return _loadPolymanTxtScoring(nonSpaceLines, epochCount);
   }
 
   // Preserve empty lines as unscored rather than skipping them, keeping alignment intact.
+  var firstLine = 0;
+  while (firstLine < nonSpaceLines.length && nonSpaceLines[firstLine].isEmpty) {
+    firstLine++;
+  }
+  var lastLine = nonSpaceLines.length;
+  while (lastLine > firstLine && nonSpaceLines[lastLine - 1].isEmpty) {
+    lastLine--;
+  }
+  final stageLines = nonSpaceLines.sublist(firstLine, lastLine);
   final stages = List.filled(epochCount, SleepStage.unknown);
-  for (var i = 0; i < nonSpaceLines.length && i < epochCount; i++) {
-    stages[i] = _stageFromYasaLabel(nonSpaceLines[i]);
+  for (var i = 0; i < stageLines.length && i < epochCount; i++) {
+    stages[i] = _stageFromYasaLabel(stageLines[i]);
   }
   return stages;
 }
 
-Future<List<SleepStage>> _loadPolymanTxtScoring(List<String> nonSpaceLines, int epochCount) async {
+List<SleepStage> _loadSomnomedicsTxtScoring(
+  List<String> lines,
+  int epochCount,
+) {
+  final stages = List.filled(epochCount, SleepStage.unknown);
+  var epoch = 0;
+  for (final line in lines) {
+    if (epoch >= epochCount) break;
+    final separator = line.lastIndexOf(';');
+    if (separator < 0) continue;
+    final timeText = line.substring(0, separator).trim();
+    if (!RegExp(r'^\d{1,2}:\d{2}:\d{2}').hasMatch(timeText)) continue;
+    stages[epoch++] = _stageFromYasaLabel(line.substring(separator + 1));
+  }
+  return stages;
+}
+
+List<SleepStage> _loadPolymanTxtScoring(
+  List<String> nonSpaceLines,
+  int epochCount,
+) {
   final stages = List.filled(epochCount, SleepStage.unknown);
   for (final line in nonSpaceLines) {
     if (line.isEmpty) continue;
     // Skip header line
-    if (line.startsWith('Date') || line.startsWith('Time') || line.startsWith('Recording')) continue;
+    if (line.toLowerCase().startsWith('date,') ||
+        line.toLowerCase().startsWith('time,') ||
+        line.toLowerCase().startsWith('recording')) {
+      continue;
+    }
 
     final parts = line.split(',');
     if (parts.length < 5) continue;
@@ -415,8 +454,8 @@ Future<List<SleepStage>> _loadPolymanTxtScoring(List<String> nonSpaceLines, int 
       final stageChar = anno.substring('sleep stage '.length).trim();
       final stage = _stageFromYasaLabel(stageChar);
       if (stage != SleepStage.unknown) {
-        final startEpoch = (onsetSec / 30.0).round();
-        final endEpoch = ((onsetSec + durationSec) / 30.0).round();
+        final startEpoch = (onsetSec / 30.0).floor();
+        final endEpoch = ((onsetSec + durationSec) / 30.0).ceil();
         for (var e = startEpoch; e < endEpoch && e < epochCount; e++) {
           if (e >= 0 && e < epochCount) {
             stages[e] = stage;
@@ -428,14 +467,23 @@ Future<List<SleepStage>> _loadPolymanTxtScoring(List<String> nonSpaceLines, int 
   return stages;
 }
 
-Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount) async {
+Future<ScoringLoadResult> _loadEdfAnnotationsScoring(
+  String path,
+  int epochCount,
+) async {
   final bytes = await File(path).readAsBytes();
   if (bytes.length < 256) {
     throw const FormatException('EDF header is shorter than 256 bytes.');
   }
 
-  int intAt(int offset, int width) => int.parse(ascii.decode(bytes.sublist(offset, offset + width)).trim());
-  double doubleAt(int offset, int width) => double.parse(ascii.decode(bytes.sublist(offset, offset + width)).trim().replaceAll(',', '.'));
+  int intAt(int offset, int width) =>
+      int.parse(ascii.decode(bytes.sublist(offset, offset + width)).trim());
+  double doubleAt(int offset, int width) => double.parse(
+    ascii
+        .decode(bytes.sublist(offset, offset + width))
+        .trim()
+        .replaceAll(',', '.'),
+  );
 
   final headerBytes = intAt(184, 8);
   final dataRecordCount = intAt(236, 8);
@@ -444,25 +492,34 @@ Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount
   var offset = 256;
   final labels = [
     for (var index = 0; index < signalCount; index++)
-      ascii.decode(bytes.sublist(offset + index * 16, offset + (index + 1) * 16)).trim().toLowerCase()
+      ascii
+          .decode(bytes.sublist(offset + index * 16, offset + (index + 1) * 16))
+          .trim()
+          .toLowerCase(),
   ];
   offset += signalCount * 16;
   offset += signalCount * 80; // transducer
-  offset += signalCount * 8;  // physical dimension
-  offset += signalCount * 8;  // physical min
-  offset += signalCount * 8;  // physical max
-  offset += signalCount * 8;  // digital min
-  offset += signalCount * 8;  // digital max
+  offset += signalCount * 8; // physical dimension
+  offset += signalCount * 8; // physical min
+  offset += signalCount * 8; // physical max
+  offset += signalCount * 8; // digital min
+  offset += signalCount * 8; // digital max
   offset += signalCount * 80; // prefiltering
-  
+
   final samplesPerRecord = [
     for (var index = 0; index < signalCount; index++)
-      int.parse(ascii.decode(bytes.sublist(offset + index * 8, offset + (index + 1) * 8)).trim())
+      int.parse(
+        ascii
+            .decode(bytes.sublist(offset + index * 8, offset + (index + 1) * 8))
+            .trim(),
+      ),
   ];
 
   final annoChannels = <int>[];
   for (var i = 0; i < signalCount; i++) {
-    if (labels[i].contains('annotation') || labels[i].contains('status') || labels[i].contains('marker')) {
+    if (labels[i].contains('annotation') ||
+        labels[i].contains('status') ||
+        labels[i].contains('marker')) {
       annoChannels.add(i);
     }
   }
@@ -473,7 +530,7 @@ Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount
   final annotationBytes = BytesBuilder();
   final data = ByteData.sublistView(bytes);
   var cursor = headerBytes;
-  
+
   for (var record = 0; record < dataRecordCount; record++) {
     for (var channel = 0; channel < signalCount; channel++) {
       final samplesInRecord = samplesPerRecord[channel];
@@ -502,7 +559,7 @@ Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount
   for (final tal in tals) {
     if (tal.trim().isEmpty) continue;
     if (!tal.contains('\x14')) continue;
-    
+
     final parts = tal.split('\x14');
     if (parts.isEmpty) continue;
 
@@ -526,8 +583,8 @@ Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount
         final stage = _stageFromYasaLabel(stageChar);
         if (stage != SleepStage.unknown) {
           final dur = duration > 0 ? duration : 30.0;
-          final startEpoch = (onset / 30.0).round();
-          final endEpoch = ((onset + dur) / 30.0).round();
+          final startEpoch = (onset / 30.0).floor();
+          final endEpoch = ((onset + dur) / 30.0).ceil();
           for (var e = startEpoch; e < endEpoch && e < epochCount; e++) {
             if (e >= 0 && e < epochCount) {
               stages[e] = stage;
@@ -538,23 +595,38 @@ Future<ScoringLoadResult> _loadEdfAnnotationsScoring(String path, int epochCount
     }
   }
 
-  return ScoringLoadResult(stages, stagesUncertain, stagesConfidence: stagesConfidence);
+  return ScoringLoadResult(
+    stages,
+    stagesUncertain,
+    stagesConfidence: stagesConfidence,
+  );
 }
 
 SleepStage _stageFromYasaLabel(String label) {
-  switch (label.toUpperCase()) {
+  switch (label.trim().toUpperCase()) {
     case 'W':
+    case 'WAKE':
+    case '0':
       return SleepStage.wake;
     case 'N1':
+    case 'S1':
+    case '1':
       return SleepStage.n1;
     case 'N2':
+    case 'S2':
+    case '2':
       return SleepStage.n2;
     case 'N3':
+    case 'S3':
+    case '3':
       return SleepStage.n3;
     case 'N4':
+    case 'S4':
+    case '4':
       return SleepStage.n3; // treat N4 as N3
     case 'R':
     case 'REM':
+    case '5':
       return SleepStage.rem;
     default:
       return SleepStage.unknown;
@@ -839,6 +911,10 @@ class ScoringLoadResult {
   });
 }
 
-Future<ScoringLoadResult> loadScoringFileDirectly(String path, String filetype, int epochCount) {
+Future<ScoringLoadResult> loadScoringFileDirectly(
+  String path,
+  String filetype,
+  int epochCount,
+) {
   return _parseScoringFile(path, filetype, epochCount);
 }

@@ -99,8 +99,10 @@ final class _EdfFile extends Struct {
   external double durationSeconds;
 }
 
-typedef _LoadEdfNative = Pointer<_EdfFile> Function(Pointer<Utf8> path, Bool scaleVolts);
-typedef _LoadEdfDart = Pointer<_EdfFile> Function(Pointer<Utf8> path, bool scaleVolts);
+typedef _LoadEdfNative =
+    Pointer<_EdfFile> Function(Pointer<Utf8> path, Bool scaleVolts);
+typedef _LoadEdfDart =
+    Pointer<_EdfFile> Function(Pointer<Utf8> path, bool scaleVolts);
 typedef _FreeEdfNative = Void Function(Pointer<_EdfFile> edf);
 typedef _FreeEdfDart = void Function(Pointer<_EdfFile> edf);
 
@@ -117,22 +119,26 @@ final class _SpectrogramResult extends Struct {
   external int nFreqs;
 }
 
-typedef _ComputeSpectrogramNative = Pointer<_SpectrogramResult> Function(
-  Pointer<Float> signal,
-  Int32 signalLen,
-  Float srate,
-  Int32 epochSeconds,
-  Int32 extensionSeconds,
-);
-typedef _ComputeSpectrogramDart = Pointer<_SpectrogramResult> Function(
-  Pointer<Float> signal,
-  int signalLen,
-  double srate,
-  int epochSeconds,
-  int extensionSeconds,
-);
-typedef _FreeSpectrogramNative = Void Function(Pointer<_SpectrogramResult> result);
-typedef _FreeSpectrogramDart = void Function(Pointer<_SpectrogramResult> result);
+typedef _ComputeSpectrogramNative =
+    Pointer<_SpectrogramResult> Function(
+      Pointer<Float> signal,
+      Int32 signalLen,
+      Float srate,
+      Int32 epochSeconds,
+      Int32 extensionSeconds,
+    );
+typedef _ComputeSpectrogramDart =
+    Pointer<_SpectrogramResult> Function(
+      Pointer<Float> signal,
+      int signalLen,
+      double srate,
+      int epochSeconds,
+      int extensionSeconds,
+    );
+typedef _FreeSpectrogramNative =
+    Void Function(Pointer<_SpectrogramResult> result);
+typedef _FreeSpectrogramDart =
+    void Function(Pointer<_SpectrogramResult> result);
 
 typedef _RunCommandStreamNative =
     Int32 Function(
@@ -320,11 +326,16 @@ class AppConfig {
       hypnogramFlex: safeInt(json['hypnogramFlex'], 27),
       periodogramFlex: safeInt(json['periodogramFlex'], 12),
       showSwaPlot: safeBool(json['showSwaPlot'], true),
-      referenceLineThickness: (json['referenceLineThickness'] as num?)?.toDouble() ?? 0.5,
+      referenceLineThickness:
+          (json['referenceLineThickness'] as num?)?.toDouble() ?? 0.5,
       referenceLineColor: json['referenceLineColor'] as String? ?? 'Light Grey',
       hypnogramZoom: json['hypnogramZoom'] as String? ?? 'Full Night',
-      channels: (json['channels'] as List<dynamic>?)
-              ?.map((c) => ChannelConfig.fromJson(Map<String, dynamic>.from(c as Map)))
+      channels:
+          (json['channels'] as List<dynamic>?)
+              ?.map(
+                (c) =>
+                    ChannelConfig.fromJson(Map<String, dynamic>.from(c as Map)),
+              )
               .toList() ??
           const [],
     );
@@ -382,7 +393,9 @@ class AppConfig {
       final channelsList = json[1] as List<dynamic>;
 
       final channels = channelsList
-          .map((c) => ChannelConfig.fromJson(Map<String, dynamic>.from(c as Map)))
+          .map(
+            (c) => ChannelConfig.fromJson(Map<String, dynamic>.from(c as Map)),
+          )
           .toList();
       final channelNames = channels.map((c) => c.name).toList();
 
@@ -431,7 +444,8 @@ class AppConfig {
         } else if (tfDisplay == 'dB (median baseline)') {
           tfMin = -10.0;
           tfMax = 15.0;
-        } else if (tfDisplay == 'L2-Normalized Power' || tfDisplay == 'Raw Power') {
+        } else if (tfDisplay == 'L2-Normalized Power' ||
+            tfDisplay == 'Raw Power') {
           tfMin = -6.0;
           tfMax = 0.0;
         }
@@ -469,15 +483,18 @@ class AppConfig {
       final hypnogramFlex = safeInt(global['Hypnogram_flex'], 27);
       final periodogramFlex = safeInt(global['Periodogram_flex'], 12);
       final showSwaPlot = safeBool(global['Show_swa_plot'], true);
-      final referenceLineThickness = (global['Reference_line_thickness'] as num?)?.toDouble() ?? 0.5;
-      final referenceLineColor = global['Reference_line_color'] as String? ?? 'Light Grey';
+      final referenceLineThickness =
+          (global['Reference_line_thickness'] as num?)?.toDouble() ?? 0.5;
+      final referenceLineColor =
+          global['Reference_line_color'] as String? ?? 'Light Grey';
       final hypnogramZoom = global['Hypnogram_zoom'] as String? ?? 'Full Night';
 
       return AppConfig(
         spectrogramChannelIndex: indexOfChannel(specCh),
         periodogramChannelIndex: indexOfChannel(periodCh),
         tfChannelIndex: indexOfChannel(tfCh),
-        amplitudeRangeUv: (global['Amplitude_range_muV'] as num?)?.toDouble() ?? 75.0,
+        amplitudeRangeUv:
+            (global['Amplitude_range_muV'] as num?)?.toDouble() ?? 75.0,
         referenceAmplitudeLineUv: amp?.toDouble() ?? 37.5,
         tfEnabled: tfVis,
         tfDisplayMode: tfDisplay,
@@ -726,20 +743,20 @@ class EegBackend {
         );
       } catch (_) {}
       try {
-        _computeSpectrogramNative = library.lookupFunction<
-            _ComputeSpectrogramNative, _ComputeSpectrogramDart>(
-          'sleep_eeg_compute_welch_spectrogram',
-        );
-        _freeSpectrogramNative = library.lookupFunction<
-            _FreeSpectrogramNative, _FreeSpectrogramDart>(
-          'sleep_eeg_free_spectrogram',
-        );
+        _computeSpectrogramNative = library
+            .lookupFunction<_ComputeSpectrogramNative, _ComputeSpectrogramDart>(
+              'sleep_eeg_compute_welch_spectrogram',
+            );
+        _freeSpectrogramNative = library
+            .lookupFunction<_FreeSpectrogramNative, _FreeSpectrogramDart>(
+              'sleep_eeg_free_spectrogram',
+            );
       } catch (_) {}
       try {
-        _runCommandStream = library.lookupFunction<
-            _RunCommandStreamNative, _RunCommandStreamDart>(
-          'sleep_eeg_run_command_stream',
-        );
+        _runCommandStream = library
+            .lookupFunction<_RunCommandStreamNative, _RunCommandStreamDart>(
+              'sleep_eeg_run_command_stream',
+            );
       } catch (_) {}
       isNativeAvailable = true;
     } on Object {
@@ -794,22 +811,22 @@ class EegBackend {
           final edf = edfPtr.ref;
           final channelLabels = <String>[];
           final channelSamples = <List<double>>[];
-          
+
           for (var i = 0; i < edf.signalCount; i++) {
             final sig = edf.signals[i];
             channelLabels.add(sig.label.toDartString());
-            
+
             final count = sig.sampleCount;
             final samples = Float64List(count);
             samples.setAll(0, sig.samples.asTypedList(count));
             channelSamples.add(samples);
           }
-          
+
           final sampleRate = edf.sampleRateHz;
           final durationSec = edf.durationSeconds;
-          
+
           _freeEdf!(edfPtr);
-          
+
           return LoadedEeg(
             sampleRateHz: sampleRate,
             channelLabels: channelLabels,
@@ -844,21 +861,39 @@ class EegBackend {
     required void Function(String line) onLine,
   }) {
     if (_runCommandStream == null) {
-      onLine('Error: rust_backend library not loaded or sleep_eeg_run_command_stream not found.');
-      return -99;
+      try {
+        final result = Process.runSync(executable, arguments);
+        for (final line in '${result.stdout}'.split(RegExp(r'\r?\n'))) {
+          if (line.isNotEmpty) onLine(line);
+        }
+        for (final line in '${result.stderr}'.split(RegExp(r'\r?\n'))) {
+          if (line.isNotEmpty) onLine(line);
+        }
+        return result.exitCode;
+      } on Object catch (error) {
+        onLine('Failed to start auto-scoring backend: $error');
+        return -99;
+      }
     }
 
     final execPtr = executable.toNativeUtf8();
     final argsJson = jsonEncode(arguments);
     final argsPtr = argsJson.toNativeUtf8();
 
-    final nativeCallback = NativeCallable<Void Function(Pointer<Utf8>)>.listener((Pointer<Utf8> linePtr) {
-      final line = linePtr.toDartString();
-      onLine(line);
-    });
+    final nativeCallback =
+        NativeCallable<Void Function(Pointer<Utf8>)>.listener((
+          Pointer<Utf8> linePtr,
+        ) {
+          final line = linePtr.toDartString();
+          onLine(line);
+        });
 
     try {
-      final result = _runCommandStream!(execPtr, argsPtr, nativeCallback.nativeFunction);
+      final result = _runCommandStream!(
+        execPtr,
+        argsPtr,
+        nativeCallback.nativeFunction,
+      );
       return result;
     } finally {
       calloc.free(execPtr);
@@ -878,7 +913,11 @@ class EegBackend {
     final visible = _visibleChannelProjection(eeg, config);
     if (channelIndex < 0 || channelIndex >= visible.configs.length) {
       if (channelIndex >= 0 && channelIndex < eeg.channelSamples.length) {
-        final channelCfg = _configForRawChannel(channelIndex, config, eeg.channelSamples.length);
+        final channelCfg = _configForRawChannel(
+          channelIndex,
+          config,
+          eeg.channelSamples.length,
+        );
         return _displaySegmentForChannel(
           eeg.channelSamples,
           eeg.sampleRateHz,
@@ -902,7 +941,6 @@ class EegBackend {
       applyFilters: applyFilters,
     );
   }
-
 
   // ─── Signal processing pipeline (runs after every file load) ──────────────
 
@@ -963,8 +1001,11 @@ class EegBackend {
     final periodograms = periodResult.power;
 
     // 4. TF frequency grid (linspace 0.25–45 Hz, 120 bins)
-    final tfFreqMin = math.max(config.tfFreqMin, 0.25);
-    final tfFreqMax = math.min(config.tfFreqMax, srate / 2 - 0.25);
+    final nyquist = math.max(0.5, srate / 2);
+    final tfFreqMin = config.tfFreqMin.clamp(0.25, nyquist - 0.25).toDouble();
+    final tfFreqMax = config.tfFreqMax
+        .clamp(tfFreqMin + 0.05, math.max(tfFreqMin + 0.05, nyquist - 0.01))
+        .toDouble();
     final tfFreqs = config.tfFrequencyScale == 'Logarithmic'
         ? sp.geomspace(math.max(tfFreqMin, 0.1), tfFreqMax, 120)
         : sp.linspaceList(tfFreqMin, tfFreqMax, 120);
@@ -977,6 +1018,8 @@ class EegBackend {
       freqs,
       config.spectrogramPowerMin,
       config.spectrogramPowerMax,
+      config.spectrogramFreqMin,
+      config.spectrogramFreqMax,
     );
 
     return LoadedEeg(
@@ -1077,9 +1120,21 @@ class EegBackend {
       }
     }
 
-    final spectChCfg = _configAt(cfg, cfg.spectrogramChannelIndex, eeg.channelSamples.length);
-    final periodChCfg = _configAt(cfg, cfg.periodogramChannelIndex, eeg.channelSamples.length);
-    final tfChCfg = _configAt(cfg, cfg.tfChannelIndex, eeg.channelSamples.length);
+    final spectChCfg = _configAt(
+      cfg,
+      cfg.spectrogramChannelIndex,
+      eeg.channelSamples.length,
+    );
+    final periodChCfg = _configAt(
+      cfg,
+      cfg.periodogramChannelIndex,
+      eeg.channelSamples.length,
+    );
+    final tfChCfg = _configAt(
+      cfg,
+      cfg.tfChannelIndex,
+      eeg.channelSamples.length,
+    );
 
     return EegViewport(
       sampleRateHz: eeg.sampleRateHz,
@@ -1106,7 +1161,7 @@ class EegBackend {
       tfFreqs: eeg.tfFreqs,
       tfNormMedian: eeg.tfNormMedian,
       tfNormIqr: eeg.tfNormIqr,
-      spectrogramChannelIndex: cfg.spectrogramChannelIndex,
+      spectrogramChannelIndex: eeg.spectrogramChannelIndex,
       spectrogramImage: eeg.spectrogramImage,
       currentEpochPeriodogram: periodogram,
       periodogramFreqs: periodogramFreqs,
@@ -1125,6 +1180,10 @@ class EegBackend {
       periodogramFreqMin: cfg.periodogramFreqMin,
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
+      spectrogramFreqMin: cfg.spectrogramFreqMin,
+      spectrogramFreqMax: cfg.spectrogramFreqMax,
+      spectrogramPowerMin: cfg.spectrogramPowerMin,
+      spectrogramPowerMax: cfg.spectrogramPowerMax,
       spectrogramFlex: cfg.spectrogramFlex,
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
@@ -1132,7 +1191,8 @@ class EegBackend {
       referenceLineThickness: cfg.referenceLineThickness,
       referenceLineColor: cfg.referenceLineColor,
       hypnogramZoom: cfg.hypnogramZoom,
-      stagesConfidence: existingConfidence ?? [for (var i = 0; i < epochCount; i++) null],
+      stagesConfidence:
+          existingConfidence ?? [for (var i = 0; i < epochCount; i++) null],
     );
   }
 
@@ -1238,6 +1298,11 @@ class EegBackend {
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
       spectrogramImage: eeg.spectrogramImage,
+      spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramFreqMin: cfg.spectrogramFreqMin,
+      spectrogramFreqMax: cfg.spectrogramFreqMax,
+      spectrogramPowerMin: cfg.spectrogramPowerMin,
+      spectrogramPowerMax: cfg.spectrogramPowerMax,
       spectrogramFlex: cfg.spectrogramFlex,
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
@@ -1284,7 +1349,10 @@ class EegBackend {
     if (eeg.epochTfPower.isNotEmpty && safeEpoch < eeg.epochTfPower.length) {
       tfPower = eeg.epochTfPower[safeEpoch];
     } else {
-      final tfConfigIndex = cfg.tfChannelIndex.clamp(0, eeg.channelSamples.length - 1);
+      final tfConfigIndex = cfg.tfChannelIndex.clamp(
+        0,
+        eeg.channelSamples.length - 1,
+      );
       final tfCfg = _configAt(cfg, tfConfigIndex, eeg.channelSamples.length);
       final cacheKey = [
         identityHashCode(eeg),
@@ -1321,12 +1389,26 @@ class EegBackend {
         cfg.tfPowerMin.toStringAsFixed(2),
         cfg.tfPowerMax.toStringAsFixed(2),
       ].join(':');
-      tfImage = _tfImageCache[imageKey] ?? (old.currentEpoch == safeEpoch ? old.tfImage : null);
+      tfImage =
+          _tfImageCache[imageKey] ??
+          (old.currentEpoch == safeEpoch ? old.tfImage : null);
     }
 
-    final spectChCfg = _configAt(cfg, cfg.spectrogramChannelIndex, eeg.channelSamples.length);
-    final periodChCfg = _configAt(cfg, cfg.periodogramChannelIndex, eeg.channelSamples.length);
-    final tfChCfg = _configAt(cfg, cfg.tfChannelIndex, eeg.channelSamples.length);
+    final spectChCfg = _configAt(
+      cfg,
+      cfg.spectrogramChannelIndex,
+      eeg.channelSamples.length,
+    );
+    final periodChCfg = _configAt(
+      cfg,
+      cfg.periodogramChannelIndex,
+      eeg.channelSamples.length,
+    );
+    final tfChCfg = _configAt(
+      cfg,
+      cfg.tfChannelIndex,
+      eeg.channelSamples.length,
+    );
 
     return old.copyWith(
       currentEpoch: safeEpoch,
@@ -1352,6 +1434,11 @@ class EegBackend {
       periodogramFreqMax: cfg.periodogramFreqMax,
       periodogramDisplayMode: cfg.periodogramDisplayMode,
       spectrogramImage: eeg.spectrogramImage,
+      spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramFreqMin: cfg.spectrogramFreqMin,
+      spectrogramFreqMax: cfg.spectrogramFreqMax,
+      spectrogramPowerMin: cfg.spectrogramPowerMin,
+      spectrogramPowerMax: cfg.spectrogramPowerMax,
       spectrogramFiltered: _hasDisplayFilter(spectChCfg),
       periodogramFiltered: _hasDisplayFilter(periodChCfg),
       tfFiltered: _hasDisplayFilter(tfChCfg),
@@ -1438,6 +1525,11 @@ class EegBackend {
       tfPowerMin: cfg.tfPowerMin,
       tfPowerMax: cfg.tfPowerMax,
       spectrogramImage: eeg.spectrogramImage,
+      spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramFreqMin: cfg.spectrogramFreqMin,
+      spectrogramFreqMax: cfg.spectrogramFreqMax,
+      spectrogramPowerMin: cfg.spectrogramPowerMin,
+      spectrogramPowerMax: cfg.spectrogramPowerMax,
       spectrogramFlex: cfg.spectrogramFlex,
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
@@ -1494,7 +1586,8 @@ class EegBackend {
         : _configForRawChannel(chIdx, cfg, eeg.channelSamples.length);
     final signal = eeg.channelSamples[chIdx];
 
-    final isClick = (endSec - startSec).abs() < 0.1 &&
+    final isClick =
+        (endSec - startSec).abs() < 0.1 &&
         startUv != null &&
         endUv != null &&
         (endUv - startUv).abs() < 2.0;
@@ -1508,8 +1601,10 @@ class EegBackend {
           final tMax = math.max(sel.startSec, sel.endSec);
           final uvMin = math.min(sel.startUv, sel.endUv);
           final uvMax = math.max(sel.startUv, sel.endUv);
-          if (startSec >= tMin && startSec <= tMax &&
-              startUv >= uvMin && startUv <= uvMax) {
+          if (startSec >= tMin &&
+              startSec <= tMax &&
+              startUv >= uvMin &&
+              startUv <= uvMax) {
             clickedSelection = sel;
             break;
           }
@@ -1517,20 +1612,36 @@ class EegBackend {
       }
 
       if (clickedSelection != null) {
-        final newSelections = old.eventSelections.where((s) => s != clickedSelection).toList();
+        final newSelections = old.eventSelections
+            .where((s) => s != clickedSelection)
+            .toList();
         if (newSelections.isNotEmpty) {
           final lastSel = newSelections.last;
           final lastCh = lastSel.channel;
           final lastChIdx = lastCh >= 0 && lastCh < signalChannelIndices.length
-              ? signalChannelIndices[lastCh].clamp(0, eeg.channelSamples.length - 1).toInt()
+              ? signalChannelIndices[lastCh]
+                    .clamp(0, eeg.channelSamples.length - 1)
+                    .toInt()
               : lastCh.clamp(0, eeg.channelSamples.length - 1).toInt();
           final lastSignal = eeg.channelSamples[lastChIdx];
-          final lastLabel = lastCh >= 0 && lastCh < visibleLabels.length ? visibleLabels[lastCh] : null;
-          final lastCfgIndex = lastLabel == null ? -1 : cfg.channels.indexWhere((c) => c.name == lastLabel);
-          final lastCfg = lastCfgIndex >= 0 ? cfg.channels[lastCfgIndex] : _configForRawChannel(lastChIdx, cfg, eeg.channelSamples.length);
-          
-          final ls1 = (lastSel.startSec * srate).round().clamp(0, lastSignal.length);
-          final ls2 = (lastSel.endSec * srate).round().clamp(0, lastSignal.length);
+          final lastLabel = lastCh >= 0 && lastCh < visibleLabels.length
+              ? visibleLabels[lastCh]
+              : null;
+          final lastCfgIndex = lastLabel == null
+              ? -1
+              : cfg.channels.indexWhere((c) => c.name == lastLabel);
+          final lastCfg = lastCfgIndex >= 0
+              ? cfg.channels[lastCfgIndex]
+              : _configForRawChannel(lastChIdx, cfg, eeg.channelSamples.length);
+
+          final ls1 = (lastSel.startSec * srate).round().clamp(
+            0,
+            lastSignal.length,
+          );
+          final ls2 = (lastSel.endSec * srate).round().clamp(
+            0,
+            lastSignal.length,
+          );
           final lStart = math.min(ls1, ls2);
           final lEnd = math.max(ls1, ls2);
           if (lEnd - lStart >= 4) {
@@ -1560,7 +1671,7 @@ class EegBackend {
             }
           }
         }
-        
+
         final (periodogram, freqs) = _epochPeriodogramWithFreqs(
           eeg,
           old.currentEpoch,
@@ -1586,10 +1697,10 @@ class EegBackend {
       }
 
       if (clickedEvent != null) {
-        final newEvents = old.scoredEvents.where((e) => e != clickedEvent).toList();
-        return old.copyWith(
-          scoredEvents: newEvents,
-        );
+        final newEvents = old.scoredEvents
+            .where((e) => e != clickedEvent)
+            .toList();
+        return old.copyWith(scoredEvents: newEvents);
       }
 
       // 3. Otherwise, click outside -> clear all selections!
@@ -1671,7 +1782,11 @@ class EegBackend {
       cfg.periodogramChannelIndex,
       cfg,
     );
-    final periodCfg = _configAt(cfg, periodConfigIndex, eeg.channelSamples.length);
+    final periodCfg = _configAt(
+      cfg,
+      periodConfigIndex,
+      eeg.channelSamples.length,
+    );
     final hasFilters = _hasDisplayFilter(periodCfg);
 
     // If display filters are active on the periodogram channel, recompute
@@ -2326,7 +2441,12 @@ class EegBackend {
     final tfConfigIndex = _clampConfigIndex(cfg.tfChannelIndex, cfg);
     final tfCh = _tfSourceIndex(eeg, cfg);
     final tfCfg = _configAt(cfg, tfConfigIndex, eeg.channelSamples.length);
-    final signal = _fullSignalForConfig(eeg.channelSamples, cfg, tfConfigIndex, applyFilters: true);
+    final signal = _fullSignalForConfig(
+      eeg.channelSamples,
+      cfg,
+      tfConfigIndex,
+      applyFilters: true,
+    );
     final srate = eeg.sampleRateHz;
     final cacheKey = [
       identityHashCode(eeg),
@@ -2356,10 +2476,23 @@ class EegBackend {
     );
     if (startSamples >= endSamples) return const [];
 
-    final slice = signal.sublist(startSamples, endSamples);
+    var slice = signal.sublist(startSamples, endSamples);
+    var waveletRate = srate;
+    const maxWaveletRate = 256.0;
+    if (waveletRate > maxWaveletRate) {
+      final step = (waveletRate / maxWaveletRate).ceil();
+      slice = [for (var i = 0; i < slice.length; i += step) slice[i]];
+      waveletRate /= step;
+    }
+    if (slice.length < 4 ||
+        !waveletRate.isFinite ||
+        waveletRate <= 0 ||
+        eeg.tfFreqs.any((f) => !f.isFinite || f <= 0 || f >= waveletRate / 2)) {
+      return const [];
+    }
     final tfFreqs = List<double>.from(eeg.tfFreqs, growable: false);
     final rawPower = await Isolate.run(
-      () => _isolateComputeMorletTf(slice, srate, tfFreqs),
+      () => _isolateComputeMorletTf(slice, waveletRate, tfFreqs),
     );
     final logPower = sp.log10TfPower(rawPower);
 
@@ -2491,15 +2624,19 @@ class EegBackend {
       if (sampled.isNotEmpty) {
         sampled.sort();
         final p2 = sampled[(sampled.length * 0.02).floor()];
-        final p98 = sampled[(sampled.length * 0.98).floor().clamp(0, sampled.length - 1)];
+        final p98 =
+            sampled[(sampled.length * 0.98).floor().clamp(
+              0,
+              sampled.length - 1,
+            )];
         final dataMin = sampled.first;
         final dataMax = sampled.last;
         final dataRange = dataMax - dataMin;
-        
+
         final overlapMin = math.max(effectiveMin, dataMin);
         final overlapMax = math.min(effectiveMax, dataMax);
         final overlapRange = math.max(0.0, overlapMax - overlapMin);
-        
+
         if (overlapRange < 0.15 * dataRange ||
             (effectiveMax - effectiveMin).abs() < 1e-6 ||
             (effectiveMin == 0.0 && effectiveMax == 20.0 && dataMax < 6.0)) {
@@ -2546,17 +2683,18 @@ class EegBackend {
     List<double> freqs,
     double colorMin,
     double colorMax,
+    double freqMin,
+    double freqMax,
   ) {
     final nEpochs = power.length;
-    const maxDisplayHz = 45.0;
-    int nFreqDisplay = freqs.length;
-    for (var i = 0; i < freqs.length; i++) {
-      if (freqs[i] > maxDisplayHz) {
-        nFreqDisplay = i;
-        break;
-      }
-    }
-    if (nFreqDisplay == 0) nFreqDisplay = freqs.length;
+    final safeColorMax = colorMax > colorMin ? colorMax : colorMin + 1.0;
+    final lowHz = math.min(freqMin, freqMax);
+    final highHz = math.max(freqMin, freqMax);
+    final freqIndices = <int>[
+      for (var i = 0; i < freqs.length; i++)
+        if (freqs[i] >= lowHz && freqs[i] <= highHz) i,
+    ];
+    final nFreqDisplay = freqIndices.length;
 
     if (nEpochs == 0 || nFreqDisplay == 0) {
       final completer = Completer<ui.Image>();
@@ -2574,11 +2712,14 @@ class EegBackend {
     var pixelIdx = 0;
 
     for (var r = 0; r < nFreqDisplay; r++) {
-      final f = nFreqDisplay - 1 - r;
+      final f = freqIndices[nFreqDisplay - 1 - r];
       for (var e = 0; e < nEpochs; e++) {
         final rawPsd = power[e][f];
         final logPsd = rawPsd > 0 ? math.log(rawPsd) / math.ln10 : colorMin;
-        final t = ((logPsd - colorMin) / (colorMax - colorMin)).clamp(0.0, 1.0);
+        final t = ((logPsd - colorMin) / (safeColorMax - colorMin)).clamp(
+          0.0,
+          1.0,
+        );
         final idx = (t * 255).round();
         final color = sp.cividis[idx];
         final argb = color.toARGB32();
@@ -2645,7 +2786,18 @@ List<List<double>> _isolateComputeMorletTf(
 
     if (resultPtr != nullptr) {
       final res = resultPtr.ref;
-      final totalPowerElements = res.nFreqs * res.nSamples;
+      final dimensionsAreValid =
+          res.power != nullptr &&
+          res.nFreqs == freqs.length &&
+          res.nSamples == slice.length &&
+          res.nFreqs > 0 &&
+          res.nSamples > 0 &&
+          res.powerLen == res.nFreqs * res.nSamples;
+      if (!dimensionsAreValid) {
+        freeMorlet(resultPtr);
+        return sp.computeMorletTf(slice, srate, freqs);
+      }
+      final totalPowerElements = res.powerLen;
       final nativePower = res.power.asTypedList(totalPowerElements);
       final rawPower = List.generate(res.nFreqs, (i) {
         final start = i * res.nSamples;
@@ -2679,14 +2831,14 @@ _SpectrogramResultData _isolateComputeSpectrogram(
 
   try {
     final library = _openDynamicLibrary();
-    computeSpectrogram = library.lookupFunction<
-        _ComputeSpectrogramNative, _ComputeSpectrogramDart>(
-      'sleep_eeg_compute_welch_spectrogram',
-    );
-    freeSpectrogram = library.lookupFunction<
-        _FreeSpectrogramNative, _FreeSpectrogramDart>(
-      'sleep_eeg_free_spectrogram',
-    );
+    computeSpectrogram = library
+        .lookupFunction<_ComputeSpectrogramNative, _ComputeSpectrogramDart>(
+          'sleep_eeg_compute_welch_spectrogram',
+        );
+    freeSpectrogram = library
+        .lookupFunction<_FreeSpectrogramNative, _FreeSpectrogramDart>(
+          'sleep_eeg_free_spectrogram',
+        );
   } catch (_) {
     // Fallback to Dart
   }
@@ -2727,13 +2879,25 @@ _SpectrogramResultData _isolateComputeSpectrogram(
   }
 
   if (extensionSeconds > 0) {
-    final (:power, :freqs) = sp.computeSpectrogram([signal], srate, epochSeconds, 0);
+    final (:power, :freqs) = sp.computeSpectrogram(
+      [signal],
+      srate,
+      epochSeconds,
+      0,
+    );
     return _SpectrogramResultData(power, freqs);
   } else {
-    final power = sp.precomputeEpochPeriodograms([signal], srate, epochSeconds, 0);
-    final slice = signal.sublist(0, math.min(signal.length, (epochSeconds * srate).round()));
+    final power = sp.precomputeEpochPeriodograms(
+      [signal],
+      srate,
+      epochSeconds,
+      0,
+    );
+    final slice = signal.sublist(
+      0,
+      math.min(signal.length, (epochSeconds * srate).round()),
+    );
     final (_, freqs) = sp.welchPsd(slice, srate);
     return _SpectrogramResultData(power, freqs);
   }
 }
-

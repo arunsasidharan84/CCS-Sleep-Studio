@@ -8,7 +8,12 @@ pub fn compute_morlet_tf(
     l2_normalize: bool,
 ) -> Vec<f32> {
     let n_samples = signal.len();
-    if n_samples == 0 || freqs.is_empty() {
+    if n_samples == 0
+        || freqs.is_empty()
+        || !srate.is_finite()
+        || srate <= 0.0
+        || signal.iter().any(|value| !value.is_finite())
+    {
         return Vec::new();
     }
 
@@ -43,6 +48,9 @@ pub fn compute_morlet_tf(
         .enumerate()
         .for_each(|(freq_idx, row)| {
             let freq = freqs[freq_idx];
+            if !freq.is_finite() || freq <= 0.0 || freq >= srate / 2.0 {
+                return;
+            }
             let n_cycles = f32::max(3.0, freq / 2.0);
             let sigma_f = freq / n_cycles;
 
@@ -56,7 +64,7 @@ pub fn compute_morlet_tf(
                 sum_sq += val * val;
             }
 
-            let norm_factor = if l2_normalize {
+            let norm_factor = if l2_normalize && sum_sq > f32::EPSILON {
                 1.0 / f32::sqrt(sum_sq)
             } else {
                 1.0

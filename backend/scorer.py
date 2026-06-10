@@ -11,12 +11,12 @@ from __future__ import annotations
 import os
 import sys
 
-# Set CPU thread limits for backend numeric and ML libraries to avoid OpenMP deadlocks on macOS
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+try:
+    from .runtime_bootstrap import configure_runtime
+except ImportError:
+    from runtime_bootstrap import configure_runtime
+
+configure_runtime()
 
 import json
 import re
@@ -38,21 +38,18 @@ except Exception:
 
 
 import numpy as np
+import scipy.integrate as scipy_integrate
 
 if not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
     np.trapz = np.trapezoid
 if not hasattr(np, "in1d"):
     np.in1d = np.isin
+if not hasattr(scipy_integrate, "simps") and hasattr(scipy_integrate, "simpson"):
+    def _simps_compat(y, x=None, dx=1.0, axis=-1, even=None):
+        del even
+        return scipy_integrate.simpson(y, x=x, dx=dx, axis=axis)
 
-_LOCAL_MNE_HOME = Path(__file__).resolve().parents[1] / ".mne_local"
-_LOCAL_MNE_HOME.mkdir(exist_ok=True)
-os.environ.setdefault("_MNE_FAKE_HOME_DIR", str(_LOCAL_MNE_HOME))
-_LOCAL_MPL_HOME = Path(__file__).resolve().parents[1] / ".matplotlib_local"
-_LOCAL_MPL_HOME.mkdir(exist_ok=True)
-os.environ.setdefault("MPLCONFIGDIR", str(_LOCAL_MPL_HOME))
-_LOCAL_VENDOR = Path(__file__).resolve().parent / "vendor"
-if _LOCAL_VENDOR.exists() and str(_LOCAL_VENDOR) not in sys.path:
-    sys.path.append(str(_LOCAL_VENDOR))
+    scipy_integrate.simps = _simps_compat
 
 import mne
 import pandas as pd
@@ -192,8 +189,7 @@ def infer_channel_groups(channel_names: Sequence[str]) -> ChannelGuess:
             continue
         if not is_prereferenced_channel(original) and clean_root in prereferenced_eeg_roots:
             continue
-        if clean_root in eeg_standards or any(f"{std}-" in clean for std in eeg_standards):
-            eeg.append(original)
+        eeg.append(original)
 
     eog_by_root: dict[str, str] = {}
     for channel in eog:

@@ -14,12 +14,12 @@ from __future__ import annotations
 import os
 import sys
 
-# Set CPU thread limits for backend numeric and ML libraries to avoid OpenMP deadlocks on macOS
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+try:
+    from .runtime_bootstrap import configure_runtime
+except ImportError:
+    from runtime_bootstrap import configure_runtime
+
+configure_runtime()
 
 import importlib.util
 import shutil

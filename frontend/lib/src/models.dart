@@ -238,6 +238,10 @@ class EegViewport {
     this.spectrogramFiltered = false,
     this.periodogramFiltered = false,
     this.tfFiltered = false,
+    this.spectrogramFreqMin = 0.0,
+    this.spectrogramFreqMax = 45.0,
+    this.spectrogramPowerMin = -1.0,
+    this.spectrogramPowerMax = 3.0,
     this.spectrogramFlex = 50,
     this.hypnogramFlex = 27,
     this.periodogramFlex = 12,
@@ -290,6 +294,10 @@ class EegViewport {
   final double periodogramFreqMin;
   final double periodogramFreqMax;
   final String periodogramDisplayMode;
+  final double spectrogramFreqMin;
+  final double spectrogramFreqMax;
+  final double spectrogramPowerMin;
+  final double spectrogramPowerMax;
 
   final int spectrogramFlex;
   final int hypnogramFlex;
@@ -362,12 +370,17 @@ class EegViewport {
     double? periodogramFreqMin,
     double? periodogramFreqMax,
     String? periodogramDisplayMode,
+    int? spectrogramChannelIndex,
     ui.Image? spectrogramImage,
     bool clearSpectrogramImage = false,
     bool clearTfImage = false,
     bool? spectrogramFiltered,
     bool? periodogramFiltered,
     bool? tfFiltered,
+    double? spectrogramFreqMin,
+    double? spectrogramFreqMax,
+    double? spectrogramPowerMin,
+    double? spectrogramPowerMax,
     int? spectrogramFlex,
     int? hypnogramFlex,
     int? periodogramFlex,
@@ -399,7 +412,8 @@ class EegViewport {
       tfFreqs: tfFreqs,
       tfNormMedian: tfNormMedian,
       tfNormIqr: tfNormIqr,
-      spectrogramChannelIndex: spectrogramChannelIndex,
+      spectrogramChannelIndex:
+          spectrogramChannelIndex ?? this.spectrogramChannelIndex,
       spectrogramImage: clearSpectrogramImage
           ? null
           : (spectrogramImage ?? this.spectrogramImage),
@@ -447,11 +461,16 @@ class EegViewport {
       periodogramFreqMax: periodogramFreqMax ?? this.periodogramFreqMax,
       periodogramDisplayMode:
           periodogramDisplayMode ?? this.periodogramDisplayMode,
+      spectrogramFreqMin: spectrogramFreqMin ?? this.spectrogramFreqMin,
+      spectrogramFreqMax: spectrogramFreqMax ?? this.spectrogramFreqMax,
+      spectrogramPowerMin: spectrogramPowerMin ?? this.spectrogramPowerMin,
+      spectrogramPowerMax: spectrogramPowerMax ?? this.spectrogramPowerMax,
       spectrogramFlex: spectrogramFlex ?? this.spectrogramFlex,
       hypnogramFlex: hypnogramFlex ?? this.hypnogramFlex,
       periodogramFlex: periodogramFlex ?? this.periodogramFlex,
       showSwaPlot: showSwaPlot ?? this.showSwaPlot,
-      referenceLineThickness: referenceLineThickness ?? this.referenceLineThickness,
+      referenceLineThickness:
+          referenceLineThickness ?? this.referenceLineThickness,
       referenceLineColor: referenceLineColor ?? this.referenceLineColor,
       hypnogramZoom: hypnogramZoom ?? this.hypnogramZoom,
       stagesConfidence: stagesConfidence ?? this.stagesConfidence,

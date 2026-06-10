@@ -130,14 +130,30 @@ pub extern "C" fn sleep_eeg_compute_morlet_tf(
     n_freqs: i32,
     l2_normalize: bool,
 ) -> *mut SleepEegMorletResult {
-    if signal.is_null() || freqs.is_null() || n_samples <= 0 || n_freqs <= 0 {
+    if signal.is_null()
+        || freqs.is_null()
+        || n_samples <= 0
+        || n_freqs <= 0
+        || !srate.is_finite()
+        || srate <= 0.0
+    {
         return ptr::null_mut();
     }
 
     let signal_slice = unsafe { std::slice::from_raw_parts(signal, n_samples as usize) };
     let freqs_slice = unsafe { std::slice::from_raw_parts(freqs, n_freqs as usize) };
+    if freqs_slice
+        .iter()
+        .any(|freq| !freq.is_finite() || *freq <= 0.0 || *freq >= srate / 2.0)
+    {
+        return ptr::null_mut();
+    }
 
-    let mut power_vec = morlet::compute_morlet_tf(signal_slice, srate, freqs_slice, l2_normalize);
+    let Ok(power_vec) = std::panic::catch_unwind(|| {
+        morlet::compute_morlet_tf(signal_slice, srate, freqs_slice, l2_normalize)
+    }) else {
+        return ptr::null_mut();
+    };
 
     let result = Box::new(SleepEegMorletResult {
         power_len: power_vec.len() as i32,

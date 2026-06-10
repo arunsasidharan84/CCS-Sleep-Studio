@@ -176,8 +176,21 @@ List<(String, double)> _timeTicks(double totalSeconds) {
   return ticks;
 }
 
-List<(String, double)> _timeTicksZoomed(double startSeconds, double visibleSeconds) {
-  const stepOptions = [3600.0, 1800.0, 900.0, 600.0, 300.0, 180.0, 120.0, 60.0, 30.0];
+List<(String, double)> _timeTicksZoomed(
+  double startSeconds,
+  double visibleSeconds,
+) {
+  const stepOptions = [
+    3600.0,
+    1800.0,
+    900.0,
+    600.0,
+    300.0,
+    180.0,
+    120.0,
+    60.0,
+    30.0,
+  ];
   double step = 3600.0;
   for (final s in stepOptions) {
     if (visibleSeconds / s >= 2) {
@@ -185,7 +198,7 @@ List<(String, double)> _timeTicksZoomed(double startSeconds, double visibleSecon
       break;
     }
   }
-  
+
   final ticks = <(String, double)>[];
   final firstTickTime = ((startSeconds / step).ceil() * step);
   for (double t = firstTickTime; t < startSeconds + visibleSeconds; t += step) {
@@ -194,7 +207,8 @@ List<(String, double)> _timeTicksZoomed(double startSeconds, double visibleSecon
     final s = (t % 60).round();
     String label;
     if (step < 60.0) {
-      label = '${h}h${m.toString().padLeft(2, '0')}m${s.toString().padLeft(2, '0')}s';
+      label =
+          '${h}h${m.toString().padLeft(2, '0')}m${s.toString().padLeft(2, '0')}s';
     } else {
       label = m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
     }
@@ -309,13 +323,15 @@ class SpectrogramPainter extends CustomPainter {
     _drawYAxisLabel(canvas, size, plotH, freqs);
 
     // Channel label
-    final spectChName = viewport.signalChannelLabels.isNotEmpty
-        ? viewport.signalChannelLabels[viewport.spectrogramChannelIndex.clamp(
+    final spectChName = viewport.channelLabels.isNotEmpty
+        ? viewport.channelLabels[viewport.spectrogramChannelIndex.clamp(
             0,
-            viewport.signalChannelLabels.length - 1,
+            viewport.channelLabels.length - 1,
           )]
         : 'Ch 1';
-    final labelText = viewport.spectrogramFiltered ? '$spectChName (Filtered)' : spectChName;
+    final labelText = viewport.spectrogramFiltered
+        ? '$spectChName (Filtered)'
+        : spectChName;
     _drawText(
       canvas,
       labelText,
@@ -331,7 +347,14 @@ class SpectrogramPainter extends CustomPainter {
       8,
       plotH * 0.70,
     );
-    _drawColorbar(canvas, cbarRect, _cividisColor, -1.0, 3.0, '');
+    _drawColorbar(
+      canvas,
+      cbarRect,
+      _cividisColor,
+      viewport.spectrogramPowerMin,
+      viewport.spectrogramPowerMax,
+      '',
+    );
   }
 
   ui.Picture _buildSpectrogramPicture(
@@ -343,28 +366,34 @@ class SpectrogramPainter extends CustomPainter {
     final c = Canvas(recorder);
 
     final nEpochs = power.length;
-    // Restrict to 0–45 Hz for display
-    const maxDisplayHz = 45.0;
-    int nFreqDisplay = freqs.length;
-    for (var i = 0; i < freqs.length; i++) {
-      if (freqs[i] > maxDisplayHz) {
-        nFreqDisplay = i;
-        break;
-      }
-    }
-    if (nFreqDisplay == 0) nFreqDisplay = freqs.length;
+    final lowHz = math.min(
+      viewport.spectrogramFreqMin,
+      viewport.spectrogramFreqMax,
+    );
+    final highHz = math.max(
+      viewport.spectrogramFreqMin,
+      viewport.spectrogramFreqMax,
+    );
+    final freqIndices = <int>[
+      for (var i = 0; i < freqs.length; i++)
+        if (freqs[i] >= lowHz && freqs[i] <= highHz) i,
+    ];
+    final nFreqDisplay = freqIndices.length;
+    if (nEpochs == 0 || nFreqDisplay == 0) return recorder.endRecording();
 
     // Compute global min/max for color scaling (log10 power)
     // Default: -1 to 3 (matches Python config["Spectrogram_power_limits"])
-    const colorMin = -1.0;
-    const colorMax = 3.0;
+    final colorMin = viewport.spectrogramPowerMin;
+    final colorMax = viewport.spectrogramPowerMax > colorMin
+        ? viewport.spectrogramPowerMax
+        : colorMin + 1.0;
 
     final cellW = size.width / nEpochs;
     final cellH = size.height / nFreqDisplay;
 
     for (var e = 0; e < nEpochs; e++) {
       for (var f = 0; f < nFreqDisplay; f++) {
-        final rawPsd = power[e][f];
+        final rawPsd = power[e][freqIndices[f]];
         final logPsd = rawPsd > 0 ? math.log(rawPsd) / math.ln10 : colorMin;
         final t = ((logPsd - colorMin) / (colorMax - colorMin)).clamp(0.0, 1.0);
         c.drawRect(
@@ -409,16 +438,26 @@ class SpectrogramPainter extends CustomPainter {
     double plotH,
     List<double> freqs,
   ) {
-    const tickHz = [0.0, 10.0, 20.0, 30.0, 40.0];
-    final maxHz = freqs.isNotEmpty ? freqs.last.clamp(1.0, 45.0) : 45.0;
+    final minHz = math.min(
+      viewport.spectrogramFreqMin,
+      viewport.spectrogramFreqMax,
+    );
+    final maxHz = math.max(
+      minHz + 1.0,
+      math.min(
+        math.max(viewport.spectrogramFreqMin, viewport.spectrogramFreqMax),
+        freqs.isNotEmpty ? freqs.last : 45.0,
+      ),
+    );
+    final tickStep = (maxHz - minHz) / 4;
+    final tickHz = [for (var i = 0; i <= 4; i++) minHz + tickStep * i];
     final tickStyle = _axisTextStyle.copyWith(color: Colors.black87);
     for (final hz in tickHz) {
-      if (hz > maxHz) continue;
-      final fy = 1.0 - hz / maxHz;
+      final fy = 1.0 - (hz - minHz) / (maxHz - minHz);
       final y = fy * plotH;
       _drawText(
         canvas,
-        '${hz.toInt()} Hz',
+        '${hz.toStringAsFixed(hz < 10 ? 1 : 0)} Hz',
         Offset(_leftPad - 4, y),
         style: tickStyle,
         align: TextAlign.right,
@@ -446,7 +485,11 @@ class SpectrogramPainter extends CustomPainter {
       old.viewport.spectrogramChannelIndex !=
           viewport.spectrogramChannelIndex ||
       !identical(old.viewport.spectrogramImage, viewport.spectrogramImage) ||
-      !identical(old.viewport.spectrogramPower, viewport.spectrogramPower);
+      !identical(old.viewport.spectrogramPower, viewport.spectrogramPower) ||
+      old.viewport.spectrogramFreqMin != viewport.spectrogramFreqMin ||
+      old.viewport.spectrogramFreqMax != viewport.spectrogramFreqMax ||
+      old.viewport.spectrogramPowerMin != viewport.spectrogramPowerMin ||
+      old.viewport.spectrogramPowerMax != viewport.spectrogramPowerMax;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -497,7 +540,11 @@ class HypnogramPainter extends CustomPainter {
     _drawXAxisTicks(canvas, size);
   }
 
-  void _drawDisagreementBands(Canvas canvas, Size size, List<SleepStage> stages) {
+  void _drawDisagreementBands(
+    Canvas canvas,
+    Size size,
+    List<SleepStage> stages,
+  ) {
     final cmp = comparisonStages;
     if (cmp == null || cmp.isEmpty) return;
 
@@ -515,14 +562,21 @@ class HypnogramPainter extends CustomPainter {
     final yBotTop = _toCanvasY(-3.7, size.height);
     final yBotBottom = _toCanvasY(-3.95, size.height);
 
-    for (var i = sEpoch; i < eEpoch && i < stages.length && i < cmp.length; i++) {
+    for (
+      var i = sEpoch;
+      i < eEpoch && i < stages.length && i < cmp.length;
+      i++
+    ) {
       final s1 = stages[i];
       final s2 = cmp[i];
       if (s1 != SleepStage.unknown && s2 != SleepStage.unknown && s1 != s2) {
         final x0 = _leftPad + (i - sEpoch) * epochW;
         final x1 = x0 + epochW;
         canvas.drawRect(Rect.fromLTRB(x0, 0, x1, plotH), bgPaint);
-        canvas.drawRect(Rect.fromLTRB(x0, yBotTop, x1, yBotBottom), indicatorPaint);
+        canvas.drawRect(
+          Rect.fromLTRB(x0, yBotTop, x1, yBotBottom),
+          indicatorPaint,
+        );
       }
     }
   }
@@ -548,9 +602,11 @@ class HypnogramPainter extends CustomPainter {
       final visibleStart = math.max(start, startTime);
       final visibleEnd = math.min(end, (sEpoch + visibleCount) * 30.0);
 
-      final x1 = _leftPad + ((visibleStart - startTime) / totalDuration) * drawWidth;
-      final x2 = _leftPad + ((visibleEnd - startTime) / totalDuration) * drawWidth;
-      
+      final x1 =
+          _leftPad + ((visibleStart - startTime) / totalDuration) * drawWidth;
+      final x2 =
+          _leftPad + ((visibleEnd - startTime) / totalDuration) * drawWidth;
+
       final baseColor = _eventColor(event.digit);
       final solidColor = baseColor.withAlpha(255);
 
@@ -594,7 +650,9 @@ class HypnogramPainter extends CustomPainter {
       (-3.0, 'N3'),
     ];
     for (final (y, label) in labels) {
-      final cy = label == 'Event' ? _toCanvasY(y, size.height) : _toCanvasY(y - 0.5, size.height);
+      final cy = label == 'Event'
+          ? _toCanvasY(y, size.height)
+          : _toCanvasY(y - 0.5, size.height);
       _drawText(
         canvas,
         label,
@@ -638,7 +696,8 @@ class HypnogramPainter extends CustomPainter {
         Paint()..color = color,
       );
 
-      final isUncertain = i < viewport.stagesUncertain.length && viewport.stagesUncertain[i];
+      final isUncertain =
+          i < viewport.stagesUncertain.length && viewport.stagesUncertain[i];
       if (isUncertain) {
         canvas.drawRect(
           Rect.fromLTRB(x0, cyTop, x1, cyBottom),
@@ -747,11 +806,7 @@ class HypnogramPainter extends CustomPainter {
     final plotH = size.height - _bottomPad;
     for (final (label, fx) in ticks) {
       final x = _leftPad + drawWidth * fx;
-      canvas.drawLine(
-        Offset(x, plotH),
-        Offset(x, plotH + 4),
-        tickPaint,
-      );
+      canvas.drawLine(Offset(x, plotH), Offset(x, plotH + 4), tickPaint);
       _drawText(
         canvas,
         label,
@@ -829,7 +884,12 @@ class RectanglePowerPainter extends CustomPainter {
     final maxV = displayPower.reduce(math.max);
     final range = maxV - minV < 1e-20 ? 1.0 : maxV - minV;
 
-    const pad = EdgeInsets.only(left: 35.0, right: 18.0, top: 6.0, bottom: 26.0);
+    const pad = EdgeInsets.only(
+      left: 35.0,
+      right: 18.0,
+      top: 6.0,
+      bottom: 26.0,
+    );
     final plotW = size.width - pad.left - pad.right;
     final plotH = size.height - pad.top - pad.bottom;
     if (plotW <= 0 || plotH <= 0) return;
@@ -930,7 +990,9 @@ class RectanglePowerPainter extends CustomPainter {
             viewport.signalChannelLabels.length - 1,
           )]
         : 'PSD';
-    final labelText = viewport.periodogramFiltered ? '$channelName (Filtered)' : channelName;
+    final labelText = viewport.periodogramFiltered
+        ? '$channelName (Filtered)'
+        : channelName;
     _drawText(
       canvas,
       labelText,
@@ -1379,7 +1441,7 @@ class TimelinePainter extends CustomPainter {
     final channelHeight = size.height / labels.length;
     final labelStyle = TextStyle(
       color: Colors.black87, // Legible dark color
-      fontSize: 12,          // Professional compact size
+      fontSize: 12, // Professional compact size
       fontWeight: FontWeight.bold,
       fontFamily: 'sans-serif',
     );
@@ -1443,7 +1505,9 @@ class TimelinePainter extends CustomPainter {
           fontSize: 10,
           color: Colors.black54,
         );
-        final refStr = refUv % 1 == 0 ? refUv.toStringAsFixed(0) : refUv.toStringAsFixed(1);
+        final refStr = refUv % 1 == 0
+            ? refUv.toStringAsFixed(0)
+            : refUv.toStringAsFixed(1);
         _drawText(
           canvas,
           '+$refStr',
@@ -1482,8 +1546,6 @@ class TimelinePainter extends CustomPainter {
       verticalPaint,
     );
   }
-
-
 
   @override
   bool shouldRepaint(TimelinePainter old) =>
@@ -1647,7 +1709,8 @@ class SelectionOverlayPainter extends CustomPainter {
 
     // Draw active drag selection on top. Committed selections remain visible and
     // contribute to the total duration, matching Scoring Hero's multi-select use.
-    final bool hasActiveDrag = (activeDragStartSec != null &&
+    final bool hasActiveDrag =
+        (activeDragStartSec != null &&
         activeDragEndSec != null &&
         activeDragChannel != null &&
         activeDragStartUv != null &&
@@ -1662,7 +1725,9 @@ class SelectionOverlayPainter extends CustomPainter {
             endUv: activeDragEndUv!,
             peakToPeakUv: 0.0,
           )
-        : (viewport.eventSelections.isNotEmpty ? viewport.eventSelections.last : null);
+        : (viewport.eventSelections.isNotEmpty
+              ? viewport.eventSelections.last
+              : null);
 
     if (labelTarget != null) {
       final s = math.min(labelTarget.startSec, labelTarget.endSec);
@@ -1765,8 +1830,9 @@ class SelectionOverlayPainter extends CustomPainter {
 
       if (peakToPeak != null) {
         final leftText = "${peakToPeak.toStringAsFixed(1)} µV";
-        final labelColor = TimelinePainter
-            .channelColors[labelTarget.channel % TimelinePainter.channelColors.length];
+        final labelColor =
+            TimelinePainter.channelColors[labelTarget.channel %
+                TimelinePainter.channelColors.length];
         final leftStyle = TextStyle(
           color: labelColor,
           fontSize: 11,
@@ -1781,7 +1847,6 @@ class SelectionOverlayPainter extends CustomPainter {
         );
       }
     }
-
   }
 
   void _drawSelectionBox(

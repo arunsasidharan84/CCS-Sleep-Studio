@@ -759,15 +759,7 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
       bool isEmg = upper.contains('EMG') || upper.contains('CHIN') || upper.contains('MYO');
       bool isRef = upper.contains('M1') || upper.contains('M2') || upper.contains('A1') || upper.contains('A2') || upper.contains('REF');
       
-      bool isEeg = !isEog && !isEmg && !isRef && (
-        upper.contains('EEG') ||
-        upper.contains('FP1') || upper.contains('FP2') ||
-        upper.contains('F3') || upper.contains('F4') || upper.contains('FZ') || upper.contains('F7') || upper.contains('F8') ||
-        upper.contains('C3') || upper.contains('C4') || upper.contains('CZ') ||
-        upper.contains('P3') || upper.contains('P4') || upper.contains('PZ') ||
-        upper.contains('O1') || upper.contains('O2') || upper.contains('OZ') ||
-        upper.contains('T3') || upper.contains('T4') || upper.contains('T5') || upper.contains('T6')
-      );
+      bool isEeg = !isEog && !isEmg && !isRef;
 
       _eegChannels[ch] = isEeg;
       _refChannels[ch] = isRef;
