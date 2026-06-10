@@ -323,7 +323,9 @@ class SpectrogramPainter extends CustomPainter {
     _drawYAxisLabel(canvas, size, plotH, freqs);
 
     // Channel label
-    final spectChName = viewport.channelLabels.isNotEmpty
+    final spectChName = viewport.spectrogramChannelLabel.isNotEmpty
+        ? viewport.spectrogramChannelLabel
+        : viewport.channelLabels.isNotEmpty
         ? viewport.channelLabels[viewport.spectrogramChannelIndex.clamp(
             0,
             viewport.channelLabels.length - 1,
@@ -984,7 +986,9 @@ class RectanglePowerPainter extends CustomPainter {
     canvas.restore();
 
     // Channel label
-    final channelName = viewport.signalChannelLabels.isNotEmpty
+    final channelName = viewport.periodogramChannelLabel.isNotEmpty
+        ? viewport.periodogramChannelLabel
+        : viewport.signalChannelLabels.isNotEmpty
         ? viewport.signalChannelLabels[viewport.periodogramChannelIndex.clamp(
             0,
             viewport.signalChannelLabels.length - 1,
@@ -1166,7 +1170,9 @@ class TimeFrequencyPainter extends CustomPainter {
     _drawXAxis(canvas, plotH, plotW);
 
     // Channel label
-    final chLabel = viewport.signalChannelLabels.isNotEmpty
+    final chLabel = viewport.tfChannelLabel.isNotEmpty
+        ? viewport.tfChannelLabel
+        : viewport.signalChannelLabels.isNotEmpty
         ? viewport.signalChannelLabels[viewport.tfChannelIndex.clamp(
             0,
             viewport.signalChannelLabels.length - 1,

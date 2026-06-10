@@ -43,6 +43,24 @@ Future<void> autoSaveScoring(
   }
 }
 
+Future<void> writeMappedScoringJson(
+  String path,
+  List<SleepStage> stages, {
+  int epochSeconds = 30,
+  String? sourcePath,
+  List<bool>? stagesUncertain,
+  List<double?>? stagesConfidence,
+}) {
+  return _writeJsonScoring(
+    path,
+    stages,
+    epochSeconds,
+    sourcePath ?? path,
+    stagesUncertain: stagesUncertain,
+    stagesConfidence: stagesConfidence,
+  );
+}
+
 /// Load scoring from the JSON file that lives next to the EDF (auto-loaded on open).
 Future<ScoringLoadResult?> tryLoadAutoScoring(
   String activePath,

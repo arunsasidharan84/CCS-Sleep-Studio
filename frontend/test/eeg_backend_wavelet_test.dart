@@ -101,4 +101,106 @@ void main() {
     expect(refreshed.tfFreqs.last, closeTo(30.0, 0.01));
     expect(refreshed.tfPower, isNotEmpty);
   });
+
+  test(
+    'accepts legacy filtered configs using the loaded sample rate',
+    () async {
+      final backend = EegBackend();
+      const sampleRate = 256.0;
+      final samples = List<double>.generate((sampleRate * 36).round(), (i) {
+        final t = i / sampleRate;
+        return 20.0 * math.sin(2.0 * math.pi * 8.0 * t);
+      });
+      final config = AppConfig(
+        tfFreqMin: 0.25,
+        tfFreqMax: 45.0,
+        channels: [
+          ChannelConfig(
+            name: 'F3',
+            sourceIndex: 0,
+            filterHpEnabled: true,
+            filterHpCutoff: 0.3,
+            filterLpEnabled: true,
+            filterLpCutoff: 35.0,
+          ),
+        ],
+      );
+      config.bindLoadedChannels(const ['F3'], sampleRateHz: sampleRate);
+      final raw = LoadedEeg(
+        sampleRateHz: sampleRate,
+        channelLabels: const ['F3'],
+        channelSamples: [samples],
+        sourceDescription: 'synthetic legacy config',
+      );
+
+      final eeg = await backend.computeNightProducts(raw, config);
+
+      expect(eeg.spectrogramPower, isNotEmpty);
+      expect(config.tfFreqMax, 45.0);
+    },
+  );
+
+  test('keeps configured panel labels after refresh and navigation', () async {
+    final backend = EegBackend();
+    const sampleRate = 64.0;
+    final sampleCount = (sampleRate * 66).round();
+    final channels = [
+      List<double>.generate(sampleCount, (i) {
+        final t = i / sampleRate;
+        return math.sin(2.0 * math.pi * 3.0 * t);
+      }),
+      List<double>.generate(sampleCount, (i) {
+        final t = i / sampleRate;
+        return math.sin(2.0 * math.pi * 12.0 * t);
+      }),
+    ];
+    final config = AppConfig(
+      spectrogramChannelIndex: 2,
+      periodogramChannelIndex: 1,
+      tfChannelIndex: 2,
+      tfFreqMax: 30.0,
+      channels: [
+        ChannelConfig(name: 'F3', sourceIndex: 0),
+        ChannelConfig(name: 'O2', sourceIndex: 1),
+        ChannelConfig(
+          name: 'F3-O2',
+          sourceIndex: 0,
+          derived: true,
+          sourceChannel: 'F3',
+          reReference: 'O2',
+        ),
+      ],
+    );
+    config.bindLoadedChannels(const ['F3', 'O2'], sampleRateHz: sampleRate);
+    final raw = LoadedEeg(
+      sampleRateHz: sampleRate,
+      channelLabels: const ['F3', 'O2'],
+      channelSamples: channels,
+      sourceDescription: 'synthetic configured channels',
+    );
+
+    final eeg = await backend.computeNightProducts(raw, config);
+    final viewport = await backend.viewportFromEeg(
+      eeg,
+      currentEpoch: 0,
+      config: config,
+      includeTimeFrequency: false,
+    );
+    final refreshed = await backend.refreshTimeFrequencyForEpoch(
+      viewport,
+      eeg,
+      config: config,
+    );
+    final navigated = await backend.rebuildViewportForEpoch(
+      refreshed,
+      eeg,
+      1,
+      config: config,
+    );
+
+    expect(navigated.spectrogramChannelLabel, 'F3-O2');
+    expect(navigated.periodogramChannelLabel, 'O2');
+    expect(navigated.tfChannelLabel, 'F3-O2');
+    expect(navigated.tfPower, isNotEmpty);
+  });
 }

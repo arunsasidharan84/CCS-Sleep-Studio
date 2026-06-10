@@ -597,13 +597,12 @@ class AppConfig {
     );
   }
 
-  void bindLoadedChannels(List<String> loadedLabels) {
+  void bindLoadedChannels(List<String> loadedLabels, {double? sampleRateHz}) {
     if (channels.isEmpty) {
       channels = defaultsForChannels(
         loadedLabels,
-        sampleRateHz: 256.0,
+        sampleRateHz: sampleRateHz ?? 256.0,
       ).channels;
-      return;
     }
 
     final rawNameToIndex = <String, int>{};
@@ -655,6 +654,34 @@ class AppConfig {
       }
     }
 
+    final configuredRawIndices = channels
+        .where((channel) => !channel.derived)
+        .map((channel) => channel.sourceIndex)
+        .whereType<int>()
+        .toSet();
+    for (var rawIndex = 0; rawIndex < loadedLabels.length; rawIndex++) {
+      if (!configuredRawIndices.contains(rawIndex)) {
+        channels.add(
+          _defaultChannelConfig(
+            loadedLabels[rawIndex],
+            rawIndex,
+            loadedLabels.length,
+          ),
+        );
+      }
+    }
+
+    final availableNames = channels.map((channel) => channel.name).toSet();
+    for (final channel in channels) {
+      if (channel.reReference != 'None' &&
+          !availableNames.contains(channel.reReference)) {
+        channel.reReference = 'None';
+      }
+      channel.filterHpOrder = channel.filterHpOrder.clamp(1, 10);
+      channel.filterLpOrder = channel.filterLpOrder.clamp(1, 10);
+      channel.filterNotchOrder = channel.filterNotchOrder.clamp(1, 10);
+    }
+
     if (channels.isNotEmpty) {
       spectrogramChannelIndex = spectrogramChannelIndex.clamp(
         0,
@@ -666,6 +693,31 @@ class AppConfig {
       );
       tfChannelIndex = tfChannelIndex.clamp(0, channels.length - 1);
     }
+
+    final nyquist = (sampleRateHz ?? 256.0) / 2;
+    final maxDisplayFrequency = math.max(0.02, nyquist - 0.01);
+    tfFreqMin = tfFreqMin.clamp(0.01, maxDisplayFrequency).toDouble();
+    tfFreqMax = tfFreqMax
+        .clamp(tfFreqMin, math.max(tfFreqMin, maxDisplayFrequency))
+        .toDouble();
+    spectrogramFreqMin = spectrogramFreqMin
+        .clamp(0.0, maxDisplayFrequency)
+        .toDouble();
+    spectrogramFreqMax = spectrogramFreqMax
+        .clamp(
+          spectrogramFreqMin,
+          math.max(spectrogramFreqMin, maxDisplayFrequency),
+        )
+        .toDouble();
+    periodogramFreqMin = periodogramFreqMin
+        .clamp(0.0, maxDisplayFrequency)
+        .toDouble();
+    periodogramFreqMax = periodogramFreqMax
+        .clamp(
+          periodogramFreqMin,
+          math.max(periodogramFreqMin, maxDisplayFrequency),
+        )
+        .toDouble();
   }
 
   static bool _boolValue(Object? value, {bool fallback = false}) {
@@ -902,6 +954,34 @@ class EegBackend {
     }
   }
 
+  Future<int> runCommandStreamAsync({
+    required String executable,
+    required List<String> arguments,
+    required void Function(String line) onLine,
+  }) async {
+    try {
+      final process = await Process.start(
+        executable,
+        arguments,
+        environment: {...Platform.environment, 'PYTHONUNBUFFERED': '1'},
+      );
+      final stdoutDone = process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .forEach(onLine);
+      final stderrDone = process.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .forEach((line) => onLine('[stderr] $line'));
+      final exitCode = await process.exitCode;
+      await Future.wait([stdoutDone, stderrDone]);
+      return exitCode;
+    } on Object catch (error) {
+      onLine('Failed to start process: $error');
+      return -99;
+    }
+  }
+
   List<double> getDisplaySegmentForChannel({
     required LoadedEeg eeg,
     required int channelIndex,
@@ -967,12 +1047,14 @@ class EegBackend {
     );
     final spectSignal = _fullSignalForConfig(
       raw.channelSamples,
+      srate,
       config,
       spectConfigIndex,
       applyFilters: true,
     );
     final periodSignal = _fullSignalForConfig(
       raw.channelSamples,
+      srate,
       config,
       periodConfigIndex,
       applyFilters: true,
@@ -1001,10 +1083,12 @@ class EegBackend {
     final periodograms = periodResult.power;
 
     // 4. TF frequency grid (linspace 0.25–45 Hz, 120 bins)
-    final nyquist = math.max(0.5, srate / 2);
-    final tfFreqMin = config.tfFreqMin.clamp(0.25, nyquist - 0.25).toDouble();
+    final nyquist = srate / 2;
+    final tfUpper = math.max(0.02, nyquist - 0.01);
+    final tfLower = math.min(0.25, tfUpper / 2);
+    final tfFreqMin = config.tfFreqMin.clamp(tfLower, tfUpper).toDouble();
     final tfFreqMax = config.tfFreqMax
-        .clamp(tfFreqMin + 0.05, math.max(tfFreqMin + 0.05, nyquist - 0.01))
+        .clamp(tfFreqMin, math.max(tfFreqMin, tfUpper))
         .toDouble();
     final tfFreqs = config.tfFrequencyScale == 'Logarithmic'
         ? sp.geomspace(math.max(tfFreqMin, 0.1), tfFreqMax, 120)
@@ -1162,13 +1246,16 @@ class EegBackend {
       tfNormMedian: eeg.tfNormMedian,
       tfNormIqr: eeg.tfNormIqr,
       spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramChannelLabel: spectChCfg.name,
       spectrogramImage: eeg.spectrogramImage,
       currentEpochPeriodogram: periodogram,
       periodogramFreqs: periodogramFreqs,
       tfPower: tfPower,
       tfImage: tfImage,
       tfChannelIndex: cfg.tfChannelIndex,
+      tfChannelLabel: tfChCfg.name,
       periodogramChannelIndex: cfg.periodogramChannelIndex,
+      periodogramChannelLabel: periodChCfg.name,
       amplitudeRangeUv: cfg.amplitudeRangeUv,
       referenceAmplitudeLineUv: cfg.referenceAmplitudeLineUv,
       visibleChannelLabels: visibleChannels.labels,
@@ -1274,6 +1361,22 @@ class EegBackend {
       }
     }
 
+    final spectChCfg = _configAt(
+      cfg,
+      _clampConfigIndex(cfg.spectrogramChannelIndex, cfg),
+      eeg.channelSamples.length,
+    );
+    final periodChCfg = _configAt(
+      cfg,
+      _clampConfigIndex(cfg.periodogramChannelIndex, cfg),
+      eeg.channelSamples.length,
+    );
+    final tfChCfg = _configAt(
+      cfg,
+      _clampConfigIndex(cfg.tfChannelIndex, cfg),
+      eeg.channelSamples.length,
+    );
+
     return old.copyWith(
       currentEpoch: safeEpoch,
       points: points,
@@ -1285,6 +1388,7 @@ class EegBackend {
       tfImage: tfImage,
       clearTfImage: tfImage == null,
       tfChannelIndex: tfCh,
+      tfChannelLabel: tfChCfg.name,
       amplitudeRangeUv: cfg.amplitudeRangeUv,
       visibleChannelLabels: visibleChannels.labels,
       visibleChannelSourceIndices: visibleChannels.indices,
@@ -1299,6 +1403,8 @@ class EegBackend {
       periodogramDisplayMode: cfg.periodogramDisplayMode,
       spectrogramImage: eeg.spectrogramImage,
       spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramChannelLabel: spectChCfg.name,
+      periodogramChannelLabel: periodChCfg.name,
       spectrogramFreqMin: cfg.spectrogramFreqMin,
       spectrogramFreqMax: cfg.spectrogramFreqMax,
       spectrogramPowerMin: cfg.spectrogramPowerMin,
@@ -1421,6 +1527,7 @@ class EegBackend {
       tfImage: tfImage,
       clearTfImage: tfImage == null,
       tfChannelIndex: tfCh,
+      tfChannelLabel: tfChCfg.name,
       amplitudeRangeUv: cfg.amplitudeRangeUv,
       visibleChannelLabels: visibleChannels.labels,
       visibleChannelSourceIndices: visibleChannels.indices,
@@ -1435,6 +1542,8 @@ class EegBackend {
       periodogramDisplayMode: cfg.periodogramDisplayMode,
       spectrogramImage: eeg.spectrogramImage,
       spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramChannelLabel: spectChCfg.name,
+      periodogramChannelLabel: periodChCfg.name,
       spectrogramFreqMin: cfg.spectrogramFreqMin,
       spectrogramFreqMax: cfg.spectrogramFreqMax,
       spectrogramPowerMin: cfg.spectrogramPowerMin,
@@ -1462,6 +1571,11 @@ class EegBackend {
       return old.copyWith(
         tfPower: const [],
         tfChannelIndex: _tfSourceIndex(eeg, cfg),
+        tfChannelLabel: _configAt(
+          cfg,
+          _clampConfigIndex(cfg.tfChannelIndex, cfg),
+          eeg.channelSamples.length,
+        ).name,
         tfDisplayMode: cfg.tfDisplayMode,
         tfPowerMin: cfg.tfPowerMin,
         tfPowerMax: cfg.tfPowerMax,
@@ -1521,11 +1635,21 @@ class EegBackend {
       tfImage: tfImage,
       clearTfImage: tfImage == null,
       tfChannelIndex: tfCh,
+      tfChannelLabel: _configAt(
+        cfg,
+        _clampConfigIndex(cfg.tfChannelIndex, cfg),
+        eeg.channelSamples.length,
+      ).name,
       tfDisplayMode: cfg.tfDisplayMode,
       tfPowerMin: cfg.tfPowerMin,
       tfPowerMax: cfg.tfPowerMax,
       spectrogramImage: eeg.spectrogramImage,
       spectrogramChannelIndex: eeg.spectrogramChannelIndex,
+      spectrogramChannelLabel: _configAt(
+        cfg,
+        _clampConfigIndex(cfg.spectrogramChannelIndex, cfg),
+        eeg.channelSamples.length,
+      ).name,
       spectrogramFreqMin: cfg.spectrogramFreqMin,
       spectrogramFreqMax: cfg.spectrogramFreqMax,
       spectrogramPowerMin: cfg.spectrogramPowerMin,
@@ -2043,6 +2167,7 @@ class EegBackend {
 
   List<double> _fullSignalForConfig(
     List<List<double>> channels,
+    double sampleRate,
     AppConfig cfg,
     int configIndex, {
     bool applyFilters = false,
@@ -2062,7 +2187,7 @@ class EegBackend {
     }
     return _displaySegmentForChannel(
       channels,
-      1.0,
+      sampleRate,
       0,
       channels[sourceIdx].length,
       channelCfg,
@@ -2443,6 +2568,7 @@ class EegBackend {
     final tfCfg = _configAt(cfg, tfConfigIndex, eeg.channelSamples.length);
     final signal = _fullSignalForConfig(
       eeg.channelSamples,
+      eeg.sampleRateHz,
       cfg,
       tfConfigIndex,
       applyFilters: true,

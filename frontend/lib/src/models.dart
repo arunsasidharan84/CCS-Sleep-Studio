@@ -208,6 +208,7 @@ class EegViewport {
     this.tfNormMedian = const [],
     this.tfNormIqr = const [],
     this.spectrogramChannelIndex = 0,
+    this.spectrogramChannelLabel = '',
     this.spectrogramImage,
     // Per-epoch data
     this.currentEpochPeriodogram = const [],
@@ -215,7 +216,9 @@ class EegViewport {
     this.tfPower = const [], // nFreqs × nSamples Morlet power (log10, z-scored)
     this.tfImage,
     this.periodogramChannelIndex = 0,
+    this.periodogramChannelLabel = '',
     this.tfChannelIndex = 0,
+    this.tfChannelLabel = '',
     this.amplitudeRangeUv = 75.0,
     this.referenceAmplitudeLineUv = 37.5,
     this.selectionStartSec,
@@ -277,6 +280,7 @@ class EegViewport {
   final List<double> tfNormMedian;
   final List<double> tfNormIqr;
   final int spectrogramChannelIndex;
+  final String spectrogramChannelLabel;
   final ui.Image? spectrogramImage;
 
   // Per-epoch computed data
@@ -285,7 +289,9 @@ class EegViewport {
   final List<List<double>> tfPower; // shape: nFreqs × nSamples, z-scored log10
   final ui.Image? tfImage;
   final int periodogramChannelIndex;
+  final String periodogramChannelLabel;
   final int tfChannelIndex;
+  final String tfChannelLabel;
   final double amplitudeRangeUv;
   final double referenceAmplitudeLineUv;
   final String tfDisplayMode;
@@ -348,7 +354,9 @@ class EegViewport {
     List<List<double>>? tfPower,
     ui.Image? tfImage,
     int? periodogramChannelIndex,
+    String? periodogramChannelLabel,
     int? tfChannelIndex,
+    String? tfChannelLabel,
     double? amplitudeRangeUv,
     double? referenceAmplitudeLineUv,
     double? selectionStartSec,
@@ -371,6 +379,7 @@ class EegViewport {
     double? periodogramFreqMax,
     String? periodogramDisplayMode,
     int? spectrogramChannelIndex,
+    String? spectrogramChannelLabel,
     ui.Image? spectrogramImage,
     bool clearSpectrogramImage = false,
     bool clearTfImage = false,
@@ -414,6 +423,8 @@ class EegViewport {
       tfNormIqr: tfNormIqr,
       spectrogramChannelIndex:
           spectrogramChannelIndex ?? this.spectrogramChannelIndex,
+      spectrogramChannelLabel:
+          spectrogramChannelLabel ?? this.spectrogramChannelLabel,
       spectrogramImage: clearSpectrogramImage
           ? null
           : (spectrogramImage ?? this.spectrogramImage),
@@ -424,7 +435,10 @@ class EegViewport {
       tfImage: clearTfImage ? null : (tfImage ?? this.tfImage),
       periodogramChannelIndex:
           periodogramChannelIndex ?? this.periodogramChannelIndex,
+      periodogramChannelLabel:
+          periodogramChannelLabel ?? this.periodogramChannelLabel,
       tfChannelIndex: tfChannelIndex ?? this.tfChannelIndex,
+      tfChannelLabel: tfChannelLabel ?? this.tfChannelLabel,
       amplitudeRangeUv: amplitudeRangeUv ?? this.amplitudeRangeUv,
       referenceAmplitudeLineUv:
           referenceAmplitudeLineUv ?? this.referenceAmplitudeLineUv,

@@ -21,7 +21,7 @@ class MtKcdDialog extends StatefulWidget {
 class _MtKcdDialogState extends State<MtKcdDialog> {
   late String _selectedChannel;
   String _selectedMarker = 'F1';
-  
+
   // Detection parameters
   double _amin = 125.0;
   double _dmax = 2.0;
@@ -42,7 +42,9 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
   @override
   void initState() {
     super.initState();
-    _selectedChannel = widget.channelLabels.isNotEmpty ? widget.channelLabels.first : '';
+    _selectedChannel = widget.channelLabels.isNotEmpty
+        ? widget.channelLabels.first
+        : '';
     _useStageFilter = widget.hasStages;
   }
 
@@ -75,10 +77,16 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: widget.channelLabels.map((ch) {
-                  return DropdownMenuItem(value: ch, child: Text(ch, style: const TextStyle(fontSize: 13)));
+                  return DropdownMenuItem(
+                    value: ch,
+                    child: Text(ch, style: const TextStyle(fontSize: 13)),
+                  );
                 }).toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _selectedChannel = v);
@@ -97,14 +105,23 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: [
-                  const DropdownMenuItem(value: 'Artifact', child: Text('Artifact (A)', style: TextStyle(fontSize: 13))),
+                  const DropdownMenuItem(
+                    value: 'Artifact',
+                    child: Text('Artifact (A)', style: TextStyle(fontSize: 13)),
+                  ),
                   for (var i = 1; i <= 12; i++)
                     DropdownMenuItem(
                       value: 'F$i',
-                      child: Text('Event $i (F$i)', style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        'Event $i (F$i)',
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
                 ],
                 onChanged: (v) {
@@ -128,14 +145,18 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                     children: [
                       const Text(
                         'Detection Thresholds',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _doubleInputRow(
                         label: 'Min. amplitude (Amin):',
                         value: _amin,
                         suffix: ' µV',
-                        tooltip: 'Minimum peak-to-peak amplitude (AASM standard requires ≥ 75 µV).',
+                        tooltip:
+                            'Minimum peak-to-peak amplitude (AASM standard requires ≥ 75 µV).',
                         onChanged: (v) => setState(() => _amin = v),
                       ),
                       const SizedBox(height: 10),
@@ -143,7 +164,8 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                         label: 'Max. duration (Dmax):',
                         value: _dmax,
                         suffix: ' s',
-                        tooltip: 'Maximum allowed duration of a K-complex (default 2 s).',
+                        tooltip:
+                            'Maximum allowed duration of a K-complex (default 2 s).',
                         onChanged: (v) => setState(() => _dmax = v),
                       ),
                       const SizedBox(height: 10),
@@ -151,7 +173,8 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                         label: 'Region percentile (q):',
                         value: _q,
                         suffix: ' %',
-                        tooltip: 'Percentile threshold for candidate-region identification (default 90%).',
+                        tooltip:
+                            'Percentile threshold for candidate-region identification (default 90%).',
                         onChanged: (v) => setState(() => _q = v),
                       ),
                       const SizedBox(height: 10),
@@ -159,7 +182,8 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                         label: 'Max. KC frequency (fmax):',
                         value: _fmax,
                         suffix: ' Hz',
-                        tooltip: 'Upper frequency limit for K-Complex spectral delta power (default 3.0 Hz).',
+                        tooltip:
+                            'Upper frequency limit for K-Complex spectral delta power (default 3.0 Hz).',
                         onChanged: (v) => setState(() => _fmax = v),
                       ),
                     ],
@@ -170,7 +194,10 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
 
               // Stage filter
               CheckboxListTile(
-                title: const Text('Keep detections in sleep stages only', style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Keep detections in sleep stages only',
+                  style: TextStyle(fontSize: 13),
+                ),
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 value: _useStageFilter,
@@ -179,7 +206,10 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                     : null,
                 subtitle: widget.hasStages
                     ? null
-                    : const Text('No stages scored yet.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    : const Text(
+                        'No stages scored yet.',
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
               ),
               if (_useStageFilter)
                 Container(
@@ -204,7 +234,7 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                   ),
                 ),
               const SizedBox(height: 12),
-              
+
               // Explanation
               Text(
                 'MT-KCD detects KCs via multitaper spectral analysis. '
@@ -223,7 +253,7 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
         ElevatedButton(
           onPressed: () {
             if (_selectedChannel.isEmpty) return;
-            
+
             // Collect selected stages
             List<String>? filteredStages;
             if (_useStageFilter) {
@@ -233,7 +263,9 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
                   .toList();
               if (filteredStages.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Select at least one stage for filtering.')),
+                  const SnackBar(
+                    content: Text('Select at least one stage for filtering.'),
+                  ),
                 );
                 return;
               }
@@ -273,7 +305,11 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
               const SizedBox(width: 4),
               Tooltip(
                 message: tooltip,
-                child: const Icon(Icons.info_outline, size: 14, color: Colors.blue),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.blue,
+                ),
               ),
             ],
           ),
@@ -318,7 +354,11 @@ class _MtKcdDialogState extends State<MtKcdDialog> {
               const SizedBox(width: 4),
               Tooltip(
                 message: tooltip,
-                child: const Icon(Icons.info_outline, size: 14, color: Colors.blue),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.blue,
+                ),
               ),
             ],
           ),
@@ -366,7 +406,7 @@ class MtSpindleDialog extends StatefulWidget {
 class _MtSpindleDialogState extends State<MtSpindleDialog> {
   late String _selectedChannel;
   String _selectedMarker = 'F3';
-  
+
   // Detection parameters
   double _fmin = 11.0;
   double _fmax = 16.0;
@@ -389,7 +429,9 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
   @override
   void initState() {
     super.initState();
-    _selectedChannel = widget.channelLabels.isNotEmpty ? widget.channelLabels.first : '';
+    _selectedChannel = widget.channelLabels.isNotEmpty
+        ? widget.channelLabels.first
+        : '';
     _useStageFilter = widget.hasStages;
   }
 
@@ -422,10 +464,16 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: widget.channelLabels.map((ch) {
-                  return DropdownMenuItem(value: ch, child: Text(ch, style: const TextStyle(fontSize: 13)));
+                  return DropdownMenuItem(
+                    value: ch,
+                    child: Text(ch, style: const TextStyle(fontSize: 13)),
+                  );
                 }).toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _selectedChannel = v);
@@ -444,14 +492,23 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: [
-                  const DropdownMenuItem(value: 'Artifact', child: Text('Artifact (A)', style: TextStyle(fontSize: 13))),
+                  const DropdownMenuItem(
+                    value: 'Artifact',
+                    child: Text('Artifact (A)', style: TextStyle(fontSize: 13)),
+                  ),
                   for (var i = 1; i <= 12; i++)
                     DropdownMenuItem(
                       value: 'F$i',
-                      child: Text('Event $i (F$i)', style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        'Event $i (F$i)',
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
                 ],
                 onChanged: (v) {
@@ -475,14 +532,18 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                     children: [
                       const Text(
                         'Detection Thresholds',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _doubleInputRow(
                         label: 'Min. frequency (fmin):',
                         value: _fmin,
                         suffix: ' Hz',
-                        tooltip: 'Lower bound of the spindle sigma frequency band (default 11.0 Hz).',
+                        tooltip:
+                            'Lower bound of the spindle sigma frequency band (default 11.0 Hz).',
                         onChanged: (v) => setState(() => _fmin = v),
                       ),
                       const SizedBox(height: 10),
@@ -490,7 +551,8 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                         label: 'Max. frequency (fmax):',
                         value: _fmax,
                         suffix: ' Hz',
-                        tooltip: 'Upper bound of the spindle sigma frequency band (default 16.0 Hz).',
+                        tooltip:
+                            'Upper bound of the spindle sigma frequency band (default 16.0 Hz).',
                         onChanged: (v) => setState(() => _fmax = v),
                       ),
                       const SizedBox(height: 10),
@@ -498,7 +560,8 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                         label: 'Min. amplitude (Amin):',
                         value: _amin,
                         suffix: ' µV',
-                        tooltip: 'Minimum peak envelope amplitude of the filtered sigma-band signal (default 10 µV).',
+                        tooltip:
+                            'Minimum peak envelope amplitude of the filtered sigma-band signal (default 10 µV).',
                         onChanged: (v) => setState(() => _amin = v),
                       ),
                       const SizedBox(height: 10),
@@ -506,7 +569,8 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                         label: 'Min. duration (Dmin):',
                         value: _dmin,
                         suffix: ' s',
-                        tooltip: 'Minimum allowed duration of a spindle (default 0.5 s).',
+                        tooltip:
+                            'Minimum allowed duration of a spindle (default 0.5 s).',
                         onChanged: (v) => setState(() => _dmin = v),
                       ),
                       const SizedBox(height: 10),
@@ -514,7 +578,8 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                         label: 'Max. duration (Dmax):',
                         value: _dmax,
                         suffix: ' s',
-                        tooltip: 'Maximum allowed duration of a spindle (default 2.0 s).',
+                        tooltip:
+                            'Maximum allowed duration of a spindle (default 2.0 s).',
                         onChanged: (v) => setState(() => _dmax = v),
                       ),
                       const SizedBox(height: 10),
@@ -522,7 +587,8 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                         label: 'Region percentile (q):',
                         value: _q,
                         suffix: ' %',
-                        tooltip: 'Percentile threshold for candidate-region identification (default 95%).',
+                        tooltip:
+                            'Percentile threshold for candidate-region identification (default 95%).',
                         onChanged: (v) => setState(() => _q = v),
                       ),
                     ],
@@ -533,7 +599,10 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
 
               // Stage filter
               CheckboxListTile(
-                title: const Text('Keep detections in sleep stages only', style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Keep detections in sleep stages only',
+                  style: TextStyle(fontSize: 13),
+                ),
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 value: _useStageFilter,
@@ -542,7 +611,10 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                     : null,
                 subtitle: widget.hasStages
                     ? null
-                    : const Text('No stages scored yet.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    : const Text(
+                        'No stages scored yet.',
+                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
               ),
               if (_useStageFilter)
                 Container(
@@ -567,7 +639,7 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                   ),
                 ),
               const SizedBox(height: 12),
-              
+
               // Explanation
               Text(
                 'MT-Spindle detects spindles using median-normalized multitaper sigma power '
@@ -598,7 +670,7 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
               );
               return;
             }
-            
+
             // Collect selected stages
             List<String>? filteredStages;
             if (_useStageFilter) {
@@ -608,7 +680,9 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
                   .toList();
               if (filteredStages.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Select at least one stage for filtering.')),
+                  const SnackBar(
+                    content: Text('Select at least one stage for filtering.'),
+                  ),
                 );
                 return;
               }
@@ -650,7 +724,11 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
               const SizedBox(width: 4),
               Tooltip(
                 message: tooltip,
-                child: const Icon(Icons.info_outline, size: 14, color: Colors.blue),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.blue,
+                ),
               ),
             ],
           ),
@@ -695,7 +773,11 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
               const SizedBox(width: 4),
               Tooltip(
                 message: tooltip,
-                child: const Icon(Icons.info_outline, size: 14, color: Colors.blue),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.blue,
+                ),
               ),
             ],
           ),
@@ -754,11 +836,25 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
     super.initState();
     for (final ch in widget.channelLabels) {
       final upper = ch.toUpperCase();
-      
-      bool isEog = upper.contains('EOG') || upper.contains('LOC') || upper.contains('ROC') || upper.contains('E1') || upper.contains('E2');
-      bool isEmg = upper.contains('EMG') || upper.contains('CHIN') || upper.contains('MYO');
-      bool isRef = upper.contains('M1') || upper.contains('M2') || upper.contains('A1') || upper.contains('A2') || upper.contains('REF');
-      
+
+      bool isEog =
+          upper.contains('EOG') ||
+          upper.contains('LOC') ||
+          upper.contains('ROC') ||
+          upper.contains('E1') ||
+          upper.contains('E2');
+      bool isEmg =
+          upper.contains('EMG') ||
+          upper.contains('CHIN') ||
+          upper.contains('MYO');
+      bool isRef =
+          upper == 'M1' ||
+          upper == 'M2' ||
+          upper == 'A1' ||
+          upper == 'A2' ||
+          upper == 'REF' ||
+          upper.startsWith('REF ');
+
       bool isEeg = !isEog && !isEmg && !isRef;
 
       _eegChannels[ch] = isEeg;
@@ -795,7 +891,10 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                       children: [
                         const Text(
                           'Base Scorer Algorithm',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
@@ -803,18 +902,75 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                           decoration: const InputDecoration(
                             isDense: true,
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'yasa', child: Text('YASA LightGBM Consensus', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'usleep', child: Text('Offline U-Sleep Consensus', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'luna', child: Text('Luna POPS Stager', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'gssc', child: Text('Greifswald Classifier (GSSC)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'tinysleepnet', child: Text('TinySleepNet (PhysioEx)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'seqsleepnet', child: Text('SeqSleepNet (PhysioEx)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'sleeptransformer', child: Text('SleepTransformer (PhysioEx)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'dreamento', child: Text('Dreamento (YASA-based)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'sleepeegpy', child: Text('SleepEEGpy (YASA-based)', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(
+                              value: 'yasa',
+                              child: Text(
+                                'YASA LightGBM Consensus',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'usleep',
+                              child: Text(
+                                'Offline U-Sleep Consensus',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'luna',
+                              child: Text(
+                                'Luna POPS Stager',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'gssc',
+                              child: Text(
+                                'Greifswald Classifier (GSSC)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'tinysleepnet',
+                              child: Text(
+                                'TinySleepNet (PhysioEx)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'seqsleepnet',
+                              child: Text(
+                                'SeqSleepNet (PhysioEx)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'sleeptransformer',
+                              child: Text(
+                                'SleepTransformer (PhysioEx)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'dreamento',
+                              child: Text(
+                                'Dreamento (YASA-based)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'sleepeegpy',
+                              child: Text(
+                                'SleepEEGpy (YASA-based)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
                           ],
                           onChanged: (v) {
                             if (v != null) setState(() => _algorithm = v);
@@ -830,7 +986,10 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                       children: [
                         const Text(
                           'Sequence Correction',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
@@ -838,11 +997,26 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                           decoration: const InputDecoration(
                             isDense: true,
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'none', child: Text('None (Raw consensus predictions)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'sleepgpt', child: Text('SleepGPT Language Model', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(
+                              value: 'none',
+                              child: Text(
+                                'None (Raw consensus predictions)',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'sleepgpt',
+                              child: Text(
+                                'SleepGPT Language Model',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
                           ],
                           onChanged: (v) {
                             if (v != null) setState(() => _correction = v);
@@ -872,7 +1046,11 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                       children: [
                         const Text(
                           'SleepGPT Sequence Parameters',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.purple),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.purple,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -881,11 +1059,19 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                               flex: 3,
                               child: Row(
                                 children: [
-                                  Text('Language model weight (alpha):', style: TextStyle(fontSize: 12)),
+                                  Text(
+                                    'Language model weight (alpha):',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
                                   SizedBox(width: 4),
                                   Tooltip(
-                                    message: 'Interpolation weight for SleepGPT predictions (0.1 = 10% model influence, 90% base stager).',
-                                    child: Icon(Icons.info_outline, size: 14, color: Colors.purple),
+                                    message:
+                                        'Interpolation weight for SleepGPT predictions (0.1 = 10% model influence, 90% base stager).',
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: Colors.purple,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -895,7 +1081,10 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                               height: 32,
                               child: TextFormField(
                                 initialValue: _sleepgptAlpha.toString(),
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 style: const TextStyle(fontSize: 12),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -919,11 +1108,19 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                               flex: 3,
                               child: Row(
                                 children: [
-                                  Text('Context sequence length (n-gram):', style: TextStyle(fontSize: 12)),
+                                  Text(
+                                    'Context sequence length (n-gram):',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
                                   SizedBox(width: 4),
                                   Tooltip(
-                                    message: 'Number of past epochs SleepGPT looks at to predict the next stage transition (default 30).',
-                                    child: Icon(Icons.info_outline, size: 14, color: Colors.purple),
+                                    message:
+                                        'Number of past epochs SleepGPT looks at to predict the next stage transition (default 30).',
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: Colors.purple,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -961,18 +1158,38 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _buildChannelSelector('EEG Signal Channels', _eegChannels)),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EEG Signal Channels',
+                      _eegChannels,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildChannelSelector('Reference Signals', _refChannels)),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'Reference Signals',
+                      _refChannels,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _buildChannelSelector('EOG Channels (Differential)', _eogChannels)),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EOG Channels (Differential)',
+                      _eogChannels,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildChannelSelector('EMG Channels (Differential)', _emgChannels)),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EMG Channels (Differential)',
+                      _emgChannels,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -980,7 +1197,11 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
               Text(
                 'Note: Multi-channel configuration runs the stager across all selected EEG pairs/montages '
                 'and takes the ensemble average (consensus).',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),
@@ -993,14 +1214,28 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            final eeg = _eegChannels.entries.where((e) => e.value).map((e) => e.key).toList();
-            final ref = _refChannels.entries.where((e) => e.value).map((e) => e.key).toList();
-            final eog = _eogChannels.entries.where((e) => e.value).map((e) => e.key).toList();
-            final emg = _emgChannels.entries.where((e) => e.value).map((e) => e.key).toList();
+            final eeg = _eegChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final ref = _refChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final eog = _eogChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final emg = _emgChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
 
             if (eeg.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Select at least one EEG channel.')),
+                const SnackBar(
+                  content: Text('Select at least one EEG channel.'),
+                ),
               );
               return;
             }
@@ -1035,7 +1270,10 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1052,7 +1290,11 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                 cursor: SystemMouseCursors.click,
                 child: Text(
                   'Clear',
-                  style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -1100,14 +1342,139 @@ class BatchAutoScoringDialog extends StatefulWidget {
   const BatchAutoScoringDialog({
     super.key,
     required this.files,
+    required this.channelLabels,
     required this.onRun,
   });
 
   final List<String> files;
+  final List<String> channelLabels;
   final void Function(Map<String, dynamic> settings) onRun;
 
   @override
   State<BatchAutoScoringDialog> createState() => _BatchAutoScoringDialogState();
+}
+
+class AnalyseNidraDialog extends StatefulWidget {
+  const AnalyseNidraDialog({
+    super.key,
+    required this.channelLabels,
+    required this.batchCount,
+    required this.onRun,
+  });
+
+  final List<String> channelLabels;
+  final int batchCount;
+  final void Function(List<String> channels, List<String> references) onRun;
+
+  @override
+  State<AnalyseNidraDialog> createState() => _AnalyseNidraDialogState();
+}
+
+class _AnalyseNidraDialogState extends State<AnalyseNidraDialog> {
+  late final Map<String, bool> _channels;
+  late final Map<String, bool> _references;
+
+  @override
+  void initState() {
+    super.initState();
+    _channels = {};
+    _references = {};
+    for (final channel in widget.channelLabels) {
+      final upper = channel.toUpperCase();
+      final isReference =
+          upper == 'A1' ||
+          upper == 'A2' ||
+          upper == 'M1' ||
+          upper == 'M2' ||
+          upper.contains('REF');
+      final isDefaultEeg = RegExp(r'^(F3|F4|C3|C4|O1|O2)$').hasMatch(upper);
+      _channels[channel] = isDefaultEeg;
+      _references[channel] = isReference;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.batchCount == 1
+            ? 'Analyse current recording'
+            : 'Batch analyse ${widget.batchCount} recordings',
+      ),
+      content: SizedBox(
+        width: 620,
+        height: 430,
+        child: Row(
+          children: [
+            Expanded(child: _selector('EEG channels', _channels)),
+            const SizedBox(width: 12),
+            Expanded(child: _selector('Reference channels', _references)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final channels = _channels.entries
+                .where((entry) => entry.value)
+                .map((entry) => entry.key)
+                .toList();
+            final references = _references.entries
+                .where((entry) => entry.value)
+                .map((entry) => entry.key)
+                .toList();
+            if (channels.isEmpty || references.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Select at least one EEG and one reference channel.',
+                  ),
+                ),
+              );
+              return;
+            }
+            Navigator.of(context).pop();
+            widget.onRun(channels, references);
+          },
+          child: const Text('Run analysis'),
+        ),
+      ],
+    );
+  }
+
+  Widget _selector(String title, Map<String, bool> values) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ListView(
+              children: [
+                for (final channel in values.keys)
+                  CheckboxListTile(
+                    dense: true,
+                    title: Text(channel, style: const TextStyle(fontSize: 12)),
+                    value: values[channel],
+                    onChanged: (value) {
+                      setState(() => values[channel] = value ?? false);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
@@ -1115,6 +1482,55 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
   String _correction = 'none';
   double _sleepgptAlpha = 0.1;
   int _sleepgptNgram = 30;
+  late final TextEditingController _eegController;
+  late final TextEditingController _refController;
+  late final TextEditingController _eogController;
+  late final TextEditingController _emgController;
+
+  @override
+  void initState() {
+    super.initState();
+    final eeg = <String>[];
+    final refs = <String>[];
+    final eog = <String>[];
+    final emg = <String>[];
+    for (final channel in widget.channelLabels) {
+      final upper = channel.toUpperCase();
+      if (upper.contains('EOG') ||
+          upper.contains('LOC') ||
+          upper.contains('ROC') ||
+          upper.contains('E1') ||
+          upper.contains('E2')) {
+        eog.add(channel);
+      } else if (upper.contains('EMG') ||
+          upper.contains('CHIN') ||
+          upper.contains('MYO')) {
+        emg.add(channel);
+      } else if (upper == 'M1' ||
+          upper == 'M2' ||
+          upper == 'A1' ||
+          upper == 'A2' ||
+          upper == 'REF' ||
+          upper.startsWith('REF ')) {
+        refs.add(channel);
+      } else {
+        eeg.add(channel);
+      }
+    }
+    _eegController = TextEditingController(text: eeg.join(','));
+    _refController = TextEditingController(text: refs.join(','));
+    _eogController = TextEditingController(text: eog.join(','));
+    _emgController = TextEditingController(text: emg.join(','));
+  }
+
+  @override
+  void dispose() {
+    _eegController.dispose();
+    _refController.dispose();
+    _eogController.dispose();
+    _emgController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1135,7 +1551,8 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
             children: [
               Text(
                 'Scoring will run in the background for each selected file. '
-                'Channels will be automatically scanned and guessed for each file.',
+                'The channel choices below are initialized from the first file '
+                'and applied to every selected recording.',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
               ),
               const SizedBox(height: 16),
@@ -1150,18 +1567,75 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'yasa', child: Text('YASA LightGBM Consensus', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'usleep', child: Text('Offline U-Sleep Consensus', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'luna', child: Text('Luna POPS Stager', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'gssc', child: Text('Greifswald Classifier (GSSC)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'tinysleepnet', child: Text('TinySleepNet (PhysioEx)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'seqsleepnet', child: Text('SeqSleepNet (PhysioEx)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'sleeptransformer', child: Text('SleepTransformer (PhysioEx)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'dreamento', child: Text('Dreamento (YASA-based)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'sleepeegpy', child: Text('SleepEEGpy (YASA-based)', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(
+                    value: 'yasa',
+                    child: Text(
+                      'YASA LightGBM Consensus',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'usleep',
+                    child: Text(
+                      'Offline U-Sleep Consensus',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'luna',
+                    child: Text(
+                      'Luna POPS Stager',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'gssc',
+                    child: Text(
+                      'Greifswald Classifier (GSSC)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'tinysleepnet',
+                    child: Text(
+                      'TinySleepNet (PhysioEx)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'seqsleepnet',
+                    child: Text(
+                      'SeqSleepNet (PhysioEx)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'sleeptransformer',
+                    child: Text(
+                      'SleepTransformer (PhysioEx)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'dreamento',
+                    child: Text(
+                      'Dreamento (YASA-based)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'sleepeegpy',
+                    child: Text(
+                      'SleepEEGpy (YASA-based)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _algorithm = v);
@@ -1179,11 +1653,26 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'none', child: Text('None (Raw consensus predictions)', style: TextStyle(fontSize: 13))),
-                  DropdownMenuItem(value: 'sleepgpt', child: Text('SleepGPT Language Model', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(
+                    value: 'none',
+                    child: Text(
+                      'None (Raw consensus predictions)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'sleepgpt',
+                    child: Text(
+                      'SleepGPT Language Model',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _correction = v);
@@ -1207,21 +1696,31 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                       children: [
                         const Text(
                           'SleepGPT Sequence Parameters',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.purple),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.purple,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Row(
                           children: [
                             const Expanded(
                               flex: 3,
-                              child: Text('Language model weight (alpha):', style: TextStyle(fontSize: 12)),
+                              child: Text(
+                                'Language model weight (alpha):',
+                                style: TextStyle(fontSize: 12),
+                              ),
                             ),
                             SizedBox(
                               width: 90,
                               height: 32,
                               child: TextFormField(
                                 initialValue: _sleepgptAlpha.toString(),
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 style: const TextStyle(fontSize: 12),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -1243,7 +1742,10 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                           children: [
                             const Expanded(
                               flex: 3,
-                              child: Text('Context sequence length (n-gram):', style: TextStyle(fontSize: 12)),
+                              child: Text(
+                                'Context sequence length (n-gram):',
+                                style: TextStyle(fontSize: 12),
+                              ),
                             ),
                             SizedBox(
                               width: 90,
@@ -1272,6 +1774,22 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                   ),
                 ),
               ],
+              const SizedBox(height: 16),
+              const Text(
+                'Channels applied to every file',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Comma-separated channel names. Files missing a selected channel '
+                'will report a clear failure in the batch log.',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              _batchChannelField('EEG channels', _eegController),
+              _batchChannelField('Reference channels', _refController),
+              _batchChannelField('EOG channels', _eogController),
+              _batchChannelField('EMG channels', _emgController),
             ],
           ),
         ),
@@ -1283,17 +1801,50 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            List<String> channels(TextEditingController controller) =>
+                controller.text
+                    .split(',')
+                    .map((value) => value.trim())
+                    .where((value) => value.isNotEmpty)
+                    .toList();
+            final eeg = channels(_eegController);
+            if (eeg.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Enter at least one EEG channel.'),
+                ),
+              );
+              return;
+            }
             widget.onRun({
               'algorithm': _algorithm,
               'sequence_correction': _correction,
               'sleepgpt_alpha': _sleepgptAlpha,
               'sleepgpt_ngram': _sleepgptNgram,
+              'eeg': eeg,
+              'ref': channels(_refController),
+              'eog': channels(_eogController),
+              'emg': channels(_emgController),
             });
             Navigator.of(context).pop();
           },
           child: const Text('Run Batch Scoring'),
         ),
       ],
+    );
+  }
+
+  Widget _batchChannelField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          border: const OutlineInputBorder(),
+        ),
+      ),
     );
   }
 }

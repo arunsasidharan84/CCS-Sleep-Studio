@@ -98,9 +98,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     final result = await FilePicker.pickFiles(
       dialogTitle: kind == 'mat'
           ? 'Load EEGLAB structure (.mat)'
-          : (kind == 'r09' ? 'Load Zurich file (.r09)' : 'Load EDF file (.edf)'),
+          : (kind == 'r09'
+                ? 'Load Zurich file (.r09)'
+                : 'Load EDF file (.edf)'),
       type: FileType.custom,
-      allowedExtensions: kind == 'mat' ? ['mat'] : (kind == 'r09' ? ['r09'] : ['edf']),
+      allowedExtensions: kind == 'mat'
+          ? ['mat']
+          : (kind == 'r09' ? ['r09'] : ['edf']),
     );
     final path = result?.files.single.path;
     if (path == null) {
@@ -122,20 +126,24 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       if (kind == 'edf') {
         rawEeg = _backend.loadEdf(path);
       } else if (kind == 'edfvolt') {
-        rawEeg = _backend.loadEdf(
-          path,
-          scaleVoltsToMicrovolts: true,
-        );
+        rawEeg = _backend.loadEdf(path, scaleVoltsToMicrovolts: true);
       } else if (kind == 'r09') {
         rawEeg = _backend.loadR09(path);
       } else {
         rawEeg = _backend.loadMat(path);
       }
 
-      final activeConfig = autoCfg ?? AppConfig.defaultsForChannels(rawEeg.channelLabels, sampleRateHz: rawEeg.sampleRateHz);
+      final activeConfig =
+          autoCfg ??
+          AppConfig.defaultsForChannels(
+            rawEeg.channelLabels,
+            sampleRateHz: rawEeg.sampleRateHz,
+          );
       // ignore: avoid_print
-      print('[ScoringNidra] Config ${autoCfg != null ? "LOADED" : "GENERATED"} '
-            'for ${_basename(path)}: ${activeConfig.channels.length} channels');
+      print(
+        '[ScoringNidra] Config ${autoCfg != null ? "LOADED" : "GENERATED"} '
+        'for ${_basename(path)}: ${activeConfig.channels.length} channels',
+      );
       if (autoCfg == null) {
         // Copy user preferences
         activeConfig.amplitudeRangeUv = _config.amplitudeRangeUv;
@@ -157,10 +165,15 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         activeConfig.robustZStandardize = _config.robustZStandardize;
         activeConfig.periodogramDisplayMode = _config.periodogramDisplayMode;
         activeConfig.eegPanelTimeUnit = _config.eegPanelTimeUnit;
-        activeConfig.distanceBetweenChannelsUv = _config.distanceBetweenChannelsUv;
-        activeConfig.referenceAmplitudeLineUv = _config.referenceAmplitudeLineUv;
+        activeConfig.distanceBetweenChannelsUv =
+            _config.distanceBetweenChannelsUv;
+        activeConfig.referenceAmplitudeLineUv =
+            _config.referenceAmplitudeLineUv;
       }
-      activeConfig.bindLoadedChannels(rawEeg.channelLabels);
+      activeConfig.bindLoadedChannels(
+        rawEeg.channelLabels,
+        sampleRateHz: rawEeg.sampleRateHz,
+      );
       // Always save after binding — persists channel index corrections
       await saveAutoConfig(path, activeConfig);
 
@@ -258,7 +271,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     final updated = v.copyWith(stagesUncertain: newUncertain);
     setState(() {
       _viewport = updated;
-      _status = 'Epoch ${epoch + 1} uncertainty toggled to ${newUncertain[epoch]}';
+      _status =
+          'Epoch ${epoch + 1} uncertainty toggled to ${newUncertain[epoch]}';
     });
     autoSaveScoring(
       _activePath,
@@ -367,7 +381,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       );
       if (!mounted || serial != _navigationSerial) return;
       setState(() {
-        _viewport = refreshed.copyWith(stages: v.stages, stagesUncertain: v.stagesUncertain);
+        _viewport = refreshed.copyWith(
+          stages: v.stages,
+          stagesUncertain: v.stagesUncertain,
+        );
       });
     } catch (e) {
       if (!mounted || serial != _navigationSerial) return;
@@ -633,7 +650,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       );
       _status = 'Deleted all events';
     });
-    autoSaveScoring(_activePath, v.stages, v.epochSeconds, stagesUncertain: v.stagesUncertain);
+    autoSaveScoring(
+      _activePath,
+      v.stages,
+      v.epochSeconds,
+      stagesUncertain: v.stagesUncertain,
+    );
   }
 
   List<ScoredEvent> _mergeScoredEvents(List<ScoredEvent> events) {
@@ -681,7 +703,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     );
     if (result != null) {
       setState(() {
-        _viewport = v.copyWith(stages: result.stages, stagesUncertain: result.stagesUncertain);
+        _viewport = v.copyWith(
+          stages: result.stages,
+          stagesUncertain: result.stagesUncertain,
+        );
       });
     }
   }
@@ -717,17 +742,19 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     final script = detectBackendScript();
 
     final args = <String>[];
-    if (executable.endsWith('.py') || script.isNotEmpty && (executable.contains('python') || executable.contains('python3'))) {
+    if (executable.endsWith('.py') ||
+        script.isNotEmpty &&
+            (executable.contains('python') || executable.contains('python3'))) {
       if (script.isNotEmpty) {
         args.add(script);
       }
     }
-    
+
     args.add(path);
-    
+
     final algorithm = settings['algorithm'] as String;
     args.addAll(['--algorithm', algorithm]);
-    
+
     final correction = settings['sequence_correction'] as String;
     args.addAll(['--sequence-correction', correction]);
 
@@ -735,17 +762,17 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     if (eegChans.isNotEmpty) {
       args.addAll(['--eeg', eegChans.join(',')]);
     }
-    
+
     final refChans = settings['ref'] as List<String>;
     if (refChans.isNotEmpty) {
       args.addAll(['--ref', refChans.join(',')]);
     }
-    
+
     final eogChans = settings['eog'] as List<String>;
     if (eogChans.isNotEmpty) {
       args.addAll(['--eog', eogChans.join(',')]);
     }
-    
+
     final emgChans = settings['emg'] as List<String>;
     if (emgChans.isNotEmpty) {
       args.addAll(['--emg', emgChans.join(',')]);
@@ -763,15 +790,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     var isDone = false;
     String? outputJsonPath;
 
-    final receivePort = ReceivePort();
-    receivePort.listen((message) {
-      if (message is String) {
-        logsController.add(message);
-        logLines.add(message);
-      }
-    });
-    final sendPort = receivePort.sendPort;
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -786,7 +804,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Executing python backend scoring process…', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Executing python backend scoring process…',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    const LinearProgressIndicator(),
                     const SizedBox(height: 10),
                     Expanded(
                       child: Container(
@@ -834,22 +857,34 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     Future.microtask(() async {
       _setStatus('Spawning automated sleep scoring backend…');
       try {
-        final task = _AutoScoringTask(
+        void onLine(String line) {
+          logsController.add(line);
+          logLines.add(line);
+        }
+
+        final exitCode = await _backend.runCommandStreamAsync(
           executable: executable,
           arguments: args,
-          sendPort: sendPort,
+          onLine: onLine,
         );
-        final result = await Isolate.run(task.run);
-
         isDone = true;
-        final exitCode = result.$1;
-        outputJsonPath = result.$2;
+        outputJsonPath = _outputPathFromLogs(logLines);
 
-        if (exitCode == 0 && outputJsonPath != null && outputJsonPath!.isNotEmpty) {
-          logsController.add('\nScoring finished successfully! Loading predictions...');
-          logLines.add('\nScoring finished successfully! Loading predictions...');
-          
-          final scoringData = await loadScoringFileDirectly(outputJsonPath!, 'scoringhero', v.epochCount);
+        if (exitCode == 0 &&
+            outputJsonPath != null &&
+            outputJsonPath!.isNotEmpty) {
+          logsController.add(
+            '\nScoring finished successfully! Loading predictions...',
+          );
+          logLines.add(
+            '\nScoring finished successfully! Loading predictions...',
+          );
+
+          final scoringData = await loadScoringFileDirectly(
+            outputJsonPath!,
+            'scoringhero',
+            v.epochCount,
+          );
           setState(() {
             _viewport = v.copyWith(
               stages: scoringData.stages,
@@ -862,7 +897,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           logsController.add('\nScoring failed with exit code $exitCode');
           logLines.add('\nScoring failed with exit code $exitCode');
           _setStatus('Automated sleep scoring failed. Exit code: $exitCode');
-          
+
           navigator.pop();
           if (mounted) {
             showDialog(
@@ -875,7 +910,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                   child: SingleChildScrollView(
                     child: Text(
                       'Auto-scoring process returned exit code $exitCode.\n\nLogs:\n${logLines.join('\n')}',
-                      style: const TextStyle(fontSize: 12, fontFamily: 'Courier'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'Courier',
+                      ),
                     ),
                   ),
                 ),
@@ -921,7 +959,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         }
       } finally {
         logsController.close();
-        receivePort.close();
       }
     });
   }
@@ -947,10 +984,18 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
 
     if (!mounted) return;
 
+    List<String> channelLabels = const [];
+    try {
+      channelLabels = _backend.loadEdf(files.first).channelLabels;
+    } on Object catch (error) {
+      _setStatus('Could not inspect batch channels: $error');
+    }
+
     showDialog(
       context: context,
       builder: (_) => BatchAutoScoringDialog(
         files: files,
+        channelLabels: channelLabels,
         onRun: (settings) async {
           _executeBatchAutoScoring(files, settings);
         },
@@ -958,7 +1003,175 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     );
   }
 
-  void _executeBatchAutoScoring(List<String> files, Map<String, dynamic> settings) {
+  Future<void> _runAnalyseNidraCurrent() async {
+    final path = _activePath;
+    final eeg = _loadedEeg;
+    final viewport = _viewport;
+    if (path == null || eeg == null || viewport == null) {
+      _setStatus('Load an EDF first');
+      return;
+    }
+    if (!path.toLowerCase().endsWith('.edf')) {
+      _setStatus('analyseNidra currently requires an EDF recording');
+      return;
+    }
+    await autoSaveScoring(
+      path,
+      viewport.stages,
+      viewport.epochSeconds,
+      stagesUncertain: viewport.stagesUncertain,
+      stagesConfidence: viewport.stagesConfidence,
+    );
+    final scoringPath = _sidecarPath(path, '.json');
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AnalyseNidraDialog(
+        channelLabels: eeg.channelLabels,
+        batchCount: 1,
+        onRun: (channels, references) {
+          _runAnalyseNidraJobs(
+            [
+              _AnalyseNidraJob(
+                edfPath: path,
+                scoringPath: scoringPath,
+                mappedScoringPath: scoringPath,
+              ),
+            ],
+            channels,
+            references,
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _runAnalyseNidraBatch() async {
+    final result = await FilePicker.pickFiles(
+      dialogTitle: 'Select sleep scoring files for batch analyseNidra',
+      type: FileType.custom,
+      allowedExtensions: ['json', 'txt', 'csv', 'vis', 'annot', 'edf'],
+      allowMultiple: true,
+    );
+    final scoringPaths = result?.files
+        .map((file) => file.path)
+        .whereType<String>()
+        .toList();
+    if (scoringPaths == null || scoringPaths.isEmpty) {
+      _setStatus('Batch analysis cancelled');
+      return;
+    }
+
+    final jobs = <_AnalyseNidraJob>[];
+    final failures = <String>[];
+    for (final scoringPath in scoringPaths) {
+      final edfPath = _detectMatchingEdf(scoringPath);
+      if (edfPath == null) {
+        failures.add('${_basename(scoringPath)}: matching EDF not found');
+        continue;
+      }
+      try {
+        final loaded = _backend.loadEdf(edfPath);
+        final epochCount = math.max(1, (loaded.durationSeconds / 30).ceil());
+        final detection = await detectScoringFormat(scoringPath);
+        final scoring = await loadScoringFileDirectly(
+          scoringPath,
+          detection.parserType,
+          epochCount,
+        );
+        final mappedPath = _sidecarPath(scoringPath, '.analyse-mapped.json');
+        await writeMappedScoringJson(
+          mappedPath,
+          scoring.stages,
+          sourcePath: edfPath,
+          stagesUncertain: scoring.stagesUncertain,
+          stagesConfidence: scoring.stagesConfidence,
+        );
+        jobs.add(
+          _AnalyseNidraJob(
+            edfPath: edfPath,
+            scoringPath: scoringPath,
+            mappedScoringPath: mappedPath,
+          ),
+        );
+      } on Object catch (error) {
+        failures.add('${_basename(scoringPath)}: $error');
+      }
+    }
+    if (jobs.isEmpty) {
+      _setStatus('No scoring files could be paired with EDF data');
+      if (mounted) {
+        _showTextDialog('Batch analysis setup failed', failures.join('\n'));
+      }
+      return;
+    }
+    final labels = _backend.loadEdf(jobs.first.edfPath).channelLabels;
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AnalyseNidraDialog(
+        channelLabels: labels,
+        batchCount: jobs.length,
+        onRun: (channels, references) {
+          if (failures.isNotEmpty) {
+            _setStatus(
+              '${jobs.length} analysis jobs ready; ${failures.length} skipped',
+            );
+          }
+          _runAnalyseNidraJobs(jobs, channels, references);
+        },
+      ),
+    );
+  }
+
+  void _runAnalyseNidraJobs(
+    List<_AnalyseNidraJob> jobs,
+    List<String> channels,
+    List<String> references,
+  ) {
+    final executable = detectAnalyseNidraExecutable();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CommandBatchProgressDialog(
+        title: 'analyseNidra',
+        jobs: [
+          for (final job in jobs)
+            _CommandJob(
+              label: _basename(job.edfPath),
+              executable: executable,
+              arguments: _analyseNidraArguments(job, channels, references),
+            ),
+        ],
+        onFinished: (failed) => _setStatus(
+          failed == 0
+              ? 'analyseNidra completed for ${jobs.length} recording(s)'
+              : 'analyseNidra finished: ${jobs.length - failed} completed, $failed failed',
+        ),
+      ),
+    );
+  }
+
+  void _showTextDialog(String title, String text) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: SelectableText(text),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeBatchAutoScoring(
+    List<String> files,
+    Map<String, dynamic> settings,
+  ) {
     final algorithm = settings['algorithm'] as String;
     final correction = settings['sequence_correction'] as String;
     final alpha = (settings['sleepgpt_alpha'] as num?)?.toDouble() ?? 0.1;
@@ -974,12 +1187,19 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           correction: correction,
           sleepgptAlpha: alpha,
           sleepgptNgram: ngram,
+          eegChannels: List<String>.from(settings['eeg'] as List? ?? const []),
+          refChannels: List<String>.from(settings['ref'] as List? ?? const []),
+          eogChannels: List<String>.from(settings['eog'] as List? ?? const []),
+          emgChannels: List<String>.from(settings['emg'] as List? ?? const []),
           onFinished: () {
             _setStatus('Batch auto-scoring finished');
             // If the active file was one of the scored files, reload it
             final active = _activePath;
             if (active != null && files.contains(active)) {
-              _openRecordingPath(active, kind: active.split('.').last.toLowerCase());
+              _openRecordingPath(
+                active,
+                kind: active.split('.').last.toLowerCase(),
+              );
             }
           },
         );
@@ -1208,7 +1428,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             }
 
             final markerLabel = settings['marker'] as String;
-            final digit = markerLabel == 'Artifact' ? 0 : int.parse(markerLabel.substring(1));
+            final digit = markerLabel == 'Artifact'
+                ? 0
+                : int.parse(markerLabel.substring(1));
             final key = digit == 0 ? 'A' : 'F$digit';
             final label = digit == 0 ? 'Artifact' : 'Event $digit';
 
@@ -1233,9 +1455,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                   scoredEvents: merged,
                   clearEventSelections: true,
                 );
-                _status = 'MT-KCD completed: detected ${finalEvents.length} K-complex(s)';
+                _status =
+                    'MT-KCD completed: detected ${finalEvents.length} K-complex(s)';
               });
-              
+
               autoSaveScoring(
                 _activePath,
                 _viewport!.stages,
@@ -1251,7 +1474,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('MT-KCD Error'),
-                  content: Text('An error occurred during K-complex detection:\n\n$e'),
+                  content: Text(
+                    'An error occurred during K-complex detection:\n\n$e',
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
@@ -1338,7 +1563,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             }
 
             final markerLabel = settings['marker'] as String;
-            final digit = markerLabel == 'Artifact' ? 0 : int.parse(markerLabel.substring(1));
+            final digit = markerLabel == 'Artifact'
+                ? 0
+                : int.parse(markerLabel.substring(1));
             final key = digit == 0 ? 'A' : 'F$digit';
             final label = digit == 0 ? 'Artifact' : 'Event $digit';
 
@@ -1363,9 +1590,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                   scoredEvents: merged,
                   clearEventSelections: true,
                 );
-                _status = 'MT-Spindle completed: detected ${finalEvents.length} spindle(s)';
+                _status =
+                    'MT-Spindle completed: detected ${finalEvents.length} spindle(s)';
               });
-              
+
               autoSaveScoring(
                 _activePath,
                 _viewport!.stages,
@@ -1381,7 +1609,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('MT-Spindle Error'),
-                  content: Text('An error occurred during spindle detection:\n\n$e'),
+                  content: Text(
+                    'An error occurred during spindle detection:\n\n$e',
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
@@ -1617,7 +1847,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               );
         final eegForBinding = _loadedEeg;
         if (eegForBinding != null) {
-          newCfg.bindLoadedChannels(eegForBinding.channelLabels);
+          newCfg.bindLoadedChannels(
+            eegForBinding.channelLabels,
+            sampleRateHz: eegForBinding.sampleRateHz,
+          );
         }
 
         setState(() {
@@ -1808,7 +2041,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     }
   }
 
-
   // ─── Platform menus ───────────────────────────────────────────────────────
 
   List<PlatformMenuItem> _platformMenus() {
@@ -1940,6 +2172,16 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       PlatformMenu(
         label: 'Utilities',
         menus: [
+          if (!buildLite) ...[
+            PlatformMenuItem(
+              label: 'analyseNidra — current recording…',
+              onSelected: _runAnalyseNidraCurrent,
+            ),
+            PlatformMenuItem(
+              label: 'analyseNidra — batch from scoring files…',
+              onSelected: _runAnalyseNidraBatch,
+            ),
+          ],
           PlatformMenuItem(
             label: 'K-Complex Detection (MT-KCD)  [Ctrl+K]',
             onSelected: _runKComplexDetection,
@@ -2166,7 +2408,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               const Divider(height: 1),
               MenuItemButton(
                 onPressed: _eraseEventsInSelections,
-                child: const Text('Erase events in drawn selection [Backspace]'),
+                child: const Text(
+                  'Erase events in drawn selection [Backspace]',
+                ),
               ),
               MenuItemButton(
                 onPressed: _deleteAllEvents,
@@ -2177,13 +2421,26 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           ),
           SubmenuButton(
             menuChildren: [
+              if (!buildLite) ...[
+                MenuItemButton(
+                  onPressed: _runAnalyseNidraCurrent,
+                  child: const Text('analyseNidra — current recording…'),
+                ),
+                MenuItemButton(
+                  onPressed: _runAnalyseNidraBatch,
+                  child: const Text('analyseNidra — batch from scoring files…'),
+                ),
+                const Divider(height: 1),
+              ],
               MenuItemButton(
                 onPressed: _runKComplexDetection,
                 child: const Text('K-Complex Detection (MT-KCD) [Ctrl+K]'),
               ),
               MenuItemButton(
                 onPressed: _runSpindleDetection,
-                child: const Text('Spindle Detection (MT-Spindle) [Ctrl+Shift+S]'),
+                child: const Text(
+                  'Spindle Detection (MT-Spindle) [Ctrl+Shift+S]',
+                ),
               ),
               MenuItemButton(
                 onPressed: _zoomOnSelectedEeg,
@@ -2196,7 +2453,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             menuChildren: [
               MenuItemButton(
                 onPressed: _loadComparisonScoring,
-                child: const Text('Import comparison scoring… (auto-detect format)'),
+                child: const Text(
+                  'Import comparison scoring… (auto-detect format)',
+                ),
               ),
               MenuItemButton(
                 onPressed: _removeComparisonScoring,
@@ -2283,7 +2542,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     );
   }
 
-
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -2337,8 +2595,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               backgroundColor: const Color(0xFFEDEDED),
               body: Column(
                 children: [
-                  if (!Platform.isMacOS)
-                    _buildInAppMenuBar(),
+                  if (!Platform.isMacOS) _buildInAppMenuBar(),
                   _Toolbar(
                     viewport: viewport,
                     onJump: _jumpToEpoch,
@@ -2497,12 +2754,16 @@ class _ToolbarState extends State<_Toolbar> {
                 child: Shortcuts(
                   shortcuts: const <ShortcutActivator, Intent>{
                     SingleActivator(LogicalKeyboardKey.keyW): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.digit1): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.digit2): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.digit3): DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.digit1):
+                        DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.digit2):
+                        DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.digit3):
+                        DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.keyR): DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.keyI): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.delete): DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.delete):
+                        DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.keyA): DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.f1): DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.f2): DoNothingIntent(),
@@ -2516,14 +2777,24 @@ class _ToolbarState extends State<_Toolbar> {
                     SingleActivator(LogicalKeyboardKey.f10): DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.f11): DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.f12): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.backspace): DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.backspace):
+                        DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.keyZ): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.keyK, control: true): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.keyS, control: true, shift: true): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.keyC, control: true): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.keyF, control: true): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.arrowRight): DoNothingIntent(),
-                    SingleActivator(LogicalKeyboardKey.arrowLeft): DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                        DoNothingIntent(),
+                    SingleActivator(
+                      LogicalKeyboardKey.keyS,
+                      control: true,
+                      shift: true,
+                    ): DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.keyC, control: true):
+                        DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.keyF, control: true):
+                        DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.arrowRight):
+                        DoNothingIntent(),
+                    SingleActivator(LogicalKeyboardKey.arrowLeft):
+                        DoNothingIntent(),
                     SingleActivator(LogicalKeyboardKey.keyQ): DoNothingIntent(),
                   },
                   child: TextField(
@@ -2546,7 +2817,10 @@ class _ToolbarState extends State<_Toolbar> {
                     onChanged: (text) {
                       final val = int.tryParse(text);
                       if (val != null && widget.viewport != null) {
-                        final clamped = val.clamp(1, widget.viewport!.epochCount);
+                        final clamped = val.clamp(
+                          1,
+                          widget.viewport!.epochCount,
+                        );
                         widget.onJump(clamped, false);
                       }
                     },
@@ -2768,10 +3042,10 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
     final zoomOption = widget.viewport.hypnogramZoom;
     final epochCount = widget.viewport.epochCount;
     final currentEpoch = widget.viewport.currentEpoch;
-    
+
     int startEpoch = 0;
     int endEpoch = epochCount;
-    
+
     if (zoomOption != 'Full Night') {
       int visibleEpochs = 100;
       if (zoomOption.contains('200')) {
@@ -2779,7 +3053,7 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
       } else if (zoomOption.contains('400')) {
         visibleEpochs = 400;
       }
-      
+
       if (epochCount > visibleEpochs) {
         startEpoch = currentEpoch - (visibleEpochs ~/ 2);
         if (startEpoch < 0) {
@@ -2919,7 +3193,9 @@ class _StatusBar extends StatelessWidget {
     if (vp != null) {
       final currentIdx = vp.currentEpoch;
       final currentStage = vp.currentStage;
-      final isUncertain = currentIdx < vp.stagesUncertain.length && vp.stagesUncertain[currentIdx];
+      final isUncertain =
+          currentIdx < vp.stagesUncertain.length &&
+          vp.stagesUncertain[currentIdx];
       final uncertainStr = isUncertain ? ' (Uncertain)' : '';
 
       String comparisonStr = '';
@@ -2928,7 +3204,9 @@ class _StatusBar extends StatelessWidget {
       if (cmpStages != null && currentIdx < cmpStages.length) {
         final cmpStage = cmpStages[currentIdx];
         comparisonStr = '  |  Comparison: ${cmpStage.label}';
-        if (currentStage != SleepStage.unknown && cmpStage != SleepStage.unknown && currentStage != cmpStage) {
+        if (currentStage != SleepStage.unknown &&
+            cmpStage != SleepStage.unknown &&
+            currentStage != cmpStage) {
           isInconsistent = true;
         }
       }
@@ -2938,7 +3216,8 @@ class _StatusBar extends StatelessWidget {
         totalSelectionLength += sel.durationSeconds;
       }
       if (vp.selectionStartSec != null && vp.selectionEndSec != null) {
-        totalSelectionLength += (vp.selectionEndSec! - vp.selectionStartSec!).abs();
+        totalSelectionLength += (vp.selectionEndSec! - vp.selectionStartSec!)
+            .abs();
       }
       final selectionStr = totalSelectionLength > 0
           ? '  |  Total Length: ${totalSelectionLength.toStringAsFixed(2)} s'
@@ -2949,7 +3228,8 @@ class _StatusBar extends StatelessWidget {
       if (currentIdx < vp.stagesConfidence.length) {
         final conf = vp.stagesConfidence[currentIdx];
         if (conf != null) {
-          confidenceStr = '  |  Confidence: ${(conf * 100).toStringAsFixed(1)}%';
+          confidenceStr =
+              '  |  Confidence: ${(conf * 100).toStringAsFixed(1)}%';
         }
       }
 
@@ -2960,10 +3240,14 @@ class _StatusBar extends StatelessWidget {
             if (isInconsistent)
               const TextSpan(
                 text: '[INCONSISTENT]  ',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             TextSpan(
-              text: 'Epoch ${currentIdx + 1}/${vp.epochCount}  |  Current: ${currentStage.label}$uncertainStr$comparisonStr$confidenceStr$selectionStr  |  ${vp.sampleRateHz.toStringAsFixed(0)} Hz',
+              text:
+                  'Epoch ${currentIdx + 1}/${vp.epochCount}  |  Current: ${currentStage.label}$uncertainStr$comparisonStr$confidenceStr$selectionStr  |  ${vp.sampleRateHz.toStringAsFixed(0)} Hz',
             ),
           ],
         ),
@@ -3024,7 +3308,10 @@ class _Panel extends StatelessWidget {
             border: Border.all(color: const Color(0xFFD0D0D0)),
           ),
           child: ClipRect(
-            child: CustomPaint(painter: painter, child: const SizedBox.expand()),
+            child: CustomPaint(
+              painter: painter,
+              child: const SizedBox.expand(),
+            ),
           ),
         ),
       ),
@@ -3382,14 +3669,15 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.arrowLeft):
       const _PreviousEpochIntent(),
   // Confidence uncertainty toggle
-  const SingleActivator(LogicalKeyboardKey.keyQ): const _ToggleUncertaintyIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyQ):
+      const _ToggleUncertaintyIntent(),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 String detectBackendExecutable() {
   final currentDir = Directory.current.path;
-  
+
   // 1. Packaged location checks
   final execDir = File(Platform.resolvedExecutable).parent.path;
   String packagedBin = '';
@@ -3403,11 +3691,11 @@ String detectBackendExecutable() {
   } else {
     packagedBin = '$execDir/autoscore-backend';
   }
-  
+
   if (File(packagedBin).existsSync()) {
     return packagedBin;
   }
-  
+
   // 2. Dev environment check (virtual environment python stager + script)
   final devPaths = Platform.isWindows
       ? [
@@ -3428,7 +3716,7 @@ String detectBackendExecutable() {
       return path;
     }
   }
-  
+
   // 3. Fallback to system python3 or autoscore-backend on PATH
   return Platform.isWindows ? 'python.exe' : 'python3';
 }
@@ -3446,6 +3734,226 @@ String detectBackendScript() {
     }
   }
   return '';
+}
+
+String detectAnalyseNidraExecutable() {
+  final executableDir = File(Platform.resolvedExecutable).parent.path;
+  final candidates = [
+    if (Platform.isWindows) '$executableDir\\analyse-nidra.exe',
+    if (!Platform.isWindows) '$executableDir/analyse-nidra',
+    if (Platform.isMacOS) '$executableDir/../Resources/analyse-nidra',
+    '${Directory.current.path}/../analyseNidra/target/release/analyse-nidra',
+    '${Directory.current.path}/analyseNidra/target/release/analyse-nidra',
+    '/Users/arunsasidharan/Code/ActiveProjects/analyseNidra/target/release/analyse-nidra',
+  ];
+  for (final candidate in candidates) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return Platform.isWindows ? 'analyse-nidra.exe' : 'analyse-nidra';
+}
+
+String _sidecarPath(String path, String suffix) {
+  final dot = path.lastIndexOf('.');
+  final base = dot >= 0 ? path.substring(0, dot) : path;
+  return '$base$suffix';
+}
+
+String? _detectMatchingEdf(String scoringPath) {
+  final scoringFile = File(scoringPath);
+  final directory = scoringFile.parent;
+  if (!directory.existsSync()) return null;
+  final scoringStem = _basename(_sidecarPath(scoringPath, ''));
+  final normalizedStem = scoringStem.replaceFirst(
+    RegExp(
+      r'_(yasa|gssc|tinysleepnet|seqsleepnet|sleeptransformer|usleep|luna|dreamento|sleepeegpy)(?:_sleepgpt)?$',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  final candidates = directory
+      .listSync()
+      .whereType<File>()
+      .where(
+        (file) =>
+            file.path != scoringPath &&
+            file.path.toLowerCase().endsWith('.edf'),
+      )
+      .toList();
+  File? best;
+  var bestLength = -1;
+  for (final candidate in candidates) {
+    final stem = _basename(_sidecarPath(candidate.path, ''));
+    if (stem == normalizedStem ||
+        scoringStem.startsWith(stem) ||
+        stem.startsWith(normalizedStem)) {
+      if (stem.length > bestLength) {
+        best = candidate;
+        bestLength = stem.length;
+      }
+    }
+  }
+  return best?.path;
+}
+
+List<String> _analyseNidraArguments(
+  _AnalyseNidraJob job,
+  List<String> channels,
+  List<String> references,
+) {
+  final base = _sidecarPath(job.edfPath, '');
+  return [
+    job.edfPath,
+    job.mappedScoringPath,
+    '${base}_analyse_core.json',
+    '${base}_analyse_pac.json',
+    '${base}_analyse_slow_waves.json',
+    '${base}_analyse_spindles.json',
+    '${base}_analyse_regional.csv',
+    '--channels',
+    channels.join(','),
+    '--references',
+    references.join(','),
+  ];
+}
+
+class _AnalyseNidraJob {
+  const _AnalyseNidraJob({
+    required this.edfPath,
+    required this.scoringPath,
+    required this.mappedScoringPath,
+  });
+
+  final String edfPath;
+  final String scoringPath;
+  final String mappedScoringPath;
+}
+
+class _CommandJob {
+  const _CommandJob({
+    required this.label,
+    required this.executable,
+    required this.arguments,
+  });
+
+  final String label;
+  final String executable;
+  final List<String> arguments;
+}
+
+class _CommandBatchProgressDialog extends StatefulWidget {
+  const _CommandBatchProgressDialog({
+    super.key,
+    required this.title,
+    required this.jobs,
+    required this.onFinished,
+  });
+
+  final String title;
+  final List<_CommandJob> jobs;
+  final void Function(int failed) onFinished;
+
+  @override
+  State<_CommandBatchProgressDialog> createState() =>
+      _CommandBatchProgressDialogState();
+}
+
+class _CommandBatchProgressDialogState
+    extends State<_CommandBatchProgressDialog> {
+  final List<String> _logs = [];
+  int _completed = 0;
+  int _failed = 0;
+  bool _finished = false;
+  String _current = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_run());
+  }
+
+  Future<void> _run() async {
+    final backend = EegBackend();
+    for (final job in widget.jobs) {
+      if (!mounted) return;
+      setState(() {
+        _current = job.label;
+        _logs.add('--- ${job.label} ---');
+      });
+      final exitCode = await backend.runCommandStreamAsync(
+        executable: job.executable,
+        arguments: job.arguments,
+        onLine: (line) {
+          if (mounted) setState(() => _logs.add(line));
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _completed++;
+        if (exitCode != 0) _failed++;
+        _logs.add(
+          exitCode == 0
+              ? 'Completed ${job.label}'
+              : 'Failed ${job.label} with exit code $exitCode',
+        );
+      });
+    }
+    if (mounted) setState(() => _finished = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = widget.jobs.isEmpty
+        ? 0.0
+        : _completed / widget.jobs.length;
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 760,
+        height: 500,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _finished
+                  ? 'Finished ${widget.jobs.length} job(s)'
+                  : 'Processing $_current (${_completed + 1}/${widget.jobs.length})',
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: _finished ? 1 : progress),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Container(
+                color: Colors.black87,
+                padding: const EdgeInsets.all(8),
+                child: ListView.builder(
+                  itemCount: _logs.length,
+                  itemBuilder: (_, index) => Text(
+                    _logs[index],
+                    style: const TextStyle(
+                      color: Colors.lightGreenAccent,
+                      fontFamily: 'Courier',
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _finished
+              ? () {
+                  Navigator.of(context).pop();
+                  widget.onFinished(_failed);
+                }
+              : null,
+          child: Text(_finished ? 'Close' : 'Processing…'),
+        ),
+      ],
+    );
+  }
 }
 
 String _basename(String path) => path.split(Platform.pathSeparator).last;
@@ -3680,7 +4188,11 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.assessment, color: Colors.indigo, size: 28),
+                      const Icon(
+                        Icons.assessment,
+                        color: Colors.indigo,
+                        size: 28,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         'Scoring Comparison Report Card',
@@ -3758,7 +4270,9 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               'Current Scorer (Rows) vs. Comparison (Columns)',
-                              style: textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                              style: textTheme.bodySmall?.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             _buildConfusionMatrixTable(stages),
@@ -3791,7 +4305,9 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               'Precision, Recall (Sensitivity), and F1-Score',
-                              style: textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                              style: textTheme.bodySmall?.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             _buildStageMetricsTable(stages),
@@ -3810,8 +4326,13 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Close'),
@@ -3858,12 +4379,20 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -3882,10 +4411,18 @@ class _ComparisonReportCardDialog extends StatelessWidget {
   }
 
   Widget _buildConfusionMatrixTable(List<SleepStage> stages) {
-    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700);
+    final headerStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      color: Colors.blueGrey.shade700,
+    );
 
     return Table(
-      border: TableBorder.all(color: Colors.grey.shade200, width: 1, borderRadius: BorderRadius.circular(4)),
+      border: TableBorder.all(
+        color: Colors.grey.shade200,
+        width: 1,
+        borderRadius: BorderRadius.circular(4),
+      ),
       columnWidths: const {
         0: FlexColumnWidth(1.2),
         1: FlexColumnWidth(1),
@@ -3899,12 +4436,20 @@ class _ComparisonReportCardDialog extends StatelessWidget {
         TableRow(
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
-            const TableCell(child: SizedBox(height: 32, child: Center(child: Text('Cur \\ Cmp', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))))),
+            const TableCell(
+              child: SizedBox(
+                height: 32,
+                child: Center(
+                  child: Text(
+                    'Cur \\ Cmp',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
             for (final s in stages)
               TableCell(
-                child: Center(
-                  child: Text(s.shortLabel, style: headerStyle),
-                ),
+                child: Center(child: Text(s.shortLabel, style: headerStyle)),
               ),
           ],
         ),
@@ -3919,8 +4464,7 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                   child: Text(sCurr.label, style: headerStyle),
                 ),
               ),
-              for (final sComp in stages)
-                _buildConfusionCell(sCurr, sComp),
+              for (final sComp in stages) _buildConfusionCell(sCurr, sComp),
             ],
           ),
       ],
@@ -3967,7 +4511,11 @@ class _ComparisonReportCardDialog extends StatelessWidget {
   }
 
   Widget _buildStageMetricsTable(List<SleepStage> stages) {
-    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700);
+    final headerStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      color: Colors.blueGrey.shade700,
+    );
 
     return Table(
       columnWidths: const {
@@ -3980,13 +4528,29 @@ class _ComparisonReportCardDialog extends StatelessWidget {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1.5)),
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300, width: 1.5),
+            ),
           ),
           children: [
-            const TableCell(child: Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Stage', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)))),
-            TableCell(child: Center(child: Text('Precision', style: headerStyle))),
-            TableCell(child: Center(child: Text('Recall', style: headerStyle))),
-            TableCell(child: Center(child: Text('F1-Score', style: headerStyle))),
+            const TableCell(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Stage',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ),
+            TableCell(
+              child: Center(child: Text('Precision', style: headerStyle)),
+            ),
+            TableCell(
+              child: Center(child: Text('Recall', style: headerStyle)),
+            ),
+            TableCell(
+              child: Center(child: Text('F1-Score', style: headerStyle)),
+            ),
           ],
         ),
         for (final s in stages)
@@ -4009,7 +4573,13 @@ class _ComparisonReportCardDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(s.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(
+                        s.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -4093,7 +4663,9 @@ class _AutoScoringTask {
       onLine: (line) {
         sendPort.send(line);
         if (line.contains('Saved ScoringHero JSON:')) {
-          final match = RegExp(r'Saved ScoringHero JSON:\s*(.*)').firstMatch(line);
+          final match = RegExp(
+            r'Saved ScoringHero JSON:\s*(.*)',
+          ).firstMatch(line);
           if (match != null) {
             outPath = match.group(1)!.trim();
           }
@@ -4104,6 +4676,14 @@ class _AutoScoringTask {
   }
 }
 
+String _outputPathFromLogs(List<String> lines) {
+  for (final line in lines.reversed) {
+    final match = RegExp(r'Saved ScoringHero JSON:\s*(.*)').firstMatch(line);
+    if (match != null) return match.group(1)!.trim();
+  }
+  return '';
+}
+
 class BatchProgressDialog extends StatefulWidget {
   const BatchProgressDialog({
     super.key,
@@ -4112,6 +4692,10 @@ class BatchProgressDialog extends StatefulWidget {
     required this.correction,
     required this.sleepgptAlpha,
     required this.sleepgptNgram,
+    required this.eegChannels,
+    required this.refChannels,
+    required this.eogChannels,
+    required this.emgChannels,
     required this.onFinished,
   });
 
@@ -4120,6 +4704,10 @@ class BatchProgressDialog extends StatefulWidget {
   final String correction;
   final double sleepgptAlpha;
   final int sleepgptNgram;
+  final List<String> eegChannels;
+  final List<String> refChannels;
+  final List<String> eogChannels;
+  final List<String> emgChannels;
   final void Function() onFinished;
 
   @override
@@ -4169,7 +4757,10 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
       _logsStream.add('--- Starting auto-scoring for ${_basename(file)} ---');
 
       final args = <String>[];
-      if (executable.endsWith('.py') || script.isNotEmpty && (executable.contains('python') || executable.contains('python3'))) {
+      if (executable.endsWith('.py') ||
+          script.isNotEmpty &&
+              (executable.contains('python') ||
+                  executable.contains('python3'))) {
         if (script.isNotEmpty) {
           args.add(script);
         }
@@ -4177,43 +4768,51 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
       args.add(file);
       args.addAll(['--algorithm', widget.algorithm]);
       args.addAll(['--sequence-correction', widget.correction]);
+      if (widget.eegChannels.isNotEmpty) {
+        args.addAll(['--eeg', widget.eegChannels.join(',')]);
+      }
+      if (widget.refChannels.isNotEmpty) {
+        args.addAll(['--ref', widget.refChannels.join(',')]);
+      }
+      if (widget.eogChannels.isNotEmpty) {
+        args.addAll(['--eog', widget.eogChannels.join(',')]);
+      }
+      if (widget.emgChannels.isNotEmpty) {
+        args.addAll(['--emg', widget.emgChannels.join(',')]);
+      }
 
       if (widget.correction == 'sleepgpt') {
         args.addAll(['--sleepgpt-alpha', widget.sleepgptAlpha.toString()]);
         args.addAll(['--sleepgpt-ngram', widget.sleepgptNgram.toString()]);
       }
 
-      final receivePort = ReceivePort();
-      final sendPort = receivePort.sendPort;
-
-      final streamSubscription = receivePort.listen((message) {
-        if (message is String) {
-          if (mounted) {
-            setState(() {
-              _logLines.add(message);
-            });
-            _logsStream.add(message);
-          }
-        }
-      });
-
       try {
-        final task = _AutoScoringTask(
+        void onLine(String line) {
+          if (!mounted) return;
+          setState(() {
+            _logLines.add(line);
+          });
+          _logsStream.add(line);
+        }
+
+        final exitCode = await EegBackend().runCommandStreamAsync(
           executable: executable,
           arguments: args,
-          sendPort: sendPort,
+          onLine: onLine,
         );
-        final result = await Isolate.run(task.run);
-        final exitCode = result.$1;
-        final outputJsonPath = result.$2;
+        final outputJsonPath = _outputPathFromLogs(_logLines);
 
         if (exitCode == 0 && outputJsonPath.isNotEmpty) {
           if (mounted) {
             setState(() {
               _statuses[file] = 'Completed';
-              _logLines.add('\nScoring finished successfully! Output saved to: $outputJsonPath');
+              _logLines.add(
+                '\nScoring finished successfully! Output saved to: $outputJsonPath',
+              );
             });
-            _logsStream.add('\nScoring finished successfully! Output saved to: $outputJsonPath');
+            _logsStream.add(
+              '\nScoring finished successfully! Output saved to: $outputJsonPath',
+            );
           }
         } else {
           if (mounted) {
@@ -4232,9 +4831,6 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
           });
           _logsStream.add('\nException occurred: $e');
         }
-      } finally {
-        await streamSubscription.cancel();
-        receivePort.close();
       }
     }
 
@@ -4256,7 +4852,11 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
         children: [
           const Icon(Icons.auto_awesome_motion, color: Colors.purple),
           const SizedBox(width: 8),
-          Text(_isFinished ? 'Batch Scoring Finished' : 'Running Batch Auto-Scoring…'),
+          Text(
+            _isFinished
+                ? 'Batch Scoring Finished'
+                : 'Running Batch Auto-Scoring…',
+          ),
         ],
       ),
       content: SizedBox(
@@ -4270,7 +4870,9 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
               flex: 2,
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border(right: BorderSide(color: Colors.grey.shade300)),
+                  border: Border(
+                    right: BorderSide(color: Colors.grey.shade300),
+                  ),
                 ),
                 padding: const EdgeInsets.only(right: 12),
                 child: Column(
@@ -4278,7 +4880,10 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
                   children: [
                     Text(
                       'Files Queue (${_currentIndex + 1}/${widget.files.length})',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
@@ -4304,27 +4909,36 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
                           final isCurrent = file == _currentFile;
                           return Container(
                             color: isCurrent ? Colors.purple.shade50 : null,
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 4,
+                            ),
                             child: Row(
                               children: [
                                 Icon(icon, size: 16, color: color),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _basename(file),
                                         style: TextStyle(
                                           fontSize: 12,
-                                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                          fontWeight: isCurrent
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       Text(
                                         status,
-                                        style: TextStyle(fontSize: 10, color: color),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: color,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -4346,6 +4960,14 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  LinearProgressIndicator(
+                    value: widget.files.isEmpty
+                        ? 0
+                        : _isFinished
+                        ? 1
+                        : _currentIndex / widget.files.length,
+                  ),
+                  const SizedBox(height: 8),
                   const Text(
                     'Active Logs',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -4395,7 +5017,10 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
               });
               Navigator.of(context).pop();
             },
-            child: const Text('Cancel Batch', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Cancel Batch',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         TextButton(
           onPressed: _isFinished
