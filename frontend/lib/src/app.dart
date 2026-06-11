@@ -67,6 +67,20 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
   // SWA slider value (0–100). 100 = no smoothing, 0 = maximum smoothing.
   int _swaSlider = 100;
 
+  // Batch Staging State
+  final List<String> _batchStagingFiles = [];
+  String _batchStagingAlgorithm = 'yasa';
+  String _batchStagingCorrection = 'none';
+  final List<String> _batchStagingEeg = [];
+  final List<String> _batchStagingRef = [];
+  final List<String> _batchStagingEog = [];
+  final List<String> _batchStagingEmg = [];
+
+  // Batch AnalyseNidra State
+  final List<Map<String, String>> _batchAnalysePairs = [];
+  final TextEditingController _batchAnalyseEegController = TextEditingController(text: 'AF7,AF8');
+  final TextEditingController _batchAnalyseRefController = TextEditingController(text: 'PPG');
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
@@ -93,18 +107,28 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
 
   Future<void> _openRecording({required String kind}) async {
     _setStatus(
-      kind == 'mat' ? 'Opening MAT file picker…' : 'Opening EDF file picker…',
+      kind == 'mat'
+          ? 'Opening MAT file picker…'
+          : (kind == 'orbit'
+              ? 'Opening Orbit file picker…'
+              : 'Opening EDF file picker…'),
     );
     final result = await FilePicker.pickFiles(
       dialogTitle: kind == 'mat'
           ? 'Load EEGLAB structure (.mat)'
           : (kind == 'r09'
-                ? 'Load Zurich file (.r09)'
-                : 'Load EDF file (.edf)'),
+              ? 'Load Zurich file (.r09)'
+              : (kind == 'orbit'
+                  ? 'Load Orbit file (.orb, .signal)'
+                  : 'Load EDF/Orbit file (.edf, .orb, .signal)')),
       type: FileType.custom,
       allowedExtensions: kind == 'mat'
           ? ['mat']
-          : (kind == 'r09' ? ['r09'] : ['edf']),
+          : (kind == 'r09'
+              ? ['r09']
+              : (kind == 'orbit'
+                  ? ['orb', 'signal']
+                  : ['edf', 'orb', 'signal'])),
     );
     final path = result?.files.single.path;
     if (path == null) {
@@ -123,7 +147,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       final autoCfg = await tryLoadAutoConfig(path);
 
       final LoadedEeg rawEeg;
-      if (kind == 'edf') {
+      if (kind == 'edf' || kind == 'orbit') {
         rawEeg = _backend.loadEdf(path);
       } else if (kind == 'edfvolt') {
         rawEeg = _backend.loadEdf(path, scaleVoltsToMicrovolts: true);
@@ -478,6 +502,29 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     _setStatus('No more disagreement epochs found');
   }
 
+  void _updateFlexValues(int spectrogramFlex, int hypnogramFlex, int periodogramFlex) async {
+    setState(() {
+      _config.spectrogramFlex = spectrogramFlex;
+      _config.hypnogramFlex = hypnogramFlex;
+      _config.periodogramFlex = periodogramFlex;
+    });
+
+    final v = _viewport;
+    if (v != null) {
+      setState(() {
+        _viewport = v.copyWith(
+          spectrogramFlex: spectrogramFlex,
+          hypnogramFlex: hypnogramFlex,
+          periodogramFlex: periodogramFlex,
+        );
+      });
+    }
+
+    if (_activePath != null) {
+      await saveAutoConfig(_activePath!, _config);
+    }
+  }
+
   // ─── Selection ────────────────────────────────────────────────────────────
 
   Future<void> _updateSelection(
@@ -791,6 +838,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     final logLines = <String>[];
     var isDone = false;
     String? outputJsonPath;
+    StateSetter? setStateDialogRef;
 
     showDialog(
       context: context,
@@ -798,6 +846,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
+            setStateDialogRef = setStateDialog;
             return AlertDialog(
               title: const Text('Auto-Scoring Progress'),
               content: SizedBox(
@@ -862,6 +911,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         void onLine(String line) {
           logsController.add(line);
           logLines.add(line);
+          setStateDialogRef?.call(() {});
         }
 
         final exitCode = await _backend.runCommandStreamAsync(
@@ -870,6 +920,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           onLine: onLine,
         );
         isDone = true;
+        setStateDialogRef?.call(() {});
         outputJsonPath = _outputPathFromLogs(logLines);
 
         if (exitCode == 0 &&
@@ -2070,6 +2121,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             onSelected: () => _openRecording(kind: 'edfvolt'),
           ),
           PlatformMenuItem(
+            label: 'Load Orbit file (.orb / .signal)',
+            onSelected: () => _openRecording(kind: 'orbit'),
+          ),
+          PlatformMenuItem(
             label: 'Load EEGLAB structure (.mat)',
             onSelected: () => _openRecording(kind: 'mat'),
           ),
@@ -2311,6 +2366,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
                 child: const Text('Load EDF file (.edf) – scaled V to µV'),
               ),
               MenuItemButton(
+                onPressed: () => _openRecording(kind: 'orbit'),
+                child: const Text('Load Orbit file (.orb / .signal)'),
+              ),
+              MenuItemButton(
                 onPressed: () => _openRecording(kind: 'mat'),
                 child: const Text('Load EEGLAB structure (.mat)'),
               ),
@@ -2544,6 +2603,424 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     );
   }
 
+  Widget _buildBatchProcessingTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left Column: Batch Auto-Scoring
+          Expanded(
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: Color(0xFFD0D0D0)),
+              ),
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.psychology, color: Colors.purple),
+                        SizedBox(width: 8),
+                        Text(
+                          'Batch Automated Sleep Scoring',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    const Text(
+                      'Selected Recording Files (EDF/ORB/SIGNAL):',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFFD0D0D0)),
+                        borderRadius: BorderRadius.circular(4),
+                        color: const Color(0xFFF9F9F9),
+                      ),
+                      child: _batchStagingFiles.isEmpty
+                          ? const Center(child: Text('No files selected'))
+                          : ListView.builder(
+                              itemCount: _batchStagingFiles.length,
+                              itemBuilder: (context, index) {
+                                final f = _batchStagingFiles[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(_basename(f)),
+                                  subtitle: Text(f),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                    onPressed: () {
+                                      setState(() {
+                                        _batchStagingFiles.removeAt(index);
+                                      });
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add Recording Files…'),
+                      onPressed: () async {
+                        final result = await FilePicker.pickFiles(
+                          dialogTitle: 'Select EEG files for batch auto-scoring',
+                          type: FileType.custom,
+                          allowedExtensions: ['edf', 'orb', 'signal'],
+                          allowMultiple: true,
+                        );
+                        if (result != null) {
+                          setState(() {
+                            for (final file in result.files) {
+                              if (file.path != null && !_batchStagingFiles.contains(file.path!)) {
+                                _batchStagingFiles.add(file.path!);
+                              }
+                            }
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _batchStagingAlgorithm,
+                      decoration: const InputDecoration(
+                        labelText: 'Base Scorer Algorithm',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'yasa', child: Text('YASA LightGBM Consensus')),
+                        DropdownMenuItem(value: 'usleep', child: Text('Offline U-Sleep Consensus')),
+                        DropdownMenuItem(value: 'luna', child: Text('Luna POPS Stager')),
+                        DropdownMenuItem(value: 'gssc', child: Text('Greifswald Classifier (GSSC)')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _batchStagingAlgorithm = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _batchStagingCorrection,
+                      decoration: const InputDecoration(
+                        labelText: 'Sequence Correction',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'none', child: Text('None (Raw consensus predictions)')),
+                        DropdownMenuItem(value: 'sleepgpt', child: Text('SleepGPT Language Model')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _batchStagingCorrection = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Channel Mapping Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                        labelText: 'EEG Channels (comma-separated)',
+                        hintText: 'e.g. AF7,AF8 or F3,F4',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      initialValue: _batchStagingEeg.join(','),
+                      onChanged: (v) {
+                        setState(() {
+                          _batchStagingEeg.clear();
+                          _batchStagingEeg.addAll(v.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                        labelText: 'Reference Channels (comma-separated)',
+                        hintText: 'e.g. PPG or M1,M2',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      initialValue: _batchStagingRef.join(','),
+                      onChanged: (v) {
+                        setState(() {
+                          _batchStagingRef.clear();
+                          _batchStagingRef.addAll(v.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: _batchStagingFiles.isEmpty
+                            ? null
+                            : () {
+                                final settings = {
+                                  'algorithm': _batchStagingAlgorithm,
+                                  'sequence_correction': _batchStagingCorrection,
+                                  'sleepgpt_alpha': 0.1,
+                                  'sleepgpt_ngram': 30,
+                                  'eeg': _batchStagingEeg,
+                                  'ref': _batchStagingRef,
+                                  'eog': _batchStagingEog,
+                                  'emg': _batchStagingEmg,
+                                };
+                                _executeBatchAutoScoring(_batchStagingFiles, settings);
+                              },
+                        child: const Text('Run Batch Auto-Scoring', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Right Column: Batch AnalyseNidra
+          Expanded(
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: Color(0xFFD0D0D0)),
+              ),
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.analytics, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text(
+                          'Batch AnalyseNidra (Region analysis)',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    const Text(
+                      'File Mappings (EEG file <-> Scoring file):',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFFD0D0D0)),
+                        borderRadius: BorderRadius.circular(4),
+                        color: const Color(0xFFF9F9F9),
+                      ),
+                      child: _batchAnalysePairs.isEmpty
+                          ? const Center(child: Text('No file pairs mapped'))
+                          : ListView.builder(
+                              itemCount: _batchAnalysePairs.length,
+                              itemBuilder: (context, index) {
+                                final pair = _batchAnalysePairs[index];
+                                final eeg = pair['eegPath'] ?? '';
+                                final scoring = pair['scoringPath'] ?? '';
+                                return ListTile(
+                                  dense: true,
+                                  title: Text('EEG: ${_basename(eeg)}'),
+                                  subtitle: Text('Scoring: ${_basename(scoring)}'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
+                                        tooltip: 'Select scoring file',
+                                        onPressed: () async {
+                                          final result = await FilePicker.pickFiles(
+                                            dialogTitle: 'Select scoring JSON file',
+                                            type: FileType.custom,
+                                            allowedExtensions: ['json'],
+                                          );
+                                          if (result != null && result.files.single.path != null) {
+                                            setState(() {
+                                              pair['scoringPath'] = result.files.single.path!;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                        onPressed: () {
+                                          setState(() {
+                                            _batchAnalysePairs.removeAt(index);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add_circle_outline, size: 16),
+                          label: const Text('Add EEG File…'),
+                          onPressed: () async {
+                            final result = await FilePicker.pickFiles(
+                              dialogTitle: 'Select EEG file (EDF/ORB/SIGNAL)',
+                              type: FileType.custom,
+                              allowedExtensions: ['edf', 'orb', 'signal'],
+                            );
+                            if (result != null && result.files.single.path != null) {
+                              setState(() {
+                                _batchAnalysePairs.add({
+                                  'eegPath': result.files.single.path!,
+                                  'scoringPath': '',
+                                });
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.settings_suggest, size: 16),
+                          label: const Text('Auto-pair Directory…'),
+                          onPressed: () async {
+                            final dir = await FilePicker.getDirectoryPath(
+                              dialogTitle: 'Select directory to auto-pair files',
+                            );
+                            if (dir != null) {
+                              final directory = Directory(dir);
+                              if (directory.existsSync()) {
+                                final files = directory.listSync();
+                                final List<String> eegs = [];
+                                final List<String> scorings = [];
+                                for (final file in files) {
+                                  if (file is File) {
+                                    final ext = file.path.split('.').last.toLowerCase();
+                                    if (ext == 'edf' || ext == 'orb' || ext == 'signal') {
+                                      eegs.add(file.path);
+                                    } else if (ext == 'json') {
+                                      scorings.add(file.path);
+                                    }
+                                  }
+                                }
+
+                                setState(() {
+                                  for (final eeg in eegs) {
+                                    final eegName = _basename(eeg).split('.').first;
+                                    String matchedScoring = '';
+                                    for (final scoring in scorings) {
+                                      final scName = _basename(scoring).split('.').first;
+                                      if (scName.contains(eegName) || eegName.contains(scName)) {
+                                        matchedScoring = scoring;
+                                        break;
+                                      }
+                                    }
+                                    _batchAnalysePairs.add({
+                                      'eegPath': eeg,
+                                      'scoringPath': matchedScoring,
+                                    });
+                                  }
+                                });
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _batchAnalyseEegController,
+                      decoration: const InputDecoration(
+                        labelText: 'EEG Channels for analysis (comma-separated)',
+                        hintText: 'e.g. AF7,AF8',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _batchAnalyseRefController,
+                      decoration: const InputDecoration(
+                        labelText: 'Reference Channels for analysis (comma-separated)',
+                        hintText: 'e.g. PPG',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: _batchAnalysePairs.isEmpty
+                            ? null
+                            : () {
+                                final validPairs = _batchAnalysePairs
+                                    .where((p) => (p['eegPath'] ?? '').isNotEmpty && (p['scoringPath'] ?? '').isNotEmpty)
+                                    .toList();
+                                if (validPairs.isEmpty) {
+                                  _setStatus('Error: Mapped pairs must have both EEG and Scoring files.');
+                                  return;
+                                }
+
+                                final jobs = validPairs.map((pair) {
+                                  return _AnalyseNidraJob(
+                                    edfPath: pair['eegPath']!,
+                                    scoringPath: pair['scoringPath']!,
+                                    mappedScoringPath: pair['scoringPath']!,
+                                  );
+                                }).toList();
+
+                                final chans = _batchAnalyseEegController.text
+                                    .split(',')
+                                    .map((e) => e.trim())
+                                    .where((e) => e.isNotEmpty)
+                                    .toList();
+                                final refs = _batchAnalyseRefController.text
+                                    .split(',')
+                                    .map((e) => e.trim())
+                                    .where((e) => e.isNotEmpty)
+                                    .toList();
+
+                                _runAnalyseNidraJobs(jobs, chans, refs);
+                              },
+                        child: const Text('Run Batch AnalyseNidra', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -2593,50 +3070,80 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           child: Focus(
             focusNode: _viewerFocusNode,
             autofocus: true,
-            child: Scaffold(
-              backgroundColor: const Color(0xFFEDEDED),
-              body: Column(
-                children: [
-                  if (!Platform.isMacOS) _buildInAppMenuBar(),
-                  _Toolbar(
-                    viewport: viewport,
-                    onJump: _jumpToEpoch,
-                    onPrevious: _previousEpoch,
-                    onNext: _nextEpoch,
-                    onUnscored: _jumpNextUnscored,
-                    onUncertain: _jumpNextUncertain,
-                    onTransition: _jumpNextTransition,
-                    onHuman: _jumpNextHuman,
-                    onEvent: _jumpNextEvent,
-                    onDisagreement: _jumpNextDisagreement,
-                    hasComparison: _comparisonStages != null,
-                    onConfig: _openConfigDialog,
-                    swaSlider: _swaSlider,
-                    onSwaSlider: (v) => setState(() => _swaSlider = v),
-                    onToggleUncertainty: _toggleUncertainty,
-                    tfEnabled: _config.tfEnabled,
-                    onToggleWavelet: _toggleWavelet,
+            child: DefaultTabController(
+              length: 2,
+              child: Scaffold(
+                backgroundColor: const Color(0xFFEDEDED),
+                appBar: PreferredSize(
+                  preferredSize: const Size.fromHeight(36),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(bottom: BorderSide(color: Color(0xFFD0D0D0))),
+                    ),
+                    child: const TabBar(
+                      labelColor: Colors.black,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.blue,
+                      labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      unselectedLabelStyle: TextStyle(fontSize: 13),
+                      tabs: [
+                        Tab(text: 'Interactive Scoring'),
+                        Tab(text: 'Batch Processing'),
+                      ],
+                    ),
                   ),
-                  Expanded(
-                    child: viewport == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : _ScoringHeroSurface(
-                            viewport: viewport,
-                            onJump: (epoch) => _jumpToEpoch(epoch),
-                            swaSlider: _swaSlider,
-                            onSwaSlider: (v) => setState(() => _swaSlider = v),
-                            onSelectionEnd: _updateSelection,
-                            comparisonStages: _comparisonStages,
-                            tfEnabled: _config.tfEnabled,
-                          ),
-                  ),
-                  _StatusBar(
-                    status: _status,
-                    activePath: _activePath,
-                    viewport: viewport,
-                    comparisonStages: _comparisonStages,
-                  ),
-                ],
+                ),
+                body: TabBarView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    Column(
+                      children: [
+                        if (!Platform.isMacOS) _buildInAppMenuBar(),
+                        _Toolbar(
+                          viewport: viewport,
+                          onJump: _jumpToEpoch,
+                          onPrevious: _previousEpoch,
+                          onNext: _nextEpoch,
+                          onUnscored: _jumpNextUnscored,
+                          onUncertain: _jumpNextUncertain,
+                          onTransition: _jumpNextTransition,
+                          onHuman: _jumpNextHuman,
+                          onEvent: _jumpNextEvent,
+                          onDisagreement: _jumpNextDisagreement,
+                          hasComparison: _comparisonStages != null,
+                          onConfig: _openConfigDialog,
+                          swaSlider: _swaSlider,
+                          onSwaSlider: (v) => setState(() => _swaSlider = v),
+                          onToggleUncertainty: _toggleUncertainty,
+                          tfEnabled: _config.tfEnabled,
+                          onToggleWavelet: _toggleWavelet,
+                        ),
+                        Expanded(
+                          child: viewport == null
+                              ? const Center(child: CircularProgressIndicator())
+                              : _ScoringHeroSurface(
+                                  viewport: viewport,
+                                  onJump: (epoch) => _jumpToEpoch(epoch),
+                                  swaSlider: _swaSlider,
+                                  onSwaSlider: (v) => setState(() => _swaSlider = v),
+                                  onSelectionEnd: _updateSelection,
+                                  comparisonStages: _comparisonStages,
+                                  tfEnabled: _config.tfEnabled,
+                                  onResizeFlex: _updateFlexValues,
+                                ),
+                        ),
+                        _StatusBar(
+                          status: _status,
+                          activePath: _activePath,
+                          viewport: viewport,
+                          comparisonStages: _comparisonStages,
+                        ),
+                      ],
+                    ),
+                    _buildBatchProcessingTab(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2928,6 +3435,7 @@ class _ScoringHeroSurface extends StatefulWidget {
     required this.onSwaSlider,
     required this.onSelectionEnd,
     required this.tfEnabled,
+    required this.onResizeFlex,
     this.comparisonStages,
   });
 
@@ -2945,6 +3453,7 @@ class _ScoringHeroSurface extends StatefulWidget {
   onSelectionEnd;
   final List<SleepStage>? comparisonStages;
   final bool tfEnabled;
+  final void Function(int spectrogramFlex, int hypnogramFlex, int periodogramFlex) onResizeFlex;
 
   @override
   State<_ScoringHeroSurface> createState() => _ScoringHeroSurfaceState();
@@ -3074,54 +3583,125 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
       child: Column(
         children: [
           // Top strip: spectrogram | hypnogram | SWA slider | power spectrum
-          SizedBox(
-            height: 158,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: widget.viewport.spectrogramFlex,
-                  child: _ClickablePainterPanel(
-                    painter: SpectrogramPainter(widget.viewport),
-                    onTapFraction: (fx) {
-                      final epoch = (fx * widget.viewport.epochCount).floor();
-                      widget.onJump(epoch + 1);
-                    },
-                  ),
-                ),
-                Expanded(
-                  flex: widget.viewport.hypnogramFlex,
-                  child: _ClickablePainterPanel(
-                    painter: HypnogramPainter(
-                      widget.viewport,
-                      swaKernelSize: 101 - widget.swaSlider,
-                      comparisonStages: widget.comparisonStages,
-                      startEpoch: startEpoch,
-                      endEpoch: endEpoch,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              final showSwaPlot = widget.viewport.showSwaPlot;
+              final swaWidth = showSwaPlot ? 42.0 : 0.0;
+              final dividerWidth = 8.0;
+              final netWidth = totalWidth - swaWidth - (dividerWidth * 2);
+
+              final specFlex = widget.viewport.spectrogramFlex;
+              final hypFlex = widget.viewport.hypnogramFlex;
+              final perFlex = widget.viewport.periodogramFlex;
+              final totalFlex = specFlex + hypFlex + perFlex;
+
+              final flexPerPixel = totalFlex / netWidth;
+
+              return SizedBox(
+                height: 158,
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: specFlex,
+                      child: _ClickablePainterPanel(
+                        painter: SpectrogramPainter(widget.viewport),
+                        onTapFraction: (fx) {
+                          final epoch = (fx * widget.viewport.epochCount).floor();
+                          widget.onJump(epoch + 1);
+                        },
+                      ),
                     ),
-                    onTapFraction: (fx) {
-                      final visibleCount = endEpoch - startEpoch;
-                      final epoch = startEpoch + (fx * visibleCount).floor();
-                      widget.onJump(epoch + 1);
-                    },
-                  ),
-                ),
-                if (widget.viewport.showSwaPlot) ...[
-                  SizedBox(
-                    width: 42,
-                    child: _HypnogramSlider(
-                      value: widget.swaSlider,
-                      onChanged: widget.onSwaSlider,
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragUpdate: (dragDetails) {
+                        final dx = dragDetails.delta.dx;
+                        final deltaFlex = (dx * flexPerPixel).round();
+                        if (deltaFlex != 0) {
+                          final newSpec = (specFlex + deltaFlex).clamp(5, totalFlex - 10);
+                          final newHyp = (hypFlex - deltaFlex).clamp(5, totalFlex - 10);
+                          if (newSpec + newHyp + perFlex == totalFlex) {
+                            widget.onResizeFlex(newSpec, newHyp, perFlex);
+                          }
+                        }
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeLeftRight,
+                        child: SizedBox(
+                          width: dividerWidth,
+                          child: const Center(
+                            child: VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: Color(0xFFD0D0D0),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-                Expanded(
-                  flex: widget.viewport.periodogramFlex,
-                  child: _Panel(
-                    painter: RectanglePowerPainter(widget.viewport),
-                  ),
+                    Expanded(
+                      flex: hypFlex,
+                      child: _ClickablePainterPanel(
+                        painter: HypnogramPainter(
+                          widget.viewport,
+                          swaKernelSize: 101 - widget.swaSlider,
+                          comparisonStages: widget.comparisonStages,
+                          startEpoch: startEpoch,
+                          endEpoch: endEpoch,
+                        ),
+                        onTapFraction: (fx) {
+                          final visibleCount = endEpoch - startEpoch;
+                          final epoch = startEpoch + (fx * visibleCount).floor();
+                          widget.onJump(epoch + 1);
+                        },
+                      ),
+                    ),
+                    if (showSwaPlot) ...[
+                      SizedBox(
+                        width: 42,
+                        child: _HypnogramSlider(
+                          value: widget.swaSlider,
+                          onChanged: widget.onSwaSlider,
+                        ),
+                      ),
+                    ],
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragUpdate: (dragDetails) {
+                        final dx = dragDetails.delta.dx;
+                        final deltaFlex = (dx * flexPerPixel).round();
+                        if (deltaFlex != 0) {
+                          final newHyp = (hypFlex + deltaFlex).clamp(5, totalFlex - 10);
+                          final newPer = (perFlex - deltaFlex).clamp(5, totalFlex - 10);
+                          if (specFlex + newHyp + newPer == totalFlex) {
+                            widget.onResizeFlex(specFlex, newHyp, newPer);
+                          }
+                        }
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeLeftRight,
+                        child: SizedBox(
+                          width: dividerWidth,
+                          child: const Center(
+                            child: VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: Color(0xFFD0D0D0),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: perFlex,
+                      child: _Panel(
+                        painter: RectanglePowerPainter(widget.viewport),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
           // Middle: EEG signal (largest panel)
           Expanded(
@@ -3192,7 +3772,7 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final vp = viewport;
     Widget? rightWidget;
-    if (vp != null) {
+    if (vp != null && activePath != null) {
       final currentIdx = vp.currentEpoch;
       final currentStage = vp.currentStage;
       final isUncertain =

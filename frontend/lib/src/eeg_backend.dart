@@ -14,6 +14,7 @@ import 'package:ffi/ffi.dart';
 import 'edf_loader.dart';
 import 'mat_loader.dart';
 import 'r09_loader.dart' as r09;
+import 'orbit_loader.dart';
 import 'models.dart';
 import 'signal_processing.dart' as sp;
 
@@ -880,6 +881,10 @@ class EegBackend {
     bool scaleVoltsToMicrovolts = false,
     AppConfig? config,
   }) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.orb') || lower.endsWith('.signal')) {
+      return OrbitLoader().load(path);
+    }
     if (_loadEdf != null && _freeEdf != null) {
       final pathPtr = path.toNativeUtf8();
       try {
