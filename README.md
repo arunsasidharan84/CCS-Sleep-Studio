@@ -1,6 +1,6 @@
 # ScoringNidra - The High-Performance Sleep EEG Visualization, Annotation & Scoring Software
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 
 Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, and automated sleep staging.
 
