@@ -1,5 +1,7 @@
 # ScoringNidra - The High-Performance Sleep EEG Visualization, Annotation & Scoring Software
 
+**Version:** 1.0.1
+
 Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, and automated sleep staging.
 
 Rebuilt from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **ScoringNidra** is a modernized, standalone recreation of the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files.
@@ -192,3 +194,4 @@ flutter build macos --release
 flutter build windows --release
 iscc windows/installer.iss
 ```
+
