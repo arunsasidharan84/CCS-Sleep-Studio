@@ -1427,11 +1427,11 @@ class _AnalyseNidraDialogState extends State<AnalyseNidraDialog> {
                 .where((entry) => entry.value)
                 .map((entry) => entry.key)
                 .toList();
-            if (channels.isEmpty || references.isEmpty) {
+            if (channels.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Select at least one EEG and one reference channel.',
+                    'Select at least one EEG channel.',
                   ),
                 ),
               );
@@ -1482,53 +1482,48 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
   String _correction = 'none';
   double _sleepgptAlpha = 0.1;
   int _sleepgptNgram = 30;
-  late final TextEditingController _eegController;
-  late final TextEditingController _refController;
-  late final TextEditingController _eogController;
-  late final TextEditingController _emgController;
+
+  late final Map<String, bool> _eegChannels;
+  late final Map<String, bool> _refChannels;
+  late final Map<String, bool> _eogChannels;
+  late final Map<String, bool> _emgChannels;
 
   @override
   void initState() {
     super.initState();
-    final eeg = <String>[];
-    final refs = <String>[];
-    final eog = <String>[];
-    final emg = <String>[];
+    _eegChannels = {};
+    _refChannels = {};
+    _eogChannels = {};
+    _emgChannels = {};
+
     for (final channel in widget.channelLabels) {
       final upper = channel.toUpperCase();
-      if (upper.contains('EOG') ||
+      bool isEog = upper.contains('EOG') ||
           upper.contains('LOC') ||
           upper.contains('ROC') ||
           upper.contains('E1') ||
-          upper.contains('E2')) {
-        eog.add(channel);
-      } else if (upper.contains('EMG') ||
+          upper.contains('E2');
+      bool isEmg = upper.contains('EMG') ||
           upper.contains('CHIN') ||
-          upper.contains('MYO')) {
-        emg.add(channel);
-      } else if (upper == 'M1' ||
+          upper.contains('MYO');
+      bool isRef = upper == 'M1' ||
           upper == 'M2' ||
           upper == 'A1' ||
           upper == 'A2' ||
           upper == 'REF' ||
-          upper.startsWith('REF ')) {
-        refs.add(channel);
-      } else {
-        eeg.add(channel);
-      }
+          upper.startsWith('REF ');
+
+      bool isEeg = !isEog && !isEmg && !isRef;
+
+      _eegChannels[channel] = isEeg;
+      _refChannels[channel] = isRef;
+      _eogChannels[channel] = isEog;
+      _emgChannels[channel] = isEmg;
     }
-    _eegController = TextEditingController(text: eeg.join(','));
-    _refController = TextEditingController(text: refs.join(','));
-    _eogController = TextEditingController(text: eog.join(','));
-    _emgController = TextEditingController(text: emg.join(','));
   }
 
   @override
   void dispose() {
-    _eegController.dispose();
-    _refController.dispose();
-    _eogController.dispose();
-    _emgController.dispose();
     super.dispose();
   }
 
@@ -1543,7 +1538,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
         ],
       ),
       content: SizedBox(
-        width: 500,
+        width: 600,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1773,23 +1768,56 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 16),
               const Text(
                 'Channels applied to every file',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 6),
               Text(
-                'Comma-separated channel names. Files missing a selected channel '
+                'Select channels to apply. Files missing a selected channel '
                 'will report a clear failure in the batch log.',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
               ),
               const SizedBox(height: 8),
-              _batchChannelField('EEG channels', _eegController),
-              _batchChannelField('Reference channels', _refController),
-              _batchChannelField('EOG channels', _eogController),
-              _batchChannelField('EMG channels', _emgController),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EEG Signal Channels',
+                      _eegChannels,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'Reference Signals',
+                      _refChannels,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EOG Channels (Differential)',
+                      _eogChannels,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildChannelSelector(
+                      'EMG Channels (Differential)',
+                      _emgChannels,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1801,17 +1829,27 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            List<String> channels(TextEditingController controller) =>
-                controller.text
-                    .split(',')
-                    .map((value) => value.trim())
-                    .where((value) => value.isNotEmpty)
-                    .toList();
-            final eeg = channels(_eegController);
+            final eeg = _eegChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final ref = _refChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final eog = _eogChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+            final emg = _emgChannels.entries
+                .where((e) => e.value)
+                .map((e) => e.key)
+                .toList();
+
             if (eeg.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Enter at least one EEG channel.'),
+                  content: Text('Select at least one EEG channel.'),
                 ),
               );
               return;
@@ -1822,9 +1860,9 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
               'sleepgpt_alpha': _sleepgptAlpha,
               'sleepgpt_ngram': _sleepgptNgram,
               'eeg': eeg,
-              'ref': channels(_refController),
-              'eog': channels(_eogController),
-              'emg': channels(_emgController),
+              'ref': ref,
+              'eog': eog,
+              'emg': emg,
             });
             Navigator.of(context).pop();
           },
@@ -1834,17 +1872,82 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
     );
   }
 
-  Widget _batchChannelField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
+  Widget _buildChannelSelector(String label, Map<String, bool> channels) {
+    final list = channels.keys.toList();
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  for (final key in channels.keys) {
+                    channels[key] = false;
+                  }
+                });
+              },
+              child: const MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Text(
+                  'Clear',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 4),
+        Container(
+          height: 110,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final ch = list[index];
+                return SizedBox(
+                  height: 32,
+                  child: CheckboxListTile(
+                    title: Text(ch, style: const TextStyle(fontSize: 11)),
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    value: channels[ch],
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    onChanged: (v) {
+                      setState(() {
+                        channels[ch] = v ?? false;
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

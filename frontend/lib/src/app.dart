@@ -51,7 +51,7 @@ class ScoringNidraHome extends StatefulWidget {
   State<ScoringNidraHome> createState() => _ScoringNidraHomeState();
 }
 
-class _ScoringNidraHomeState extends State<ScoringNidraHome> {
+class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerProviderStateMixin {
   final EegBackend _backend = EegBackend();
   final FocusNode _viewerFocusNode = FocusNode();
   AppConfig _config = AppConfig();
@@ -63,6 +63,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
   String _status = 'Ready — load an EDF file to begin scoring';
   int _navigationSerial = 0;
   Timer? _tfRefreshTimer;
+  late final TabController _tabController;
 
   // SWA slider value (0–100). 100 = no smoothing, 0 = maximum smoothing.
   int _swaSlider = 100;
@@ -86,11 +87,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _viewport = _backend.loadDemoViewport();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _tfRefreshTimer?.cancel();
     _viewerFocusNode.dispose();
     super.dispose();
@@ -404,6 +407,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         v,
         eeg,
         config: _config,
+        isCancelled: () => serial != _navigationSerial,
       );
       if (!mounted || serial != _navigationSerial) return;
       setState(() {
@@ -1017,43 +1021,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
   }
 
   Future<void> _runBatchAutoScoring() async {
-    _setStatus('Opening multi-EDF file picker…');
-    final result = await FilePicker.pickFiles(
-      dialogTitle: 'Select EDF files for Batch Auto-Scoring',
-      type: FileType.custom,
-      allowedExtensions: ['edf'],
-      allowMultiple: true,
-    );
-    if (result == null || result.files.isEmpty) {
-      _setStatus('Batch scoring cancelled');
-      return;
-    }
-
-    final files = result.files.map((f) => f.path).whereType<String>().toList();
-    if (files.isEmpty) {
-      _setStatus('No valid files selected');
-      return;
-    }
-
-    if (!mounted) return;
-
-    List<String> channelLabels = const [];
-    try {
-      channelLabels = _backend.loadEdf(files.first).channelLabels;
-    } on Object catch (error) {
-      _setStatus('Could not inspect batch channels: $error');
-    }
-
-    showDialog(
-      context: context,
-      builder: (_) => BatchAutoScoringDialog(
-        files: files,
-        channelLabels: channelLabels,
-        onRun: (settings) async {
-          _executeBatchAutoScoring(files, settings);
-        },
-      ),
-    );
+    _tabController.animateTo(1);
   }
 
   Future<void> _runAnalyseNidraCurrent() async {
@@ -1100,81 +1068,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
   }
 
   Future<void> _runAnalyseNidraBatch() async {
-    final result = await FilePicker.pickFiles(
-      dialogTitle: 'Select sleep scoring files for batch analyseNidra',
-      type: FileType.custom,
-      allowedExtensions: ['json', 'txt', 'csv', 'vis', 'annot', 'edf'],
-      allowMultiple: true,
-    );
-    final scoringPaths = result?.files
-        .map((file) => file.path)
-        .whereType<String>()
-        .toList();
-    if (scoringPaths == null || scoringPaths.isEmpty) {
-      _setStatus('Batch analysis cancelled');
-      return;
-    }
-
-    final jobs = <_AnalyseNidraJob>[];
-    final failures = <String>[];
-    for (final scoringPath in scoringPaths) {
-      final edfPath = _detectMatchingEdf(scoringPath);
-      if (edfPath == null) {
-        failures.add('${_basename(scoringPath)}: matching EDF not found');
-        continue;
-      }
-      try {
-        final loaded = _backend.loadEdf(edfPath);
-        final epochCount = math.max(1, (loaded.durationSeconds / 30).ceil());
-        final detection = await detectScoringFormat(scoringPath);
-        final scoring = await loadScoringFileDirectly(
-          scoringPath,
-          detection.parserType,
-          epochCount,
-        );
-        final mappedPath = _sidecarPath(scoringPath, '.analyse-mapped.json');
-        await writeMappedScoringJson(
-          mappedPath,
-          scoring.stages,
-          sourcePath: edfPath,
-          stagesUncertain: scoring.stagesUncertain,
-          stagesConfidence: scoring.stagesConfidence,
-        );
-        jobs.add(
-          _AnalyseNidraJob(
-            edfPath: edfPath,
-            scoringPath: scoringPath,
-            mappedScoringPath: mappedPath,
-          ),
-        );
-      } on Object catch (error) {
-        failures.add('${_basename(scoringPath)}: $error');
-      }
-    }
-    if (jobs.isEmpty) {
-      _setStatus('No scoring files could be paired with EDF data');
-      if (mounted) {
-        _showTextDialog('Batch analysis setup failed', failures.join('\n'));
-      }
-      return;
-    }
-    final labels = _backend.loadEdf(jobs.first.edfPath).channelLabels;
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AnalyseNidraDialog(
-        channelLabels: labels,
-        batchCount: jobs.length,
-        onRun: (channels, references) {
-          if (failures.isNotEmpty) {
-            _setStatus(
-              '${jobs.length} analysis jobs ready; ${failures.length} skipped',
-            );
-          }
-          _runAnalyseNidraJobs(jobs, channels, references);
-        },
-      ),
-    );
+    _tabController.animateTo(1);
   }
 
   void _runAnalyseNidraJobs(
@@ -2625,8 +2519,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Left Column: Batch Auto-Scoring
-          Expanded(
-            child: Card(
+          if (!buildLite) ...[
+            Expanded(
+              child: Card(
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -2810,6 +2705,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             ),
           ),
           const SizedBox(width: 16),
+        ],
           // Right Column: Batch AnalyseNidra
           Expanded(
             child: Card(
@@ -3085,80 +2981,79 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
           child: Focus(
             focusNode: _viewerFocusNode,
             autofocus: true,
-            child: DefaultTabController(
-              length: 2,
-              child: Scaffold(
-                backgroundColor: const Color(0xFFEDEDED),
-                appBar: PreferredSize(
-                  preferredSize: const Size.fromHeight(36),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(bottom: BorderSide(color: Color(0xFFD0D0D0))),
-                    ),
-                    child: const TabBar(
-                      labelColor: Colors.black,
-                      unselectedLabelColor: Colors.grey,
-                      indicatorColor: Colors.blue,
-                      labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                      unselectedLabelStyle: TextStyle(fontSize: 13),
-                      tabs: [
-                        Tab(text: 'Interactive Scoring'),
-                        Tab(text: 'Batch Processing'),
-                      ],
-                    ),
+            child: Scaffold(
+              backgroundColor: const Color(0xFFEDEDED),
+              appBar: PreferredSize(
+                preferredSize: const Size.fromHeight(36),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(bottom: BorderSide(color: Color(0xFFD0D0D0))),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: Colors.black,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: Colors.blue,
+                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    unselectedLabelStyle: const TextStyle(fontSize: 13),
+                    tabs: const [
+                      Tab(text: 'Interactive Scoring'),
+                      Tab(text: 'Batch'),
+                    ],
                   ),
                 ),
-                body: TabBarView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    Column(
-                      children: [
-                        if (!Platform.isMacOS) _buildInAppMenuBar(),
-                        _Toolbar(
-                          viewport: viewport,
-                          onJump: _jumpToEpoch,
-                          onPrevious: _previousEpoch,
-                          onNext: _nextEpoch,
-                          onUnscored: _jumpNextUnscored,
-                          onUncertain: _jumpNextUncertain,
-                          onTransition: _jumpNextTransition,
-                          onHuman: _jumpNextHuman,
-                          onEvent: _jumpNextEvent,
-                          onDisagreement: _jumpNextDisagreement,
-                          hasComparison: _comparisonStages != null,
-                          onConfig: _openConfigDialog,
-                          swaSlider: _swaSlider,
-                          onSwaSlider: (v) => setState(() => _swaSlider = v),
-                          onToggleUncertainty: _toggleUncertainty,
-                          tfEnabled: _config.tfEnabled,
-                          onToggleWavelet: _toggleWavelet,
-                        ),
-                        Expanded(
-                          child: viewport == null
-                              ? const Center(child: CircularProgressIndicator())
-                              : _ScoringHeroSurface(
-                                  viewport: viewport,
-                                  onJump: (epoch) => _jumpToEpoch(epoch),
-                                  swaSlider: _swaSlider,
-                                  onSwaSlider: (v) => setState(() => _swaSlider = v),
-                                  onSelectionEnd: _updateSelection,
-                                  comparisonStages: _comparisonStages,
-                                  tfEnabled: _config.tfEnabled,
-                                  onResizeFlex: _updateFlexValues,
-                                ),
-                        ),
-                        _StatusBar(
-                          status: _status,
-                          activePath: _activePath,
-                          viewport: viewport,
-                          comparisonStages: _comparisonStages,
-                        ),
-                      ],
-                    ),
-                    _buildBatchProcessingTab(),
-                  ],
-                ),
+              ),
+              body: TabBarView(
+                controller: _tabController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  Column(
+                    children: [
+                      if (!Platform.isMacOS) _buildInAppMenuBar(),
+                      _Toolbar(
+                        viewport: viewport,
+                        onJump: _jumpToEpoch,
+                        onPrevious: _previousEpoch,
+                        onNext: _nextEpoch,
+                        onUnscored: _jumpNextUnscored,
+                        onUncertain: _jumpNextUncertain,
+                        onTransition: _jumpNextTransition,
+                        onHuman: _jumpNextHuman,
+                        onEvent: _jumpNextEvent,
+                        onDisagreement: _jumpNextDisagreement,
+                        hasComparison: _comparisonStages != null,
+                        onConfig: _openConfigDialog,
+                        swaSlider: _swaSlider,
+                        onSwaSlider: (v) => setState(() => _swaSlider = v),
+                        onToggleUncertainty: _toggleUncertainty,
+                        tfEnabled: _config.tfEnabled,
+                        onToggleWavelet: _toggleWavelet,
+                      ),
+                      Expanded(
+                        child: viewport == null
+                            ? const Center(child: CircularProgressIndicator())
+                            : _ScoringHeroSurface(
+                                viewport: viewport,
+                                onJump: (epoch) => _jumpToEpoch(epoch),
+                                swaSlider: _swaSlider,
+                                onSwaSlider: (v) => setState(() => _swaSlider = v),
+                                onSelectionEnd: _updateSelection,
+                                comparisonStages: _comparisonStages,
+                                tfEnabled: _config.tfEnabled,
+                                onResizeFlex: _updateFlexValues,
+                              ),
+                      ),
+                      _StatusBar(
+                        status: _status,
+                        activePath: _activePath,
+                        viewport: viewport,
+                        comparisonStages: _comparisonStages,
+                      ),
+                    ],
+                  ),
+                  _buildBatchProcessingTab(),
+                ],
               ),
             ),
           ),
@@ -3481,6 +3376,11 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
   double? _dragStartUv;
   double? _dragEndUv;
 
+  double _cumulativeDx = 0.0;
+  int _dragSpecStartFlex = 0;
+  int _dragHypStartFlex = 0;
+  int _dragPerStartFlex = 0;
+
   void _handlePanStart(DragStartDetails details, BoxConstraints constraints) {
     final n = widget.viewport.channelCount;
     if (n == 0) return;
@@ -3629,16 +3529,17 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                     ),
                     GestureDetector(
                       behavior: HitTestBehavior.translucent,
+                      onHorizontalDragStart: (_) {
+                        _cumulativeDx = 0.0;
+                        _dragSpecStartFlex = widget.viewport.spectrogramFlex;
+                        _dragHypStartFlex = widget.viewport.hypnogramFlex;
+                      },
                       onHorizontalDragUpdate: (dragDetails) {
-                        final dx = dragDetails.delta.dx;
-                        final deltaFlex = (dx * flexPerPixel).round();
-                        if (deltaFlex != 0) {
-                          final newSpec = (specFlex + deltaFlex).clamp(5, totalFlex - 10);
-                          final newHyp = (hypFlex - deltaFlex).clamp(5, totalFlex - 10);
-                          if (newSpec + newHyp + perFlex == totalFlex) {
-                            widget.onResizeFlex(newSpec, newHyp, perFlex);
-                          }
-                        }
+                        _cumulativeDx += dragDetails.delta.dx;
+                        final deltaFlex = (_cumulativeDx * flexPerPixel).round();
+                        final newSpec = (_dragSpecStartFlex + deltaFlex).clamp(5, totalFlex - perFlex - 5);
+                        final newHyp = totalFlex - newSpec - perFlex;
+                        widget.onResizeFlex(newSpec, newHyp, perFlex);
                       },
                       child: MouseRegion(
                         cursor: SystemMouseCursors.resizeLeftRight,
@@ -3682,16 +3583,17 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                     ],
                     GestureDetector(
                       behavior: HitTestBehavior.translucent,
+                      onHorizontalDragStart: (_) {
+                        _cumulativeDx = 0.0;
+                        _dragHypStartFlex = widget.viewport.hypnogramFlex;
+                        _dragPerStartFlex = widget.viewport.periodogramFlex;
+                      },
                       onHorizontalDragUpdate: (dragDetails) {
-                        final dx = dragDetails.delta.dx;
-                        final deltaFlex = (dx * flexPerPixel).round();
-                        if (deltaFlex != 0) {
-                          final newHyp = (hypFlex + deltaFlex).clamp(5, totalFlex - 10);
-                          final newPer = (perFlex - deltaFlex).clamp(5, totalFlex - 10);
-                          if (specFlex + newHyp + newPer == totalFlex) {
-                            widget.onResizeFlex(specFlex, newHyp, newPer);
-                          }
-                        }
+                        _cumulativeDx += dragDetails.delta.dx;
+                        final deltaFlex = (_cumulativeDx * flexPerPixel).round();
+                        final newHyp = (_dragHypStartFlex + deltaFlex).clamp(5, totalFlex - specFlex - 5);
+                        final newPer = totalFlex - specFlex - newHyp;
+                        widget.onResizeFlex(specFlex, newHyp, newPer);
                       },
                       child: MouseRegion(
                         cursor: SystemMouseCursors.resizeLeftRight,
@@ -4315,6 +4217,16 @@ String detectBackendExecutable() {
   }
 
   // 3. Fallback to system python3 or autoscore-backend on PATH
+  if (Platform.isMacOS) {
+    for (final sysPath in [
+      '/opt/homebrew/bin/python3',
+      '/usr/local/bin/python3',
+    ]) {
+      if (File(sysPath).existsSync()) {
+        return sysPath;
+      }
+    }
+  }
   return Platform.isWindows ? 'python.exe' : 'python3';
 }
 

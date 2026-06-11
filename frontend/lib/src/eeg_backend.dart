@@ -1605,6 +1605,7 @@ class EegBackend {
     EegViewport old,
     LoadedEeg eeg, {
     AppConfig? config,
+    bool Function()? isCancelled,
   }) async {
     final cfg = config ?? AppConfig();
     if (!cfg.tfEnabled) {
@@ -1635,7 +1636,7 @@ class EegBackend {
         eeg.epochTfPower.isNotEmpty &&
             old.currentEpoch < eeg.epochTfPower.length
         ? eeg.epochTfPower[old.currentEpoch]
-        : await _timeFrequencyForEpoch(eeg, old.currentEpoch, cfg);
+        : await _timeFrequencyForEpoch(eeg, old.currentEpoch, cfg, isCancelled: isCancelled);
     final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;
@@ -2590,8 +2591,9 @@ class EegBackend {
   Future<List<List<double>>> _timeFrequencyForEpoch(
     LoadedEeg eeg,
     int epoch,
-    AppConfig cfg,
-  ) async {
+    AppConfig cfg, {
+    bool Function()? isCancelled,
+  }) async {
     if (eeg.channelSamples.isEmpty || eeg.tfFreqs.isEmpty) return const [];
 
     const epochSeconds = 30;
@@ -2637,14 +2639,11 @@ class EegBackend {
       signal.length,
       ((safeEpoch + 1) * epochSeconds * srate + extensionSec * srate).round(),
     );
-    if (startSamples >= endSamples) return const [];
-
-    var slice = signal.sublist(startSamples, endSamples);
+    final slice = signal.sublist(startSamples, endSamples);
     var waveletRate = srate;
     const maxWaveletRate = 256.0;
     if (waveletRate > maxWaveletRate) {
       final step = (waveletRate / maxWaveletRate).ceil();
-      slice = [for (var i = 0; i < slice.length; i += step) slice[i]];
       waveletRate /= step;
     }
     if (slice.length < 4 ||
@@ -2653,10 +2652,12 @@ class EegBackend {
         eeg.tfFreqs.any((f) => !f.isFinite || f <= 0 || f >= waveletRate / 2)) {
       return const [];
     }
+    if (isCancelled != null && isCancelled()) return const [];
     final tfFreqs = List<double>.from(eeg.tfFreqs, growable: false);
     final rawPower = await Isolate.run(
-      () => _isolateComputeMorletTf(slice, waveletRate, tfFreqs),
+      () => _isolateComputeMorletTf(slice, srate, tfFreqs),
     );
+    if (isCancelled != null && isCancelled()) return const [];
     final logPower = sp.log10TfPower(rawPower);
 
     List<List<double>> tfPower;
@@ -2905,10 +2906,24 @@ class EegBackend {
 // ─── Top-Level Isolate Functions ─────────────────────────────────────────────
 
 List<List<double>> _isolateComputeMorletTf(
-  List<double> slice,
-  double srate,
+  List<double> originalSlice,
+  double originalSrate,
   List<double> freqs,
 ) {
+  var slice = originalSlice;
+  var waveletRate = originalSrate;
+  const maxWaveletRate = 256.0;
+  if (waveletRate > maxWaveletRate) {
+    final step = (waveletRate / maxWaveletRate).ceil();
+    final length = (slice.length / step).ceil();
+    final downsampled = Float64List(length);
+    for (var i = 0; i < length; i++) {
+      downsampled[i] = slice[i * step];
+    }
+    slice = downsampled;
+    waveletRate /= step;
+  }
+
   _ComputeMorletDart? computeMorlet;
   _FreeMorletDart? freeMorlet;
 
@@ -2935,7 +2950,7 @@ List<List<double>> _isolateComputeMorletTf(
     final resultPtr = computeMorlet(
       signalPtr,
       slice.length,
-      srate,
+      waveletRate,
       freqsPtr,
       freqs.length,
       true,
@@ -2955,7 +2970,7 @@ List<List<double>> _isolateComputeMorletTf(
           res.powerLen == res.nFreqs * res.nSamples;
       if (!dimensionsAreValid) {
         freeMorlet(resultPtr);
-        return sp.computeMorletTf(slice, srate, freqs);
+        return sp.computeMorletTf(slice, waveletRate, freqs);
       }
       final totalPowerElements = res.powerLen;
       final nativePower = res.power.asTypedList(totalPowerElements);
@@ -2971,7 +2986,7 @@ List<List<double>> _isolateComputeMorletTf(
     }
   }
 
-  return sp.computeMorletTf(slice, srate, freqs);
+  return sp.computeMorletTf(slice, waveletRate, freqs);
 }
 
 class _SpectrogramResultData {
