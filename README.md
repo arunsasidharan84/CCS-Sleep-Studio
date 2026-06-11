@@ -1,5 +1,15 @@
 # ScoringNidra - The High-Performance Sleep EEG Visualization, Annotation & Scoring Software
 
+<p align="center">
+  <img src="screenshots/ccs_logo.png" width="200" alt="CCS NIMHANS Logo">
+</p>
+
+<p align="center">
+  Developed by the <b>Team from Centre for Consciousness Studies (CCS)</b>,<br>
+  Department of Neurophysiology,<br>
+  <b>National Institute of Mental Health and Neurosciences (NIMHANS)</b>, Bangalore, India.
+</p>
+
 **Version:** 1.0.4
 
 Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, and automated sleep staging.
@@ -69,8 +79,8 @@ ScoringNidra incorporates a comprehensive suite of automatic sleep scorers power
     8.  **Dreamento**: Feature-engineered YASA classifier.
     9.  **SleepEEGpy**: Standard MNE/YASA scorer.
 *   **Sequence Correction (SleepGPT)**: An optional sequence correction pass applied to base stagers to correct unphysiological stage transitions.
-*   **Batch Auto-scoring**: Queue multiple EDF files for sequential background auto-scoring. Includes live status monitoring and progress log output.
-*   **Easy Setup**: Includes "Clear" selection buttons for instant channel configuration when matching signals for staging.
+*   **Batch Auto-scoring**: Queue multiple EDF/ORB/SIGNAL files for sequential background auto-scoring. Includes live status monitoring and progress log output.
+*   **Interactive Checklists**: Configure stager EEG, EOG, EMG, and Reference signals dynamically using checklist selectors instead of manual comma-separated text input fields.
 
 ![Autoscoring Configuration and Model Run](screenshots/autoscoring_snapshot.png)
 
@@ -79,7 +89,8 @@ ScoringNidra incorporates a comprehensive suite of automatic sleep scorers power
 ## 🎨 New UI Features
 
 We have enriched the UI with several flexibility and control improvements:
-*   **Adjustable Flex Ratios**: Customize the relative vertical grid sizes of the Spectrogram, Hypnogram, and Periodogram plot panels directly via the configuration dialog to suit different screen sizes and resolutions.
+*   **Smooth Draggable Plot Borders**: Manually adjust the vertical boundaries between the Spectrogram, Hypnogram, and Periodogram panels in real time by dragging. Resizing is cumulative, smooth, locked to respect screen size limits, and is automatically saved to the recording's `.config.json` file.
+*   **Consolidated Batch Tab**: Consolidates all batch auto-scoring and batch AnalyseNidra setups under a dedicated, clean, multi-column "Batch" tab, with automatic tab switching when triggered from platform/in-app menus. (In Lite builds, Python automated scoring is completely hidden, exposing only the Rust-based AnalyseNidra features analysis).
 *   **Hypnogram Horizontal Zoom**: View the hypnogram step chart fully (Full Night) or zoom in on 100, 200, or 400 epoch windows centered around the active epoch. All mouse taps map correctly to coordinates within the zoomed viewport.
 *   **Wavelet Spectre Toggle**: Easily toggle the complex Morlet wavelet spectrogram panel on or off to save vertical screen space.
 *   **Slow Wave Activity (SWA) Toggle**: Show or hide the SWA delta-power overlay on the hypnogram timeline, hiding its slider controls when inactive.
@@ -121,6 +132,7 @@ We have enriched the UI with several flexibility and control improvements:
 *   **Erase events in selection**: Draw selection boxes and press `Backspace` to delete all events inside the drawn region.
 
 ### File Formats & Loaders
+*   **Orbit (.orb / .signal) File Loader**: Native binary and JSON-lines parser for Orbit recordings, complete with gap-filling, linear interpolation, and automatic calibration scaling.
 *   **EDF+ Annotations Reader**: Parses TAL structures directly from annotations channels.
 *   **Polyman CSV Interval Loader**: Imports sleep events and labels from Polyman text logs.
 *   **YASA List Parser**: Retains epoch alignment by preserving empty lines as unscored elements.
