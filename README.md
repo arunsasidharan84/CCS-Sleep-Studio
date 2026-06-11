@@ -22,14 +22,14 @@ We compile two distinct variants of **ScoringNidra** automatically via GitHub Ac
 *   **ScoringNidra (Full)**: Includes manual scoring, loaders, detections, plus the packaged Python ML runtime to run automated staging models locally.
 *   **ScoringNidra-lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, and loaders, with a significantly smaller download size (does not bundle Python runtimes).
 
-| Operating System | Variant | Package Type | Download Link |
-|------------------|---------|--------------|---------------|
-| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) |
-| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
-| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
-| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
-| **Linux** | **Full** | x64 Tarball | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) |
-| | **Lite** | x64 Tarball | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) |
+| Operating System | Variant | Package Type | Download Link | Downloads |
+|------------------|---------|--------------|---------------|-----------|
+| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) | [![macOS Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-macos.zip?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) |
+| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) | [![macOS Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-macos.zip?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
+| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) | [![Windows Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-Installer.exe?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
+| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) | [![Windows Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-Installer.exe?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
+| **Linux** | **Full** | x64 Tarball | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) | [![Linux Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-linux.tar.gz?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) |
+| | **Lite** | x64 Tarball | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) | [![Linux Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-linux.tar.gz?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) |
 
 ### For macOS Users
 Because the application is signed ad-hoc, you must clear the macOS Gatekeeper quarantine flag after extracting:

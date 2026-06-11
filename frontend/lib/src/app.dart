@@ -1339,6 +1339,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
     );
   }
 
+  void _showDownloadStats() {
+    showDialog(
+      context: context,
+      builder: (context) => const _DownloadStatsDialog(),
+    );
+  }
+
   Future<void> _loadSleeptripEvents() async {
     final v = _viewport;
     if (v == null) {
@@ -2340,6 +2347,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
             label: 'Signal selection box  [Ctrl+H]',
             onSelected: _showSelectionHelp,
           ),
+          PlatformMenuItem(
+            label: 'Release Download Statistics',
+            onSelected: _showDownloadStats,
+          ),
         ],
       ),
     ];
@@ -2594,6 +2605,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> {
               MenuItemButton(
                 onPressed: _showSelectionHelp,
                 child: const Text('Signal selection box  [Ctrl+H]'),
+              ),
+              MenuItemButton(
+                onPressed: _showDownloadStats,
+                child: const Text('Release Download Statistics'),
               ),
             ],
             child: const Text('Help'),
@@ -5614,6 +5629,262 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
           child: Text(_isFinished ? 'Close' : 'Processing…'),
         ),
       ],
+    );
+  }
+}
+
+class _DownloadStatsDialog extends StatefulWidget {
+  const _DownloadStatsDialog({super.key});
+
+  @override
+  State<_DownloadStatsDialog> createState() => _DownloadStatsDialogState();
+}
+
+class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<Map<String, dynamic>> _assets = [];
+  int _totalDownloads = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStats();
+  }
+
+  Future<void> _fetchStats() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await client.getUrl(Uri.parse(
+          'https://api.github.com/repos/arunsasidharan84/ScoringNidra/releases/tags/latest'));
+      request.headers.set(HttpHeaders.userAgentHeader, 'ScoringNidra-App');
+      final response = await request.close();
+
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(responseBody);
+        final assetsList = json['assets'] as List<dynamic>?;
+        if (assetsList != null) {
+          final List<Map<String, dynamic>> loadedAssets = [];
+          int total = 0;
+          final expectedAssetNames = {
+            'ScoringNidra-macos.zip': 'macOS (Full Edition)',
+            'ScoringNidra-lite-macos.zip': 'macOS (Lite Edition)',
+            'ScoringNidra-Installer.exe': 'Windows (Full Edition)',
+            'ScoringNidra-lite-Installer.exe': 'Windows (Lite Edition)',
+            'ScoringNidra-linux.tar.gz': 'Linux (Full Edition)',
+            'ScoringNidra-lite-linux.tar.gz': 'Linux (Lite Edition)',
+          };
+
+          for (final asset in assetsList) {
+            final name = asset['name'] as String?;
+            final count = asset['download_count'] as int? ?? 0;
+            if (name != null && expectedAssetNames.containsKey(name)) {
+              loadedAssets.add({
+                'filename': name,
+                'displayName': expectedAssetNames[name],
+                'count': count,
+              });
+              total += count;
+            }
+          }
+          final order = expectedAssetNames.keys.toList();
+          loadedAssets.sort((a, b) {
+            final idxA = order.indexOf(a['filename'] as String);
+            final idxB = order.indexOf(b['filename'] as String);
+            return idxA.compareTo(idxB);
+          });
+
+          if (mounted) {
+            setState(() {
+              _assets = loadedAssets;
+              _totalDownloads = total;
+              _isLoading = false;
+            });
+          }
+        } else {
+          throw Exception('Invalid response structure: assets field missing');
+        }
+      } else {
+        throw Exception('Server returned status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+      backgroundColor: Colors.white,
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud_download_outlined, color: Color(0xFF3B6EA5), size: 28),
+                const SizedBox(width: 12),
+                Text(
+                  'Release Download Statistics',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 32, thickness: 1),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48.0),
+                child: Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B6EA5)),
+                      ),
+                      SizedBox(height: 16),
+                      Text('Fetching statistics from GitHub...', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              )
+            else if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0),
+                child: Column(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Failed to load download statistics.',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B6EA5),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: _fetchStats,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              Container(
+                color: Colors.grey[100],
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Platform / Variant', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Downloads', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_assets.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                  child: Center(
+                    child: Text('No assets found in the latest release.', style: TextStyle(color: Colors.grey)),
+                  ),
+                )
+              else
+                ..._assets.map((asset) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              asset['displayName'] as String,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              asset['filename'] as String,
+                              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '${asset['count']}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF3B6EA5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              const Divider(height: 24, thickness: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Downloads',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      '$_totalDownloads',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const Divider(height: 32, thickness: 1),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close', style: TextStyle(color: Color(0xFF3B6EA5))),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
