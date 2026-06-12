@@ -11,3 +11,7 @@ safetensors
 torch
 matplotlib
 gssc
+physioex
+braindecode
+lunapi
+usleep-api

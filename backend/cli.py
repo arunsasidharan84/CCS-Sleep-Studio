@@ -23,14 +23,15 @@ except Exception:
     pass
 
 import argparse
+import json
 from pathlib import Path
 
 if __package__:
     from .scorer import scan_channels, score_file
-    from .algorithms import available_algorithms
+    from .algorithms import algorithm_availability, available_algorithms
 else:
     from scorer import scan_channels, score_file
-    from algorithms import available_algorithms
+    from algorithms import algorithm_availability, available_algorithms
 
 
 def parse_csv(value: str | None) -> list[str]:
@@ -46,7 +47,7 @@ def log(message: str) -> None:
 def main() -> None:
     algorithms = available_algorithms()
     parser = argparse.ArgumentParser(description="Automated 30-second sleep staging from EEG.")
-    parser.add_argument("data_file", help="Input EDF/BDF/GDF/FIF/SET file.")
+    parser.add_argument("data_file", nargs="?", help="Input EDF/BDF/GDF/FIF/SET file.")
     parser.add_argument("--out-dir", default=None, help="Output directory. Defaults beside the input file.")
     parser.add_argument("--algorithm", choices=sorted(algorithms), default="yasa")
     parser.add_argument("--sequence-correction", choices=["none", "sleepgpt"], default="none")
@@ -57,7 +58,17 @@ def main() -> None:
     parser.add_argument("--sleepgpt-alpha", type=float, default=0.1)
     parser.add_argument("--sleepgpt-ngram", type=int, default=30)
     parser.add_argument("--list-channels", action="store_true", help="Print detected channels and exit.")
+    parser.add_argument("--check-models", action="store_true", help="Validate packaged model dependencies and exit.")
     args = parser.parse_args()
+
+    if args.check_models:
+        availability = algorithm_availability()
+        print(json.dumps(availability, indent=2), flush=True)
+        if not all(item["available"] for item in availability.values()):
+            raise SystemExit(2)
+        return
+    if not args.data_file:
+        parser.error("data_file is required unless --check-models is used")
 
     channels, guesses, sfreq, duration_sec = scan_channels(args.data_file)
     if args.list_channels:

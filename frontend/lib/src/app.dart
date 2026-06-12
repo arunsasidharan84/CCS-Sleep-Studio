@@ -51,7 +51,8 @@ class ScoringNidraHome extends StatefulWidget {
   State<ScoringNidraHome> createState() => _ScoringNidraHomeState();
 }
 
-class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerProviderStateMixin {
+class _ScoringNidraHomeState extends State<ScoringNidraHome>
+    with SingleTickerProviderStateMixin {
   final EegBackend _backend = EegBackend();
   final FocusNode _viewerFocusNode = FocusNode();
   AppConfig _config = AppConfig();
@@ -79,8 +80,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
   // Batch AnalyseNidra State
   final List<Map<String, String>> _batchAnalysePairs = [];
-  final TextEditingController _batchAnalyseEegController = TextEditingController(text: 'AF7,AF8');
-  final TextEditingController _batchAnalyseRefController = TextEditingController(text: 'PPG');
+  final TextEditingController _batchAnalyseEegController =
+      TextEditingController(text: 'AF7,AF8');
+  final TextEditingController _batchAnalyseRefController =
+      TextEditingController(text: 'PPG');
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -113,25 +116,25 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       kind == 'mat'
           ? 'Opening MAT file picker…'
           : (kind == 'orbit'
-              ? 'Opening Orbit file picker…'
-              : 'Opening EDF file picker…'),
+                ? 'Opening Orbit file picker…'
+                : 'Opening EDF file picker…'),
     );
     final result = await FilePicker.pickFiles(
       dialogTitle: kind == 'mat'
           ? 'Load EEGLAB structure (.mat)'
           : (kind == 'r09'
-              ? 'Load Zurich file (.r09)'
-              : (kind == 'orbit'
-                  ? 'Load Orbit file (.orb, .signal)'
-                  : 'Load EDF/Orbit file (.edf, .orb, .signal)')),
+                ? 'Load Zurich file (.r09)'
+                : (kind == 'orbit'
+                      ? 'Load Orbit file (.orb, .signal)'
+                      : 'Load EDF/Orbit file (.edf, .orb, .signal)')),
       type: FileType.custom,
       allowedExtensions: kind == 'mat'
           ? ['mat']
           : (kind == 'r09'
-              ? ['r09']
-              : (kind == 'orbit'
-                  ? ['orb', 'signal']
-                  : ['edf', 'orb', 'signal'])),
+                ? ['r09']
+                : (kind == 'orbit'
+                      ? ['orb', 'signal']
+                      : ['edf', 'orb', 'signal'])),
     );
     final path = result?.files.single.path;
     if (path == null) {
@@ -506,7 +509,11 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     _setStatus('No more disagreement epochs found');
   }
 
-  void _updateFlexValues(int spectrogramFlex, int hypnogramFlex, int periodogramFlex) async {
+  void _updateFlexValues(
+    int spectrogramFlex,
+    int hypnogramFlex,
+    int periodogramFlex,
+  ) async {
     setState(() {
       _config.spectrogramFlex = spectrogramFlex;
       _config.hypnogramFlex = hypnogramFlex;
@@ -842,6 +849,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     final logLines = <String>[];
     final scrollController = ScrollController();
     var isDone = false;
+    var progress = 0.0;
+    var progressLabel = 'Starting scoring backend...';
     String? outputJsonPath;
     StateSetter? setStateDialogRef;
 
@@ -860,12 +869,20 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Executing python backend scoring process…',
+                    Text(
+                      progressLabel,
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
-                    const LinearProgressIndicator(),
+                    LinearProgressIndicator(value: progress),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(progress * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black54,
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     Expanded(
                       child: Container(
@@ -920,12 +937,19 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       _setStatus('Spawning automated sleep scoring backend…');
       try {
         void onLine(String line) {
+          final update = _scoringProgressFromLine(line);
+          if (update != null) {
+            progress = math.max(progress, update.$1);
+            progressLabel = update.$2;
+          }
           logsController.add(line);
           logLines.add(line);
           setStateDialogRef?.call(() {});
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (scrollController.hasClients) {
-              scrollController.jumpTo(scrollController.position.maxScrollExtent);
+              scrollController.jumpTo(
+                scrollController.position.maxScrollExtent,
+              );
             }
           });
         }
@@ -950,7 +974,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           );
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (scrollController.hasClients) {
-              scrollController.jumpTo(scrollController.position.maxScrollExtent);
+              scrollController.jumpTo(
+                scrollController.position.maxScrollExtent,
+              );
             }
           });
 
@@ -1612,7 +1638,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       if (Platform.isMacOS) {
         await Process.run('open', [path]);
       } else if (Platform.isWindows) {
-        await Process.run('cmd.exe', ['/c', 'start', '""', path], runInShell: true);
+        await Process.run('cmd.exe', [
+          '/c',
+          'start',
+          '""',
+          path,
+        ], runInShell: true);
       } else if (Platform.isLinux) {
         await Process.run('xdg-open', [path]);
       }
@@ -1644,6 +1675,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     Map<String, dynamic>? spindleData;
     Map<String, dynamic>? slowWaveData;
     Map<String, dynamic>? pacData;
+    List<Map<String, String>> regionalRows = const [];
 
     if (_activePath != null) {
       final base = _sidecarPath(_activePath!, '');
@@ -1651,34 +1683,48 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       final spindleFile = File('${base}_analyse_spindles.json');
       final slowWaveFile = File('${base}_analyse_slow_waves.json');
       final pacFile = File('${base}_analyse_pac.json');
+      final regionalFile = File('${base}_analyse_regional.csv');
 
       try {
         if (await coreFile.exists()) {
-          coreData = jsonDecode(await coreFile.readAsString()) as Map<String, dynamic>;
+          coreData =
+              jsonDecode(await coreFile.readAsString()) as Map<String, dynamic>;
         }
       } catch (e) {
         print('Error parsing core features sidecar: $e');
       }
       try {
         if (await spindleFile.exists()) {
-          spindleData = jsonDecode(await spindleFile.readAsString()) as Map<String, dynamic>;
+          spindleData =
+              jsonDecode(await spindleFile.readAsString())
+                  as Map<String, dynamic>;
         }
       } catch (e) {
         print('Error parsing spindle features sidecar: $e');
       }
       try {
         if (await slowWaveFile.exists()) {
-          slowWaveData = jsonDecode(await slowWaveFile.readAsString()) as Map<String, dynamic>;
+          slowWaveData =
+              jsonDecode(await slowWaveFile.readAsString())
+                  as Map<String, dynamic>;
         }
       } catch (e) {
         print('Error parsing slow-wave features sidecar: $e');
       }
       try {
         if (await pacFile.exists()) {
-          pacData = jsonDecode(await pacFile.readAsString()) as Map<String, dynamic>;
+          pacData =
+              jsonDecode(await pacFile.readAsString()) as Map<String, dynamic>;
         }
       } catch (e) {
         print('Error parsing PAC features sidecar: $e');
+      }
+      try {
+        if (await regionalFile.exists()) {
+          regionalRows = _parseCsvTable(await regionalFile.readAsString());
+        }
+      } catch (e) {
+        print('Error parsing regional features sidecar: $e');
       }
     }
 
@@ -1694,7 +1740,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
         .length;
     final totalMinutes = v.epochCount * v.epochSeconds / 60.0;
     final sleepMinutes = sleepEpochs * v.epochSeconds / 60.0;
-    final efficiency = totalMinutes <= 0 ? 0.0 : sleepMinutes / totalMinutes * 100.0;
+    final efficiency = totalMinutes <= 0
+        ? 0.0
+        : sleepMinutes / totalMinutes * 100.0;
 
     final n2Count = v.stages.where((s) => s == SleepStage.n2).length;
     final n3Count = v.stages.where((s) => s == SleepStage.n3).length;
@@ -1705,19 +1753,56 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     // ----------------- PAGE 1: SLEEP ARCHITECTURE -----------------
     final p1 = PdfPageBuilder();
 
-    // Title
-    p1.drawText('CLINICAL SLEEP SCORING & ARCHITECTURE REPORT', 50, 745, bold: true, size: 13);
-    p1.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
+    p1.drawRgbRect(36, 724, 540, 48, 0.05, 0.18, 0.31);
+    p1.drawText(
+      'SCORINGNIDRA QUANTITATIVE SLEEP REPORT',
+      52,
+      750,
+      bold: true,
+      size: 15,
+      r: 1,
+      g: 1,
+      b: 1,
+    );
+    p1.drawText(
+      'Sleep architecture and AnalyseNidra quantitative EEG summary',
+      52,
+      734,
+      size: 8.5,
+      r: 0.75,
+      g: 0.86,
+      b: 0.96,
+    );
 
     // Metadata Block
-    p1.drawRect(50, 610, 512, 85, fill: false, gray: 0.6);
+    p1.drawRgbRect(50, 610, 512, 85, 0.96, 0.98, 1.0);
     p1.drawText('Recording Details', 60, 680, bold: true, size: 10);
     p1.drawLine(60, 676, 170, 676, width: 0.5, gray: 0.5);
 
-    p1.drawText('File Name: ${_basename(_activePath ?? v.sourceDescription)}', 60, 660, size: 9);
-    p1.drawText('Total Epochs: ${v.epochCount} (${v.epochSeconds} seconds each)', 60, 645, size: 9);
-    p1.drawText('Total Duration: ${totalMinutes.toStringAsFixed(1)} minutes', 60, 630, size: 9);
-    p1.drawText('Scored Epochs: $scored / ${v.epochCount} (${(scored / v.epochCount * 100).toStringAsFixed(1)}%)', 60, 615, size: 9);
+    p1.drawText(
+      'File Name: ${_basename(_activePath ?? v.sourceDescription)}',
+      60,
+      660,
+      size: 9,
+    );
+    p1.drawText(
+      'Total Epochs: ${v.epochCount} (${v.epochSeconds} seconds each)',
+      60,
+      645,
+      size: 9,
+    );
+    p1.drawText(
+      'Total Duration: ${totalMinutes.toStringAsFixed(1)} minutes',
+      60,
+      630,
+      size: 9,
+    );
+    p1.drawText(
+      'Scored Epochs: $scored / ${v.epochCount} (${(scored / v.epochCount * 100).toStringAsFixed(1)}%)',
+      60,
+      615,
+      size: 9,
+    );
 
     // Sleep Architecture Section
     p1.drawText('Sleep Architecture Summary', 50, 580, bold: true, size: 11);
@@ -1742,9 +1827,17 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     for (final entry in stagesList) {
       final count = v.stages.where((s) => s == entry.$1).length;
       final minutes = count * v.epochSeconds / 60.0;
-      final pct = sleepMinutes <= 0 ? 0.0 : (entry.$1 == SleepStage.wake ? 0.0 : (minutes / sleepMinutes * 100.0));
-      final pctStr = entry.$1 == SleepStage.wake ? 'N/A' : '${pct.toStringAsFixed(1)} %';
+      final pct = sleepMinutes <= 0
+          ? 0.0
+          : (entry.$1 == SleepStage.wake
+                ? 0.0
+                : (minutes / sleepMinutes * 100.0));
+      final pctStr = entry.$1 == SleepStage.wake
+          ? 'N/A'
+          : '${pct.toStringAsFixed(1)} %';
 
+      final color = _pdfStageColor(entry.$1);
+      p1.drawRgbRect(51, y + 1, 5, 16, color.$1, color.$2, color.$3);
       p1.drawText(entry.$2, 60, y + 4, size: 9);
       p1.drawText('$count', 200, y + 4, size: 9);
       p1.drawText(minutes.toStringAsFixed(1), 320, y + 4, size: 9);
@@ -1757,7 +1850,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     p1.drawRect(50, y, 512, 18, gray: 0.95);
     p1.drawText('Total Sleep Time (TST)', 60, y + 4, bold: true, size: 9);
     p1.drawText('$sleepEpochs', 200, y + 4, bold: true, size: 9);
-    p1.drawText(sleepMinutes.toStringAsFixed(1), 320, y + 4, bold: true, size: 9);
+    p1.drawText(
+      sleepMinutes.toStringAsFixed(1),
+      320,
+      y + 4,
+      bold: true,
+      size: 9,
+    );
     p1.drawText('100.0 %', 440, y + 4, bold: true, size: 9);
     p1.drawLine(50, y, 562, y, width: 0.5, gray: 0.5);
 
@@ -1765,14 +1864,36 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
     // Metrics Box
     p1.drawRect(50, y - 50, 512, 60, fill: false, gray: 0.6);
-    p1.drawText('Sleep Efficiency: ${efficiency.toStringAsFixed(1)} %  (Total Sleep Time / Recording Time)', 65, y - 15, bold: true, size: 9);
-    p1.drawText('Latency to N1: ${_getStageLatency(v, SleepStage.n1)} min', 65, y - 30, size: 9);
-    p1.drawText('Latency to REM: ${_getStageLatency(v, SleepStage.rem)} min', 65, y - 45, size: 9);
+    p1.drawText(
+      'Sleep Efficiency: ${efficiency.toStringAsFixed(1)} %  (Total Sleep Time / Recording Time)',
+      65,
+      y - 15,
+      bold: true,
+      size: 9,
+    );
+    p1.drawText(
+      'Latency to N1: ${_getStageLatency(v, SleepStage.n1)} min',
+      65,
+      y - 30,
+      size: 9,
+    );
+    p1.drawText(
+      'Latency to REM: ${_getStageLatency(v, SleepStage.rem)} min',
+      65,
+      y - 45,
+      size: 9,
+    );
 
     y -= 60;
 
     // Draw Vector Hypnogram step chart
-    p1.drawText('Hypnogram (Sleep Stage Timeline)', 50, y, bold: true, size: 10);
+    p1.drawText(
+      'Hypnogram (Sleep Stage Timeline)',
+      50,
+      y,
+      bold: true,
+      size: 10,
+    );
     p1.drawLine(50, y - 5, 562, y - 5, width: 0.5, gray: 0.4);
     y -= 140;
 
@@ -1799,27 +1920,53 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     // Draw frame bounding box
     p1.drawRect(80, y, 482, 120, fill: false, gray: 0.5);
 
-    // Draw uncertain background stripes (light gray)
+    // Draw uncertain background stripes.
     for (var i = 0; i < v.epochCount; i++) {
       final isUncertain = i < v.stagesUncertain.length && v.stagesUncertain[i];
       if (isUncertain) {
         final xStart = 80 + (i / v.epochCount) * 482;
         final xEnd = 80 + ((i + 1) / v.epochCount) * 482;
-        p1.drawRect(xStart, y, (xEnd - xStart).clamp(0.5, 482.0), 120, gray: 0.95, fill: true);
+        p1.drawRect(
+          xStart,
+          y,
+          (xEnd - xStart).clamp(0.5, 482.0),
+          120,
+          gray: 0.95,
+          fill: true,
+        );
       }
     }
 
-    // Draw step line
+    // Draw stage-coloured blocks and a high-contrast step line.
     double? lastHypY;
     for (var i = 0; i < v.epochCount; i++) {
       final stage = v.stages[i];
       final yVal = stagesY[stage] ?? (y + 110.0); // default to Wake
       final xStart = 80 + (i / v.epochCount) * 482;
       final xEnd = 80 + ((i + 1) / v.epochCount) * 482;
+      final color = _pdfStageColor(stage);
+      p1.drawRgbRect(
+        xStart,
+        yVal - 9,
+        math.max(0.5, xEnd - xStart),
+        18,
+        color.$1,
+        color.$2,
+        color.$3,
+      );
 
-      p1.drawLine(xStart, yVal, xEnd, yVal, width: 1.0, gray: 0.2);
+      p1.drawRgbLine(xStart, yVal, xEnd, yVal, 0.05, 0.08, 0.12, width: 0.7);
       if (lastHypY != null && lastHypY != yVal) {
-        p1.drawLine(xStart, lastHypY, xStart, yVal, width: 1.0, gray: 0.2);
+        p1.drawRgbLine(
+          xStart,
+          lastHypY,
+          xStart,
+          yVal,
+          0.05,
+          0.08,
+          0.12,
+          width: 0.7,
+        );
       }
       lastHypY = yVal;
     }
@@ -1827,12 +1974,23 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     // Draw X-Axis Ticks & Labels
     final totalHours = (v.epochCount * v.epochSeconds) / 3600.0;
     p1.drawText('0.0h', 80, y - 12, size: 8);
-    p1.drawText('${(totalHours / 2).toStringAsFixed(1)}h', 310, y - 12, size: 8);
+    p1.drawText(
+      '${(totalHours / 2).toStringAsFixed(1)}h',
+      310,
+      y - 12,
+      size: 8,
+    );
     p1.drawText('${totalHours.toStringAsFixed(1)}h', 545, y - 12, size: 8);
     p1.drawText('Time (Hours)', 300, y - 25, size: 8, bold: true);
 
-    final totalPages = coreData != null ? 3 : 1;
-    p1.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
+    final totalPages =
+        1 + (coreData != null ? 2 : 0) + (regionalRows.isNotEmpty ? 1 : 0);
+    p1.drawText(
+      'Research-use quantitative summary; clinical interpretation remains the responsibility of a qualified reviewer.',
+      50,
+      40,
+      size: 7,
+    );
     p1.drawText('Page 1 of $totalPages', 520, 40, size: 8, bold: false);
     doc.addPage(p1.build());
 
@@ -1840,12 +1998,30 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     if (coreData != null) {
       // PAGE 2: Spindles and Slow Waves Summaries
       final p2 = PdfPageBuilder();
-      p2.drawText('QUANTITATIVE EEG ANALYSIS: SPINDLES & SLOW WAVES', 50, 745, bold: true, size: 13);
+      p2.drawText(
+        'QUANTITATIVE EEG ANALYSIS: SPINDLES & SLOW WAVES',
+        50,
+        745,
+        bold: true,
+        size: 13,
+      );
       p2.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
-      p2.drawText('Events detected during NREM sleep (N2 + N3) epochs.', 50, 715, size: 9, gray: 0.4);
+      p2.drawText(
+        'Events detected during NREM sleep (N2 + N3) epochs.',
+        50,
+        715,
+        size: 9,
+        gray: 0.4,
+      );
 
       // Spindles Table
-      p2.drawText('Sleep Spindles (YASA algorithm)', 50, 685, bold: true, size: 11);
+      p2.drawText(
+        'Sleep Spindles (YASA algorithm)',
+        50,
+        685,
+        bold: true,
+        size: 11,
+      );
       p2.drawLine(50, 680, 562, 680, width: 0.5, gray: 0.4);
 
       p2.drawRect(50, 655, 512, 18, gray: 0.85);
@@ -1857,7 +2033,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       p2.drawText('Avg Freq (Hz)', 490, 659, bold: true, size: 9);
 
       double y2 = 635;
-      final List<dynamic> spindleSummaries = (spindleData != null && spindleData['summary'] != null)
+      final List<dynamic> spindleSummaries =
+          (spindleData != null && spindleData['summary'] != null)
           ? spindleData['summary'] as List<dynamic>
           : [];
 
@@ -1897,7 +2074,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       p2.drawText('Coupling (ndPAC)', 460, y2 + 4, bold: true, size: 9);
 
       y2 -= 20;
-      final List<dynamic> slowWaveSummaries = (slowWaveData != null && slowWaveData['summary'] != null)
+      final List<dynamic> slowWaveSummaries =
+          (slowWaveData != null && slowWaveData['summary'] != null)
           ? slowWaveData['summary'] as List<dynamic>
           : [];
 
@@ -1921,18 +2099,42 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
         y2 -= 18;
       }
 
-      p2.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
-      p2.drawText('Page 2 of 3', 520, 40, size: 8, bold: false);
+      p2.drawText(
+        'Report generated by ScoringNidra.',
+        50,
+        40,
+        size: 8,
+        bold: false,
+      );
+      p2.drawText('Page 2 of $totalPages', 520, 40, size: 8, bold: false);
       doc.addPage(p2.build());
 
       // PAGE 3: Spectral features and Phase-Amplitude Coupling details
       final p3 = PdfPageBuilder();
-      p3.drawText('QUANTITATIVE EEG: SPECTRAL POWER & PAC ANALYSIS', 50, 745, bold: true, size: 13);
+      p3.drawText(
+        'QUANTITATIVE EEG: SPECTRAL POWER & PAC ANALYSIS',
+        50,
+        745,
+        bold: true,
+        size: 13,
+      );
       p3.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
-      p3.drawText('Spectral power and coupling calculated using FOOOF/IRASA/TensorPAC.', 50, 715, size: 9, gray: 0.4);
+      p3.drawText(
+        'Spectral power and coupling calculated using FOOOF/IRASA/TensorPAC.',
+        50,
+        715,
+        size: 9,
+        gray: 0.4,
+      );
 
       // Spectral Power Table
-      p3.drawText('EEG Spectral Band Power & ACW (averaged over 15s windows)', 50, 685, bold: true, size: 11);
+      p3.drawText(
+        'EEG Spectral Band Power & ACW (averaged over 15s windows)',
+        50,
+        685,
+        bold: true,
+        size: 11,
+      );
       p3.drawLine(50, 680, 562, 680, width: 0.5, gray: 0.4);
 
       p3.drawRect(50, 655, 512, 18, gray: 0.85);
@@ -1950,7 +2152,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           : {};
 
       for (final chan in channelsData.keys) {
-        final Map<String, dynamic> feats = channelsData[chan] is Map<String, dynamic>
+        final Map<String, dynamic> feats =
+            channelsData[chan] is Map<String, dynamic>
             ? channelsData[chan] as Map<String, dynamic>
             : {};
 
@@ -1963,10 +2166,30 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
           p3.drawText(chan, 60, y3 + 3, size: 9);
           p3.drawText(stage, 110, y3 + 3, size: 9);
-          p3.drawText('${(delta * 100).toStringAsFixed(1)} %', 170, y3 + 3, size: 9);
-          p3.drawText('${(theta * 100).toStringAsFixed(1)} %', 255, y3 + 3, size: 9);
-          p3.drawText('${(alpha * 100).toStringAsFixed(1)} %', 340, y3 + 3, size: 9);
-          p3.drawText('${(sigma * 100).toStringAsFixed(1)} %', 425, y3 + 3, size: 9);
+          p3.drawText(
+            '${(delta * 100).toStringAsFixed(1)} %',
+            170,
+            y3 + 3,
+            size: 9,
+          );
+          p3.drawText(
+            '${(theta * 100).toStringAsFixed(1)} %',
+            255,
+            y3 + 3,
+            size: 9,
+          );
+          p3.drawText(
+            '${(alpha * 100).toStringAsFixed(1)} %',
+            340,
+            y3 + 3,
+            size: 9,
+          );
+          p3.drawText(
+            '${(sigma * 100).toStringAsFixed(1)} %',
+            425,
+            y3 + 3,
+            size: 9,
+          );
           p3.drawText(acw.toStringAsFixed(2), 510, y3 + 3, size: 9);
 
           p3.drawLine(50, y3, 562, y3, width: 0.25, gray: 0.8);
@@ -1977,7 +2200,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       y3 -= 15;
 
       // Phase Amplitude Coupling (PAC) Section
-      p3.drawText('Phase-Amplitude Coupling (PAC) Modulation Index (MI)', 50, y3, bold: true, size: 11);
+      p3.drawText(
+        'Phase-Amplitude Coupling (PAC) Modulation Index (MI)',
+        50,
+        y3,
+        bold: true,
+        size: 11,
+      );
       p3.drawLine(50, y3 - 5, 562, y3 - 5, width: 0.5, gray: 0.4);
       y3 -= 30;
 
@@ -2011,9 +2240,194 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
         }
       }
 
-      p3.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
-      p3.drawText('Page 3 of 3', 520, 40, size: 8, bold: false);
+      p3.drawText(
+        'Report generated by ScoringNidra.',
+        50,
+        40,
+        size: 8,
+        bold: false,
+      );
+      p3.drawText('Page 3 of $totalPages', 520, 40, size: 8, bold: false);
       doc.addPage(p3.build());
+    }
+
+    if (regionalRows.isNotEmpty) {
+      final p = PdfPageBuilder();
+      p.drawRgbRect(36, 724, 540, 48, 0.05, 0.18, 0.31);
+      p.drawText(
+        'REGIONAL QUANTITATIVE EEG PROFILE',
+        52,
+        748,
+        bold: true,
+        size: 15,
+        r: 1,
+        g: 1,
+        b: 1,
+      );
+      p.drawText(
+        'AnalyseNidra regional aggregation across selected scalp channels',
+        52,
+        733,
+        size: 8.5,
+        r: 0.75,
+        g: 0.86,
+        b: 0.96,
+      );
+
+      final architecture = regionalRows.first;
+      final metricCards = <(String, String, String)>[
+        ('TST', _csvMetric(architecture, 'TST', decimals: 1), 'min'),
+        (
+          'Sleep efficiency',
+          _csvMetric(architecture, 'Sleep_efficiency', decimals: 1),
+          '%',
+        ),
+        ('WASO', _csvMetric(architecture, 'WASO', decimals: 1), 'min'),
+        ('Sleep onset', _csvMetric(architecture, 'SOL', decimals: 1), 'min'),
+        ('NREM', _csvMetric(architecture, 'NREM_duration', decimals: 1), 'min'),
+        ('Lempel-Ziv', _csvMetric(architecture, 'LZc', decimals: 3), ''),
+      ];
+      for (var i = 0; i < metricCards.length; i++) {
+        final col = i % 3;
+        final row = i ~/ 3;
+        final x = 50.0 + col * 172;
+        final top = 688.0 - row * 58;
+        p.drawRgbRect(x, top - 42, 158, 46, 0.95, 0.97, 0.99);
+        p.drawText(
+          metricCards[i].$1,
+          x + 9,
+          top - 10,
+          size: 7.5,
+          r: 0.28,
+          g: 0.36,
+          b: 0.45,
+        );
+        p.drawText(
+          '${metricCards[i].$2} ${metricCards[i].$3}',
+          x + 9,
+          top - 29,
+          bold: true,
+          size: 13,
+          r: 0.05,
+          g: 0.18,
+          b: 0.31,
+        );
+      }
+
+      p.drawText(
+        'Regional sleep microstructure',
+        50,
+        555,
+        bold: true,
+        size: 11,
+      );
+      p.drawText('Region', 58, 532, bold: true, size: 8);
+      p.drawText('Spindles', 145, 532, bold: true, size: 8);
+      p.drawText('Density/min', 215, 532, bold: true, size: 8);
+      p.drawText('Slow waves', 300, 532, bold: true, size: 8);
+      p.drawText('SW PTP uV', 380, 532, bold: true, size: 8);
+      p.drawText('ndPAC', 475, 532, bold: true, size: 8);
+      p.drawRgbRect(50, 525, 512, 20, 0.86, 0.91, 0.96);
+      var ry = 505.0;
+      for (final row in regionalRows.take(8)) {
+        final alternate = ((505 - ry) / 22).round().isOdd;
+        if (alternate) p.drawRgbRect(50, ry - 5, 512, 21, 0.97, 0.98, 0.99);
+        p.drawText(row['Chan'] ?? '-', 58, ry, bold: true, size: 8.5);
+        p.drawText(
+          _csvMetric(row, 'sp_all_Count', decimals: 0),
+          145,
+          ry,
+          size: 8.5,
+        );
+        p.drawText(
+          _csvMetric(row, 'sp_all_density', decimals: 2),
+          215,
+          ry,
+          size: 8.5,
+        );
+        p.drawText(
+          _csvMetric(row, 'sw_all_Count', decimals: 0),
+          300,
+          ry,
+          size: 8.5,
+        );
+        p.drawText(
+          _csvMetric(row, 'sw_all_PTP', decimals: 1),
+          380,
+          ry,
+          size: 8.5,
+        );
+        p.drawText(
+          _csvMetric(row, 'sw_all_ndPAC', decimals: 3),
+          475,
+          ry,
+          size: 8.5,
+        );
+        ry -= 22;
+      }
+
+      p.drawText(
+        'Relative spectral composition by sleep stage',
+        50,
+        305,
+        bold: true,
+        size: 11,
+      );
+      final bands = <(String, double, double, double)>[
+        ('Delta', 0.10, 0.35, 0.65),
+        ('Theta', 0.18, 0.58, 0.78),
+        ('Alpha', 0.31, 0.69, 0.55),
+        ('Sigma', 0.89, 0.55, 0.18),
+        ('Beta', 0.78, 0.30, 0.26),
+      ];
+      var sy = 272.0;
+      for (final stage in ['N1', 'N2', 'N3', 'REM']) {
+        p.drawText(stage, 52, sy + 3, bold: true, size: 8);
+        var x = 82.0;
+        final means = <double>[];
+        for (final band in ['Delta', 'Theta', 'Alpha', 'Sigma', 'Beta1']) {
+          final values = regionalRows
+              .map((row) => double.tryParse(row['${stage}_${band}_PSD'] ?? ''))
+              .whereType<double>()
+              .where((value) => value.isFinite)
+              .toList();
+          means.add(
+            values.isEmpty ? 0 : values.reduce((a, b) => a + b) / values.length,
+          );
+        }
+        final sum = means.fold<double>(0, (a, b) => a + b);
+        for (var i = 0; i < means.length; i++) {
+          final width = sum <= 0 ? 0.0 : 450 * means[i] / sum;
+          p.drawRgbRect(
+            x,
+            sy - 3,
+            width,
+            15,
+            bands[i].$2,
+            bands[i].$3,
+            bands[i].$4,
+          );
+          x += width;
+        }
+        sy -= 30;
+      }
+      var lx = 90.0;
+      for (final band in bands) {
+        p.drawRgbRect(lx, 135, 9, 9, band.$2, band.$3, band.$4);
+        p.drawText(band.$1, lx + 13, 136, size: 7.5);
+        lx += 88;
+      }
+      p.drawText(
+        'PSD segments are normalized within each displayed stage to emphasize spectral composition.',
+        50,
+        112,
+        size: 7.5,
+        r: 0.35,
+        g: 0.4,
+        b: 0.45,
+      );
+      p.drawText('Page $totalPages of $totalPages', 520, 40, size: 8);
+      doc.addPage(p.build());
     }
 
     final pdfBytes = doc.build();
@@ -2840,190 +3254,257 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           if (!buildLite) ...[
             Expanded(
               child: Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Color(0xFFD0D0D0)),
-              ),
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.psychology, color: Colors.purple),
-                        SizedBox(width: 8),
-                        Text(
-                          'Batch Automated Sleep Scoring',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    const Text(
-                      'Selected Recording Files (EDF/ORB/SIGNAL):',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 150,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFD0D0D0)),
-                        borderRadius: BorderRadius.circular(4),
-                        color: const Color(0xFFF9F9F9),
-                      ),
-                      child: _batchStagingFiles.isEmpty
-                          ? const Center(child: Text('No files selected'))
-                          : ListView.builder(
-                              itemCount: _batchStagingFiles.length,
-                              itemBuilder: (context, index) {
-                                final f = _batchStagingFiles[index];
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(_basename(f)),
-                                  subtitle: Text(f),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                                    onPressed: () {
-                                      setState(() {
-                                        _batchStagingFiles.removeAt(index);
-                                      });
-                                    },
-                                  ),
-                                );
-                              },
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFFD0D0D0)),
+                ),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.psychology, color: Colors.purple),
+                          SizedBox(width: 8),
+                          Text(
+                            'Batch Automated Sleep Scoring',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add Recording Files…'),
-                      onPressed: () async {
-                        final result = await FilePicker.pickFiles(
-                          dialogTitle: 'Select EEG files for batch auto-scoring',
-                          type: FileType.custom,
-                          allowedExtensions: ['edf', 'orb', 'signal'],
-                          allowMultiple: true,
-                        );
-                        if (result != null) {
-                          setState(() {
-                            for (final file in result.files) {
-                              if (file.path != null && !_batchStagingFiles.contains(file.path!)) {
-                                _batchStagingFiles.add(file.path!);
-                              }
-                            }
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _batchStagingAlgorithm,
-                      decoration: const InputDecoration(
-                        labelText: 'Base Scorer Algorithm',
-                        isDense: true,
-                        border: OutlineInputBorder(),
+                          ),
+                        ],
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'yasa', child: Text('YASA LightGBM Consensus')),
-                        DropdownMenuItem(value: 'usleep', child: Text('Offline U-Sleep Consensus')),
-                        DropdownMenuItem(value: 'luna', child: Text('Luna POPS Stager')),
-                        DropdownMenuItem(value: 'gssc', child: Text('Greifswald Classifier (GSSC)')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() => _batchStagingAlgorithm = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _batchStagingCorrection,
-                      decoration: const InputDecoration(
-                        labelText: 'Sequence Correction',
-                        isDense: true,
-                        border: OutlineInputBorder(),
+                      const Divider(height: 24),
+                      const Text(
+                        'Selected Recording Files (EDF/ORB/SIGNAL):',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'none', child: Text('None (Raw consensus predictions)')),
-                        DropdownMenuItem(value: 'sleepgpt', child: Text('SleepGPT Language Model')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() => _batchStagingCorrection = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Channel Mapping Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'EEG Channels (comma-separated)',
-                        hintText: 'e.g. AF7,AF8 or F3,F4',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: _batchStagingEeg.join(','),
-                      onChanged: (v) {
-                        setState(() {
-                          _batchStagingEeg.clear();
-                          _batchStagingEeg.addAll(v.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Reference Channels (comma-separated)',
-                        hintText: 'e.g. PPG or M1,M2',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: _batchStagingRef.join(','),
-                      onChanged: (v) {
-                        setState(() {
-                          _batchStagingRef.clear();
-                          _batchStagingRef.addAll(v.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          foregroundColor: Colors.white,
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 150,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFFD0D0D0)),
+                          borderRadius: BorderRadius.circular(4),
+                          color: const Color(0xFFF9F9F9),
                         ),
-                        onPressed: _batchStagingFiles.isEmpty
-                            ? null
-                            : () {
-                                final settings = {
-                                  'algorithm': _batchStagingAlgorithm,
-                                  'sequence_correction': _batchStagingCorrection,
-                                  'sleepgpt_alpha': 0.1,
-                                  'sleepgpt_ngram': 30,
-                                  'eeg': _batchStagingEeg,
-                                  'ref': _batchStagingRef,
-                                  'eog': _batchStagingEog,
-                                  'emg': _batchStagingEmg,
-                                };
-                                _executeBatchAutoScoring(_batchStagingFiles, settings);
-                              },
-                        child: const Text('Run Batch Auto-Scoring', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: _batchStagingFiles.isEmpty
+                            ? const Center(child: Text('No files selected'))
+                            : ListView.builder(
+                                itemCount: _batchStagingFiles.length,
+                                itemBuilder: (context, index) {
+                                  final f = _batchStagingFiles[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(_basename(f)),
+                                    subtitle: Text(f),
+                                    trailing: IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        size: 16,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _batchStagingFiles.removeAt(index);
+                                        });
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add Recording Files…'),
+                        onPressed: () async {
+                          final result = await FilePicker.pickFiles(
+                            dialogTitle:
+                                'Select EEG files for batch auto-scoring',
+                            type: FileType.custom,
+                            allowedExtensions: ['edf', 'orb', 'signal'],
+                            allowMultiple: true,
+                          );
+                          if (result != null) {
+                            setState(() {
+                              for (final file in result.files) {
+                                if (file.path != null &&
+                                    !_batchStagingFiles.contains(file.path!)) {
+                                  _batchStagingFiles.add(file.path!);
+                                }
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: _batchStagingAlgorithm,
+                        decoration: const InputDecoration(
+                          labelText: 'Base Scorer Algorithm',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'yasa',
+                            child: Text('YASA LightGBM Consensus'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'usleep',
+                            child: Text('Offline U-Sleep Consensus'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'luna',
+                            child: Text('Luna POPS Stager'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'gssc',
+                            child: Text('Greifswald Classifier (GSSC)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tinysleepnet',
+                            child: Text('TinySleepNet (PhysioEx)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'seqsleepnet',
+                            child: Text('SeqSleepNet (PhysioEx)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'sleeptransformer',
+                            child: Text('SleepTransformer (PhysioEx)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'dreamento',
+                            child: Text('Dreamento (YASA-based)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'sleepeegpy',
+                            child: Text('SleepEEGpy (YASA-based)'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _batchStagingAlgorithm = v);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: _batchStagingCorrection,
+                        decoration: const InputDecoration(
+                          labelText: 'Sequence Correction',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'none',
+                            child: Text('None (Raw consensus predictions)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'sleepgpt',
+                            child: Text('SleepGPT Language Model'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _batchStagingCorrection = v);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Channel Mapping Configuration:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        decoration: const InputDecoration(
+                          labelText: 'EEG Channels (comma-separated)',
+                          hintText: 'e.g. AF7,AF8 or F3,F4',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        initialValue: _batchStagingEeg.join(','),
+                        onChanged: (v) {
+                          setState(() {
+                            _batchStagingEeg.clear();
+                            _batchStagingEeg.addAll(
+                              v
+                                  .split(',')
+                                  .map((e) => e.trim())
+                                  .where((e) => e.isNotEmpty),
+                            );
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        decoration: const InputDecoration(
+                          labelText: 'Reference Channels (comma-separated)',
+                          hintText: 'e.g. PPG or M1,M2',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        initialValue: _batchStagingRef.join(','),
+                        onChanged: (v) {
+                          setState(() {
+                            _batchStagingRef.clear();
+                            _batchStagingRef.addAll(
+                              v
+                                  .split(',')
+                                  .map((e) => e.trim())
+                                  .where((e) => e.isNotEmpty),
+                            );
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: _batchStagingFiles.isEmpty
+                              ? null
+                              : () {
+                                  final settings = {
+                                    'algorithm': _batchStagingAlgorithm,
+                                    'sequence_correction':
+                                        _batchStagingCorrection,
+                                    'sleepgpt_alpha': 0.1,
+                                    'sleepgpt_ngram': 30,
+                                    'eeg': _batchStagingEeg,
+                                    'ref': _batchStagingRef,
+                                    'eog': _batchStagingEog,
+                                    'emg': _batchStagingEmg,
+                                  };
+                                  _executeBatchAutoScoring(
+                                    _batchStagingFiles,
+                                    settings,
+                                  );
+                                },
+                          child: const Text(
+                            'Run Batch Auto-Scoring',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-        ],
+            const SizedBox(width: 16),
+          ],
           // Right Column: Batch AnalyseNidra
           Expanded(
             child: Card(
@@ -3044,7 +3525,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                         SizedBox(width: 8),
                         Text(
                           'Batch AnalyseNidra (Region analysis)',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -3072,28 +3556,43 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                                 return ListTile(
                                   dense: true,
                                   title: Text('EEG: ${_basename(eeg)}'),
-                                  subtitle: Text('Scoring: ${_basename(scoring)}'),
+                                  subtitle: Text(
+                                    'Scoring: ${_basename(scoring)}',
+                                  ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
-                                        icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          size: 16,
+                                          color: Colors.grey,
+                                        ),
                                         tooltip: 'Select scoring file',
                                         onPressed: () async {
-                                          final result = await FilePicker.pickFiles(
-                                            dialogTitle: 'Select scoring JSON file',
-                                            type: FileType.custom,
-                                            allowedExtensions: ['json'],
-                                          );
-                                          if (result != null && result.files.single.path != null) {
+                                          final result =
+                                              await FilePicker.pickFiles(
+                                                dialogTitle:
+                                                    'Select scoring JSON file',
+                                                type: FileType.custom,
+                                                allowedExtensions: ['json'],
+                                              );
+                                          if (result != null &&
+                                              result.files.single.path !=
+                                                  null) {
                                             setState(() {
-                                              pair['scoringPath'] = result.files.single.path!;
+                                              pair['scoringPath'] =
+                                                  result.files.single.path!;
                                             });
                                           }
                                         },
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          size: 16,
+                                          color: Colors.red,
+                                        ),
                                         onPressed: () {
                                           setState(() {
                                             _batchAnalysePairs.removeAt(index);
@@ -3118,7 +3617,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                               type: FileType.custom,
                               allowedExtensions: ['edf', 'orb', 'signal'],
                             );
-                            if (result != null && result.files.single.path != null) {
+                            if (result != null &&
+                                result.files.single.path != null) {
                               setState(() {
                                 _batchAnalysePairs.add({
                                   'eegPath': result.files.single.path!,
@@ -3134,7 +3634,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                           label: const Text('Auto-pair Directory…'),
                           onPressed: () async {
                             final dir = await FilePicker.getDirectoryPath(
-                              dialogTitle: 'Select directory to auto-pair files',
+                              dialogTitle:
+                                  'Select directory to auto-pair files',
                             );
                             if (dir != null) {
                               final directory = Directory(dir);
@@ -3144,8 +3645,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                                 final List<String> scorings = [];
                                 for (final file in files) {
                                   if (file is File) {
-                                    final ext = file.path.split('.').last.toLowerCase();
-                                    if (ext == 'edf' || ext == 'orb' || ext == 'signal') {
+                                    final ext = file.path
+                                        .split('.')
+                                        .last
+                                        .toLowerCase();
+                                    if (ext == 'edf' ||
+                                        ext == 'orb' ||
+                                        ext == 'signal') {
                                       eegs.add(file.path);
                                     } else if (ext == 'json') {
                                       scorings.add(file.path);
@@ -3155,11 +3661,16 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
                                 setState(() {
                                   for (final eeg in eegs) {
-                                    final eegName = _basename(eeg).split('.').first;
+                                    final eegName = _basename(
+                                      eeg,
+                                    ).split('.').first;
                                     String matchedScoring = '';
                                     for (final scoring in scorings) {
-                                      final scName = _basename(scoring).split('.').first;
-                                      if (scName.contains(eegName) || eegName.contains(scName)) {
+                                      final scName = _basename(
+                                        scoring,
+                                      ).split('.').first;
+                                      if (scName.contains(eegName) ||
+                                          eegName.contains(scName)) {
                                         matchedScoring = scoring;
                                         break;
                                       }
@@ -3180,7 +3691,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                     TextFormField(
                       controller: _batchAnalyseEegController,
                       decoration: const InputDecoration(
-                        labelText: 'EEG Channels for analysis (comma-separated)',
+                        labelText:
+                            'EEG Channels for analysis (comma-separated)',
                         hintText: 'e.g. AF7,AF8',
                         isDense: true,
                         border: OutlineInputBorder(),
@@ -3190,7 +3702,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                     TextFormField(
                       controller: _batchAnalyseRefController,
                       decoration: const InputDecoration(
-                        labelText: 'Reference Channels for analysis (comma-separated)',
+                        labelText:
+                            'Reference Channels for analysis (comma-separated)',
                         hintText: 'e.g. PPG',
                         isDense: true,
                         border: OutlineInputBorder(),
@@ -3209,10 +3722,16 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                             ? null
                             : () {
                                 final validPairs = _batchAnalysePairs
-                                    .where((p) => (p['eegPath'] ?? '').isNotEmpty && (p['scoringPath'] ?? '').isNotEmpty)
+                                    .where(
+                                      (p) =>
+                                          (p['eegPath'] ?? '').isNotEmpty &&
+                                          (p['scoringPath'] ?? '').isNotEmpty,
+                                    )
                                     .toList();
                                 if (validPairs.isEmpty) {
-                                  _setStatus('Error: Mapped pairs must have both EEG and Scoring files.');
+                                  _setStatus(
+                                    'Error: Mapped pairs must have both EEG and Scoring files.',
+                                  );
                                   return;
                                 }
 
@@ -3237,7 +3756,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
                                 _runAnalyseNidraJobs(jobs, chans, refs);
                               },
-                        child: const Text('Run Batch AnalyseNidra', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Run Batch AnalyseNidra',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
@@ -3306,18 +3828,23 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                 child: Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    border: Border(bottom: BorderSide(color: Color(0xFFD0D0D0))),
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFD0D0D0)),
+                    ),
                   ),
                   child: TabBar(
                     controller: _tabController,
                     labelColor: Colors.black,
                     unselectedLabelColor: Colors.grey,
                     indicatorColor: Colors.blue,
-                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
                     unselectedLabelStyle: const TextStyle(fontSize: 13),
                     tabs: const [
                       Tab(text: 'Interactive Scoring'),
-                      Tab(text: 'Consolidated Batch'),
+                      Tab(text: 'Batch'),
                     ],
                   ),
                 ),
@@ -3355,7 +3882,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                                 viewport: viewport,
                                 onJump: (epoch) => _jumpToEpoch(epoch),
                                 swaSlider: _swaSlider,
-                                onSwaSlider: (v) => setState(() => _swaSlider = v),
+                                onSwaSlider: (v) =>
+                                    setState(() => _swaSlider = v),
                                 onSelectionEnd: _updateSelection,
                                 comparisonStages: _comparisonStages,
                                 tfEnabled: _config.tfEnabled,
@@ -3681,7 +4209,12 @@ class _ScoringHeroSurface extends StatefulWidget {
   onSelectionEnd;
   final List<SleepStage>? comparisonStages;
   final bool tfEnabled;
-  final void Function(int spectrogramFlex, int hypnogramFlex, int periodogramFlex) onResizeFlex;
+  final void Function(
+    int spectrogramFlex,
+    int hypnogramFlex,
+    int periodogramFlex,
+  )
+  onResizeFlex;
 
   @override
   State<_ScoringHeroSurface> createState() => _ScoringHeroSurfaceState();
@@ -3840,7 +4373,8 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                       child: _ClickablePainterPanel(
                         painter: SpectrogramPainter(widget.viewport),
                         onTapFraction: (fx) {
-                          final epoch = (fx * widget.viewport.epochCount).floor();
+                          final epoch = (fx * widget.viewport.epochCount)
+                              .floor();
                           widget.onJump(epoch + 1);
                         },
                       ),
@@ -3854,8 +4388,12 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                       },
                       onHorizontalDragUpdate: (dragDetails) {
                         _cumulativeDx += dragDetails.delta.dx;
-                        final deltaFlex = (_cumulativeDx * flexPerPixel).round();
-                        final newSpec = (_dragSpecStartFlex + deltaFlex).clamp(5, totalFlex - perFlex - 5);
+                        final deltaFlex = (_cumulativeDx * flexPerPixel)
+                            .round();
+                        final newSpec = (_dragSpecStartFlex + deltaFlex).clamp(
+                          5,
+                          totalFlex - perFlex - 5,
+                        );
                         final newHyp = totalFlex - newSpec - perFlex;
                         widget.onResizeFlex(newSpec, newHyp, perFlex);
                       },
@@ -3885,7 +4423,8 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                         ),
                         onTapFraction: (fx) {
                           final visibleCount = endEpoch - startEpoch;
-                          final epoch = startEpoch + (fx * visibleCount).floor();
+                          final epoch =
+                              startEpoch + (fx * visibleCount).floor();
                           widget.onJump(epoch + 1);
                         },
                       ),
@@ -3908,8 +4447,12 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                       },
                       onHorizontalDragUpdate: (dragDetails) {
                         _cumulativeDx += dragDetails.delta.dx;
-                        final deltaFlex = (_cumulativeDx * flexPerPixel).round();
-                        final newHyp = (_dragHypStartFlex + deltaFlex).clamp(5, totalFlex - specFlex - 5);
+                        final deltaFlex = (_cumulativeDx * flexPerPixel)
+                            .round();
+                        final newHyp = (_dragHypStartFlex + deltaFlex).clamp(
+                          5,
+                          totalFlex - specFlex - 5,
+                        );
                         final newPer = totalFlex - specFlex - newHyp;
                         widget.onResizeFlex(specFlex, newHyp, newPer);
                       },
@@ -4583,6 +5126,66 @@ String _sidecarPath(String path, String suffix) {
   final dot = path.lastIndexOf('.');
   final base = dot >= 0 ? path.substring(0, dot) : path;
   return '$base$suffix';
+}
+
+(double, double, double) _pdfStageColor(SleepStage stage) {
+  return switch (stage) {
+    SleepStage.wake => (0.34, 0.75, 0.55),
+    SleepStage.rem => (0.55, 0.75, 0.34),
+    SleepStage.n1 => (0.67, 0.74, 0.81),
+    SleepStage.n2 => (0.25, 0.36, 0.47),
+    SleepStage.n3 => (0.04, 0.11, 0.17),
+    SleepStage.inconclusive => (0.12, 0.12, 0.12),
+    SleepStage.unknown => (0.53, 0.53, 0.53),
+  };
+}
+
+List<Map<String, String>> _parseCsvTable(String source) {
+  final lines = const LineSplitter()
+      .convert(source)
+      .where((line) => line.trim().isNotEmpty)
+      .toList();
+  if (lines.length < 2) return const [];
+  final headers = _parseCsvLine(lines.first);
+  final rows = <Map<String, String>>[];
+  for (final line in lines.skip(1)) {
+    final values = _parseCsvLine(line);
+    rows.add({
+      for (var i = 0; i < headers.length; i++)
+        headers[i]: i < values.length ? values[i] : '',
+    });
+  }
+  return rows;
+}
+
+List<String> _parseCsvLine(String line) {
+  final fields = <String>[];
+  final current = StringBuffer();
+  var quoted = false;
+  for (var i = 0; i < line.length; i++) {
+    final char = line[i];
+    if (char == '"') {
+      if (quoted && i + 1 < line.length && line[i + 1] == '"') {
+        current.write('"');
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char == ',' && !quoted) {
+      fields.add(current.toString());
+      current.clear();
+    } else {
+      current.write(char);
+    }
+  }
+  fields.add(current.toString());
+  return fields;
+}
+
+String _csvMetric(Map<String, String> row, String key, {int decimals = 2}) {
+  final value = double.tryParse(row[key] ?? '');
+  if (value == null || !value.isFinite) return '-';
+  return value.toStringAsFixed(decimals);
 }
 
 String? _detectMatchingEdf(String scoringPath) {
@@ -5529,6 +6132,34 @@ String _outputPathFromLogs(List<String> lines) {
   return '';
 }
 
+(double, String)? _scoringProgressFromLine(String line) {
+  final protocol = RegExp(
+    r'PROGRESS\s+([01](?:\.\d+)?)\s+(.+)',
+  ).firstMatch(line);
+  if (protocol != null) {
+    return (
+      (double.tryParse(protocol.group(1)!) ?? 0).clamp(0.0, 1.0),
+      protocol.group(2)!.trim(),
+    );
+  }
+
+  final epochs = RegExp(
+    r'progress:\s*(\d+)/(\d+)\s+epochs',
+    caseSensitive: false,
+  ).firstMatch(line);
+  if (epochs != null) {
+    final done = int.tryParse(epochs.group(1)!) ?? 0;
+    final total = int.tryParse(epochs.group(2)!) ?? 0;
+    if (total > 0) {
+      return (
+        0.22 + 0.63 * (done / total).clamp(0.0, 1.0),
+        'Scoring epochs: $done of $total',
+      );
+    }
+  }
+  return null;
+}
+
 class BatchProgressDialog extends StatefulWidget {
   const BatchProgressDialog({
     super.key,
@@ -5568,6 +6199,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
   int _currentIndex = 0;
   bool _isFinished = false;
   bool _isCancelled = false;
+  double _fileProgress = 0.0;
+  String _progressLabel = 'Preparing next recording...';
 
   @override
   void initState() {
@@ -5587,8 +6220,13 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
 
   void _addLog(String line) {
     if (!mounted) return;
+    final update = _scoringProgressFromLine(line);
     setState(() {
       _logLines.add(line);
+      if (update != null) {
+        _fileProgress = math.max(_fileProgress, update.$1);
+        _progressLabel = update.$2;
+      }
     });
     _logsStream.add(line);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5612,6 +6250,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
         _currentFile = file;
         _statuses[file] = 'Scoring…';
         _logLines.clear();
+        _fileProgress = 0.0;
+        _progressLabel = 'Starting ${_basename(file)}...';
       });
       _addLog('--- Starting auto-scoring for ${_basename(file)} ---');
 
@@ -5811,7 +6451,12 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
                         ? 0
                         : _isFinished
                         ? 1
-                        : _currentIndex / widget.files.length,
+                        : (_currentIndex + _fileProgress) / widget.files.length,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _progressLabel,
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -5911,8 +6556,11 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 10);
     try {
-      final request = await client.getUrl(Uri.parse(
-          'https://api.github.com/repos/arunsasidharan84/ScoringNidra/releases/tags/latest'));
+      final request = await client.getUrl(
+        Uri.parse(
+          'https://api.github.com/repos/arunsasidharan84/ScoringNidra/releases/tags/latest',
+        ),
+      );
       request.headers.set(HttpHeaders.userAgentHeader, 'ScoringNidra-App');
       final response = await request.close();
 
@@ -5990,7 +6638,11 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
           children: [
             Row(
               children: [
-                const Icon(Icons.cloud_download_outlined, color: Color(0xFF3B6EA5), size: 28),
+                const Icon(
+                  Icons.cloud_download_outlined,
+                  color: Color(0xFF3B6EA5),
+                  size: 28,
+                ),
                 const SizedBox(width: 12),
                 Text(
                   'Release Download Statistics',
@@ -6009,10 +6661,15 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
                   child: Column(
                     children: [
                       CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B6EA5)),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF3B6EA5),
+                        ),
                       ),
                       SizedBox(height: 16),
-                      Text('Fetching statistics from GitHub...', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'Fetching statistics from GitHub...',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),
@@ -6022,7 +6679,11 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
                 padding: const EdgeInsets.symmetric(vertical: 24.0),
                 child: Column(
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.redAccent,
+                      size: 48,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'Failed to load download statistics.',
@@ -6050,12 +6711,21 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
             else ...[
               Container(
                 color: Colors.grey[100],
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Platform / Variant', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Downloads', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Platform / Variant',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Downloads',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
               ),
@@ -6064,13 +6734,19 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16.0),
                   child: Center(
-                    child: Text('No assets found in the latest release.', style: TextStyle(color: Colors.grey)),
+                    child: Text(
+                      'No assets found in the latest release.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ),
                 )
               else
                 ..._assets.map((asset) {
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 10.0,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -6079,12 +6755,18 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
                           children: [
                             Text(
                               asset['displayName'] as String,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               asset['filename'] as String,
-                              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
@@ -6108,7 +6790,10 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
                   children: [
                     const Text(
                       'Total Downloads',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     Text(
                       '$_totalDownloads',
@@ -6128,7 +6813,10 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close', style: TextStyle(color: Color(0xFF3B6EA5))),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(color: Color(0xFF3B6EA5)),
+                  ),
                 ),
               ],
             ),
@@ -6145,16 +6833,34 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
 class PdfPageBuilder {
   final List<String> commands = [];
 
-  void drawText(String text, double x, double y, {bool bold = false, double size = 10, double gray = 0.0}) {
+  void drawText(
+    String text,
+    double x,
+    double y, {
+    bool bold = false,
+    double size = 10,
+    double gray = 0.0,
+    double? r,
+    double? g,
+    double? b,
+  }) {
     final font = bold ? '/F2' : '/F1';
     final escaped = text
         .replaceAll('\\', '\\\\')
         .replaceAll('(', r'\(')
         .replaceAll(')', r'\)');
-    commands.add('BT $gray g $font $size Tf $x $y Td ($escaped) Tj ET');
+    final color = r == null ? '$gray g' : '$r ${g ?? 0} ${b ?? 0} rg';
+    commands.add('BT $color $font $size Tf $x $y Td ($escaped) Tj ET');
   }
 
-  void drawRect(double x, double y, double width, double height, {double gray = 0.9, bool fill = true}) {
+  void drawRect(
+    double x,
+    double y,
+    double width,
+    double height, {
+    double gray = 0.9,
+    bool fill = true,
+  }) {
     if (fill) {
       commands.add('$gray g $x $y $width $height re f 0 g');
     } else {
@@ -6162,8 +6868,40 @@ class PdfPageBuilder {
     }
   }
 
-  void drawLine(double x1, double y1, double x2, double y2, {double width = 0.5, double gray = 0.3}) {
+  void drawLine(
+    double x1,
+    double y1,
+    double x2,
+    double y2, {
+    double width = 0.5,
+    double gray = 0.3,
+  }) {
     commands.add('$width w $gray G $x1 $y1 m $x2 $y2 l S 0 G');
+  }
+
+  void drawRgbRect(
+    double x,
+    double y,
+    double width,
+    double height,
+    double r,
+    double g,
+    double b,
+  ) {
+    commands.add('$r $g $b rg $x $y $width $height re f 0 g');
+  }
+
+  void drawRgbLine(
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double r,
+    double g,
+    double b, {
+    double width = 0.5,
+  }) {
+    commands.add('$width w $r $g $b RG $x1 $y1 m $x2 $y2 l S 0 G');
   }
 
   String build() {
@@ -6223,4 +6961,3 @@ class SimplePdfDoc {
     return buffer.toString().codeUnits;
   }
 }
-

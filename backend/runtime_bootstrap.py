@@ -13,6 +13,13 @@ def configure_runtime() -> None:
     vendor_dir = backend_dir / "vendor"
     if vendor_dir.exists():
         vendor_path = str(vendor_dir)
+        # Keep the bundled runtime deterministic. Mixing vendored torch with a
+        # host torchvision/site-package installation causes binary ABI failures.
+        sys.path[:] = [
+            path
+            for path in sys.path
+            if "site-packages" not in path or Path(path).resolve() == vendor_dir.resolve()
+        ]
         if vendor_path in sys.path:
             sys.path.remove(vendor_path)
         sys.path.insert(0, vendor_path)

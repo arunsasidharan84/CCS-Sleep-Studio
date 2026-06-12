@@ -290,6 +290,7 @@ def prepare_raw_for_scoring(
     keep = _pick_existing(raw, keep)
     if not keep:
         raise ValueError("None of the selected channels were found in the data file.")
+    log("PROGRESS 0.05 Loading selected channels")
     log(f"Loading {len(keep)} selected channel(s).")
     raw.pick(keep)
     raw.load_data(verbose="ERROR")
@@ -302,6 +303,7 @@ def prepare_raw_for_scoring(
 
     eeg_ref_eog = _pick_existing(raw, eeg_channels + ref_channels + eog_channels)
     if eeg_ref_eog:
+        log("PROGRESS 0.12 Filtering EEG, reference, and EOG channels")
         log("Applying 0.3-35 Hz bandpass to EEG/reference/EOG channels.")
         raw.filter(l_freq=0.3, h_freq=35.0, picks=eeg_ref_eog, verbose=False)
 
@@ -312,6 +314,7 @@ def prepare_raw_for_scoring(
         raw.filter(l_freq=10.0, h_freq=h_freq, picks=emg_existing, verbose=False)
 
     if raw.info["sfreq"] != target_sfreq:
+        log("PROGRESS 0.18 Resampling recording")
         log(f"Resampling to {target_sfreq:g} Hz.")
         raw.resample(target_sfreq, verbose=False)
 
@@ -602,15 +605,6 @@ def score_file(
     data_file = Path(data_file)
     base = data_file.stem
 
-    raw, eeg, refs, eog_name, emg_name = prepare_raw_for_scoring(
-        data_file=data_file,
-        eeg_channels=eeg_channels,
-        ref_channels=ref_channels,
-        eog_channels=eog_channels,
-        emg_channels=emg_channels,
-        log=log,
-    )
-
     if __package__:
         from .algorithms import available_algorithms
     else:
@@ -622,10 +616,23 @@ def score_file(
         raise ValueError(f"Unsupported algorithm '{algorithm}'. Supported algorithms: {supported}")
 
     base_algorithm = algorithms[requested_algorithm]
+    base_algorithm.check_available()
+    log(f"Model preflight passed: {requested_algorithm}.")
+
+    raw, eeg, refs, eog_name, emg_name = prepare_raw_for_scoring(
+        data_file=data_file,
+        eeg_channels=eeg_channels,
+        ref_channels=ref_channels,
+        eog_channels=eog_channels,
+        emg_channels=emg_channels,
+        log=log,
+    )
+
     configure = getattr(base_algorithm, "configure", None)
     if callable(configure):
         configure(data_file=data_file, output_dir=output_dir)
     base_start = time.perf_counter()
+    log(f"PROGRESS 0.22 Running {requested_algorithm}")
     consensus_prob, per_channel_prob, montages_used = base_algorithm.score(raw, eeg, refs, eog_name, emg_name, log=log)
     base_elapsed = time.perf_counter() - base_start
     log(
@@ -636,6 +643,7 @@ def score_file(
     stages = stages_from_probabilities(consensus_prob)
     stage_algorithm = requested_algorithm
     if sequence_correction == "sleepgpt":
+        log("PROGRESS 0.86 Applying SleepGPT sequence correction")
         corrected = run_sleepgpt_correction(consensus_prob, alpha=sleepgpt_alpha, ngram=sleepgpt_ngram, log=log)
         if corrected:
             stages = corrected[: len(stages)]
@@ -652,6 +660,7 @@ def score_file(
     write_json(output_json, [stage_records, []])
     write_json(probability_json, consensus_prob.to_dict(orient="records"))
     write_json(per_channel_json, per_channel_prob.to_dict(orient="records"))
+    log("PROGRESS 1.00 Scoring complete")
     log(f"Saved ScoringHero JSON: {output_json}")
 
     return ScoreResult(

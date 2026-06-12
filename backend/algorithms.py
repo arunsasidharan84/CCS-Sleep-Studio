@@ -90,6 +90,9 @@ class SleepScoringAlgorithm(ABC):
     ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
         """Return consensus probabilities, per-channel probabilities, montages."""
 
+    def check_available(self) -> None:
+        """Raise AlgorithmUnavailable when the packaged runtime is incomplete."""
+
 
 def _stage_series_to_probabilities(stages: Sequence[str]) -> pd.DataFrame:
     normalized = []
@@ -126,6 +129,9 @@ class YasaAlgorithm(SleepScoringAlgorithm):
     label = "YASA / SleepEEGpy-compatible LightGBM"
     description = "Open-source YASA feature extraction with LightGBM staging."
 
+    def check_available(self) -> None:
+        import yasa  # noqa: F401
+
     def score(self, raw, eeg_channels, ref_channels, eog_name, emg_name, log):
         import yasa
 
@@ -133,7 +139,7 @@ class YasaAlgorithm(SleepScoringAlgorithm):
         per_channel_rows: list[pd.DataFrame] = []
         montages_used: list[str] = []
 
-        for eeg in eeg_channels:
+        for eeg_index, eeg in enumerate(eeg_channels):
             try:
                 if ref_channels and not is_prereferenced_channel(eeg):
                     ref = _clinical_reference_for(eeg, ref_channels)
@@ -162,6 +168,10 @@ class YasaAlgorithm(SleepScoringAlgorithm):
                 per_channel_rows.append(prob)
                 yprobs.append(prob[STAGE_COLUMNS])
                 montages_used.append(montage_name)
+                log(
+                    f"PROGRESS {0.22 + 0.63 * ((eeg_index + 1) / len(eeg_channels)):.3f} "
+                    f"YASA channel {eeg_index + 1} of {len(eeg_channels)} complete"
+                )
             except Exception as exc:
                 log(f"YASA failed for {eeg}: {exc}")
 
@@ -256,6 +266,18 @@ class PhysioExSequenceAlgorithm(LocalTorchEpochAlgorithm):
     physioex_model: str
     preprocessing: str
     sequence_length = 21
+
+    def check_available(self) -> None:
+        self._ensure_physioex()
+        checkpoint_dir = Path(__file__).resolve().parent / "vendor" / "physioex" / "train" / "models" / "checkpoints"
+        if not checkpoint_dir.exists():
+            try:
+                import physioex
+                checkpoint_dir = Path(physioex.__file__).resolve().parent / "train" / "models" / "checkpoints"
+            except Exception:
+                pass
+        if not checkpoint_dir.exists() or not any(checkpoint_dir.glob("*.ckpt")):
+            raise AlgorithmUnavailable(f"PhysioEx checkpoints are missing from {checkpoint_dir}.")
 
     def _ensure_physioex(self):
         try:
@@ -360,12 +382,20 @@ class GsscAlgorithm(SleepScoringAlgorithm):
     label = "Greifswald Sleep Stage Classifier (GSSC)"
     description = "Automatic sleep stage classifier using GSSC neural networks."
 
+    def check_available(self) -> None:
+        from importlib.resources import files
+        import gssc  # noqa: F401
+
+        for name in ("sig_net_v1.pt", "gru_net_v1.pt"):
+            if not Path(files("gssc.nets").joinpath(name)).exists():
+                raise AlgorithmUnavailable(f"GSSC model asset is missing: {name}")
+
     def score(self, raw, eeg_channels, ref_channels, eog_name, emg_name, log):
         del emg_name
         try:
             import torch
             import torch.nn as nn
-            from importlib_resources import files
+            from importlib.resources import files
             from gssc.infer import EEGInfer
             from gssc.utils import prepare_inst, permute_sigs, epo_arr_zscore, loudest_vote
         except ImportError as exc:
@@ -469,6 +499,7 @@ class GsscAlgorithm(SleepScoringAlgorithm):
 
         logits = []
         perm_names = []
+        log("PROGRESS 0.45 Running GSSC signal encoder")
         for sig_idx, (perm_str, sigs) in enumerate(all_sigs.items()):
             perm_names.append(perm_str)
             for k in sigs.keys():
@@ -492,6 +523,10 @@ class GsscAlgorithm(SleepScoringAlgorithm):
                 del reps
                 y = y.float()
                 logits.append(y[:, 0, :].cpu().numpy())
+            log(
+                f"PROGRESS {0.45 + 0.38 * ((sig_idx + 1) / len(all_sigs)):.3f} "
+                f"GSSC montage {sig_idx + 1} of {len(all_sigs)} complete"
+            )
 
         # loudest_vote to find the best permutation and its logits
         logits_arr = np.array(logits) # shape (P, E, 5)
@@ -565,6 +600,14 @@ class USleepAlgorithm(SleepScoringAlgorithm):
     key = "usleep"
     label = "U-Sleep"
     description = "Offline Braindecode U-Sleep checkpoint with optional official web API fallback."
+
+    def check_available(self) -> None:
+        import braindecode  # noqa: F401
+        import safetensors  # noqa: F401
+
+        checkpoint = self._local_checkpoint()
+        if not checkpoint.exists():
+            raise AlgorithmUnavailable(f"Offline U-Sleep checkpoint not found: {checkpoint}")
 
     def configure(self, data_file: Path, output_dir: Path) -> None:
         self.data_file = Path(data_file)
@@ -660,6 +703,9 @@ class USleepAlgorithm(SleepScoringAlgorithm):
                             raise RuntimeError(f"Unexpected U-Sleep output shape: {tuple(logits.shape)}")
                         probs = torch.softmax(logits[:, :, logits.shape[-1] // 2], dim=1)
                         rows.append(probs.detach().cpu().numpy())
+                        done = min(start + 32, len(sequences))
+                        if done == len(sequences) or (done // 32) % 10 == 0:
+                            log(f"  U-Sleep progress: {done}/{len(sequences)} epochs ({done/len(sequences):.0%})")
                 prob = pd.DataFrame(np.vstack(rows), columns=STAGE_COLUMNS)
                 channel_probs.append((montage, prob))
             except Exception as exc:
@@ -679,7 +725,7 @@ class USleepAlgorithm(SleepScoringAlgorithm):
             raise AlgorithmUnavailable("The usleep-api package is not importable from vendor.") from exc
 
         channel_groups = []
-        for eeg in eeg_channels:
+        for eeg_index, eeg in enumerate(eeg_channels):
             group = [eeg]
             if eog_name:
                 group.append(eog_name)
@@ -738,6 +784,13 @@ class LunaAlgorithm(SleepScoringAlgorithm):
     label = "Luna"
     description = "External Luna CLI adapter; requires luna on PATH and a staging model/script."
 
+    def check_available(self) -> None:
+        import lunapi  # noqa: F401
+
+        pops_path = Path(__file__).resolve().parent / "models" / "pops"
+        if not pops_path.exists():
+            raise AlgorithmUnavailable(f"Luna POPS resources not found at {pops_path}.")
+
     def configure(self, data_file: Path, output_dir: Path) -> None:
         self.data_file = Path(data_file)
         self.output_dir = Path(output_dir)
@@ -785,6 +838,10 @@ class LunaAlgorithm(SleepScoringAlgorithm):
             table = inst.table("RUN_POPS", "E")
             prob = self._parse_luna_pops_table(table)
             channel_probs.append((_make_pair_name(eeg, ref) if ref else eeg, prob))
+            log(
+                f"PROGRESS {0.22 + 0.63 * ((eeg_index + 1) / len(eeg_channels)):.3f} "
+                f"Luna channel {eeg_index + 1} of {len(eeg_channels)} complete"
+            )
         return _consensus_from_channel_probs(channel_probs, self.label)
 
 
@@ -826,3 +883,14 @@ def available_algorithms() -> dict[str, SleepScoringAlgorithm]:
         DreamentoAlgorithm(),
     ]
     return {algorithm.key: algorithm for algorithm in algorithms}
+
+
+def algorithm_availability() -> dict[str, dict[str, str | bool]]:
+    results: dict[str, dict[str, str | bool]] = {}
+    for key, algorithm in available_algorithms().items():
+        try:
+            algorithm.check_available()
+            results[key] = {"available": True, "message": "Ready"}
+        except Exception as exc:
+            results[key] = {"available": False, "message": str(exc)}
+    return results

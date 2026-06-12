@@ -41,6 +41,11 @@ jobs:
             --collect-all yasa \
             --collect-all lspopt \
             --collect-all lightgbm \
+            --collect-all physioex \
+            --collect-all braindecode \
+            --collect-all lunapi \
+            --collect-all safetensors \
+            --collect-all usleep_api \
             --add-data "backend/models:models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
             backend_entry.py
@@ -160,6 +165,11 @@ jobs:
             --collect-all yasa `
             --collect-all lspopt `
             --collect-all lightgbm `
+            --collect-all physioex `
+            --collect-all braindecode `
+            --collect-all lunapi `
+            --collect-all safetensors `
+            --collect-all usleep_api `
             --add-data "backend/models;models" `
             --add-data "backend/sleepgpt-main;sleepgpt-main" `
             backend_entry.py
@@ -271,6 +281,11 @@ jobs:
             --collect-all yasa \
             --collect-all lspopt \
             --collect-all lightgbm \
+            --collect-all physioex \
+            --collect-all braindecode \
+            --collect-all lunapi \
+            --collect-all safetensors \
+            --collect-all usleep_api \
             --add-data "backend/models:models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
             backend_entry.py
