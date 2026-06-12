@@ -840,6 +840,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
     final logsController = StreamController<String>();
     final logLines = <String>[];
+    final scrollController = ScrollController();
     var isDone = false;
     String? outputJsonPath;
     StateSetter? setStateDialogRef;
@@ -876,6 +877,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                           builder: (context, snapshot) {
                             return Scrollbar(
                               child: ListView.builder(
+                                controller: scrollController,
                                 shrinkWrap: true,
                                 itemCount: logLines.length,
                                 itemBuilder: (context, index) {
@@ -899,7 +901,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
               ),
               actions: [
                 TextButton(
-                  onPressed: isDone ? () => navigator.pop() : null,
+                  onPressed: isDone
+                      ? () {
+                          scrollController.dispose();
+                          navigator.pop();
+                        }
+                      : null,
                   child: Text(isDone ? 'Close' : 'Scoring…'),
                 ),
               ],
@@ -916,6 +923,11 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           logsController.add(line);
           logLines.add(line);
           setStateDialogRef?.call(() {});
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (scrollController.hasClients) {
+              scrollController.jumpTo(scrollController.position.maxScrollExtent);
+            }
+          });
         }
 
         final exitCode = await _backend.runCommandStreamAsync(
@@ -936,6 +948,11 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           logLines.add(
             '\nScoring finished successfully! Loading predictions...',
           );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (scrollController.hasClients) {
+              scrollController.jumpTo(scrollController.position.maxScrollExtent);
+            }
+          });
 
           final scoringData = await loadScoringFileDirectly(
             outputJsonPath!,
@@ -1687,37 +1704,33 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
     // ----------------- PAGE 1: SLEEP ARCHITECTURE -----------------
     final p1 = PdfPageBuilder();
-    // Headers
-    p1.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
-    p1.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
-    p1.drawText('National Institute of Mental Health and Neurosciences, Bangalore, India', 50, 718, bold: false, size: 8);
-    p1.drawLine(50, 708, 562, 708, width: 1.5, gray: 0.1);
 
     // Title
-    p1.drawText('CLINICAL SLEEP SCORING & ARCHITECTURE REPORT', 50, 680, bold: true, size: 13);
+    p1.drawText('CLINICAL SLEEP SCORING & ARCHITECTURE REPORT', 50, 745, bold: true, size: 13);
+    p1.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
 
     // Metadata Block
-    p1.drawRect(50, 580, 512, 85, fill: false, gray: 0.6);
-    p1.drawText('Recording Details', 60, 650, bold: true, size: 10);
-    p1.drawLine(60, 646, 170, 646, width: 0.5, gray: 0.5);
+    p1.drawRect(50, 610, 512, 85, fill: false, gray: 0.6);
+    p1.drawText('Recording Details', 60, 680, bold: true, size: 10);
+    p1.drawLine(60, 676, 170, 676, width: 0.5, gray: 0.5);
 
-    p1.drawText('File Name: ${_basename(_activePath ?? v.sourceDescription)}', 60, 630, size: 9);
-    p1.drawText('Total Epochs: ${v.epochCount} (${v.epochSeconds} seconds each)', 60, 615, size: 9);
-    p1.drawText('Total Duration: ${totalMinutes.toStringAsFixed(1)} minutes', 60, 600, size: 9);
-    p1.drawText('Scored Epochs: $scored / ${v.epochCount} (${(scored / v.epochCount * 100).toStringAsFixed(1)}%)', 60, 585, size: 9);
+    p1.drawText('File Name: ${_basename(_activePath ?? v.sourceDescription)}', 60, 660, size: 9);
+    p1.drawText('Total Epochs: ${v.epochCount} (${v.epochSeconds} seconds each)', 60, 645, size: 9);
+    p1.drawText('Total Duration: ${totalMinutes.toStringAsFixed(1)} minutes', 60, 630, size: 9);
+    p1.drawText('Scored Epochs: $scored / ${v.epochCount} (${(scored / v.epochCount * 100).toStringAsFixed(1)}%)', 60, 615, size: 9);
 
     // Sleep Architecture Section
-    p1.drawText('Sleep Architecture Summary', 50, 550, bold: true, size: 11);
-    p1.drawLine(50, 545, 562, 545, width: 0.75, gray: 0.4);
+    p1.drawText('Sleep Architecture Summary', 50, 580, bold: true, size: 11);
+    p1.drawLine(50, 575, 562, 575, width: 0.75, gray: 0.4);
 
     // Table Header
-    p1.drawRect(50, 520, 512, 18, gray: 0.85);
-    p1.drawText('Sleep Stage', 60, 525, bold: true, size: 9);
-    p1.drawText('Epochs', 200, 525, bold: true, size: 9);
-    p1.drawText('Duration (min)', 320, 525, bold: true, size: 9);
-    p1.drawText('% of Sleep Time', 440, 525, bold: true, size: 9);
+    p1.drawRect(50, 550, 512, 18, gray: 0.85);
+    p1.drawText('Sleep Stage', 60, 555, bold: true, size: 9);
+    p1.drawText('Epochs', 200, 555, bold: true, size: 9);
+    p1.drawText('Duration (min)', 320, 555, bold: true, size: 9);
+    p1.drawText('% of Sleep Time', 440, 555, bold: true, size: 9);
 
-    double y = 500;
+    double y = 530;
     final stagesList = [
       (SleepStage.wake, 'Wake (W)'),
       (SleepStage.n1, 'NREM 1 (N1)'),
@@ -1748,13 +1761,75 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     p1.drawText('100.0 %', 440, y + 4, bold: true, size: 9);
     p1.drawLine(50, y, 562, y, width: 0.5, gray: 0.5);
 
-    y -= 30;
+    y -= 25;
 
     // Metrics Box
     p1.drawRect(50, y - 50, 512, 60, fill: false, gray: 0.6);
     p1.drawText('Sleep Efficiency: ${efficiency.toStringAsFixed(1)} %  (Total Sleep Time / Recording Time)', 65, y - 15, bold: true, size: 9);
     p1.drawText('Latency to N1: ${_getStageLatency(v, SleepStage.n1)} min', 65, y - 30, size: 9);
     p1.drawText('Latency to REM: ${_getStageLatency(v, SleepStage.rem)} min', 65, y - 45, size: 9);
+
+    y -= 60;
+
+    // Draw Vector Hypnogram step chart
+    p1.drawText('Hypnogram (Sleep Stage Timeline)', 50, y, bold: true, size: 10);
+    p1.drawLine(50, y - 5, 562, y - 5, width: 0.5, gray: 0.4);
+    y -= 140;
+
+    final stagesY = {
+      SleepStage.wake: y + 110.0,
+      SleepStage.rem: y + 85.0,
+      SleepStage.n1: y + 60.0,
+      SleepStage.n2: y + 35.0,
+      SleepStage.n3: y + 10.0,
+    };
+
+    stagesY.forEach((stage, yVal) {
+      String label = '';
+      if (stage == SleepStage.wake) label = 'W';
+      if (stage == SleepStage.rem) label = 'REM';
+      if (stage == SleepStage.n1) label = 'N1';
+      if (stage == SleepStage.n2) label = 'N2';
+      if (stage == SleepStage.n3) label = 'N3';
+
+      p1.drawText(label, 50, yVal - 3, size: 8, bold: stage == SleepStage.rem);
+      p1.drawLine(80, yVal, 562, yVal, width: 0.25, gray: 0.8);
+    });
+
+    // Draw frame bounding box
+    p1.drawRect(80, y, 482, 120, fill: false, gray: 0.5);
+
+    // Draw uncertain background stripes (light gray)
+    for (var i = 0; i < v.epochCount; i++) {
+      final isUncertain = i < v.stagesUncertain.length && v.stagesUncertain[i];
+      if (isUncertain) {
+        final xStart = 80 + (i / v.epochCount) * 482;
+        final xEnd = 80 + ((i + 1) / v.epochCount) * 482;
+        p1.drawRect(xStart, y, (xEnd - xStart).clamp(0.5, 482.0), 120, gray: 0.95, fill: true);
+      }
+    }
+
+    // Draw step line
+    double? lastHypY;
+    for (var i = 0; i < v.epochCount; i++) {
+      final stage = v.stages[i];
+      final yVal = stagesY[stage] ?? (y + 110.0); // default to Wake
+      final xStart = 80 + (i / v.epochCount) * 482;
+      final xEnd = 80 + ((i + 1) / v.epochCount) * 482;
+
+      p1.drawLine(xStart, yVal, xEnd, yVal, width: 1.0, gray: 0.2);
+      if (lastHypY != null && lastHypY != yVal) {
+        p1.drawLine(xStart, lastHypY, xStart, yVal, width: 1.0, gray: 0.2);
+      }
+      lastHypY = yVal;
+    }
+
+    // Draw X-Axis Ticks & Labels
+    final totalHours = (v.epochCount * v.epochSeconds) / 3600.0;
+    p1.drawText('0.0h', 80, y - 12, size: 8);
+    p1.drawText('${(totalHours / 2).toStringAsFixed(1)}h', 310, y - 12, size: 8);
+    p1.drawText('${totalHours.toStringAsFixed(1)}h', 545, y - 12, size: 8);
+    p1.drawText('Time (Hours)', 300, y - 25, size: 8, bold: true);
 
     final totalPages = coreData != null ? 3 : 1;
     p1.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
@@ -1765,26 +1840,23 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     if (coreData != null) {
       // PAGE 2: Spindles and Slow Waves Summaries
       final p2 = PdfPageBuilder();
-      p2.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
-      p2.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
-      p2.drawLine(50, 720, 562, 720, width: 1.0, gray: 0.2);
-
-      p2.drawText('QUANTITATIVE EEG ANALYSIS: SPINDLES & SLOW WAVES', 50, 695, bold: true, size: 13);
-      p2.drawText('Events detected during NREM sleep (N2 + N3) epochs.', 50, 680, size: 9, gray: 0.4);
+      p2.drawText('QUANTITATIVE EEG ANALYSIS: SPINDLES & SLOW WAVES', 50, 745, bold: true, size: 13);
+      p2.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
+      p2.drawText('Events detected during NREM sleep (N2 + N3) epochs.', 50, 715, size: 9, gray: 0.4);
 
       // Spindles Table
-      p2.drawText('Sleep Spindles (YASA algorithm)', 50, 655, bold: true, size: 11);
-      p2.drawLine(50, 650, 562, 650, width: 0.5, gray: 0.4);
+      p2.drawText('Sleep Spindles (YASA algorithm)', 50, 685, bold: true, size: 11);
+      p2.drawLine(50, 680, 562, 680, width: 0.5, gray: 0.4);
 
-      p2.drawRect(50, 625, 512, 18, gray: 0.85);
-      p2.drawText('Channel', 60, 629, bold: true, size: 9);
-      p2.drawText('Count', 140, 629, bold: true, size: 9);
-      p2.drawText('Density (/min)', 220, 629, bold: true, size: 9);
-      p2.drawText('Avg Duration (s)', 310, 629, bold: true, size: 9);
-      p2.drawText('Avg Amp (uV)', 400, 629, bold: true, size: 9);
-      p2.drawText('Avg Freq (Hz)', 490, 629, bold: true, size: 9);
+      p2.drawRect(50, 655, 512, 18, gray: 0.85);
+      p2.drawText('Channel', 60, 659, bold: true, size: 9);
+      p2.drawText('Count', 140, 659, bold: true, size: 9);
+      p2.drawText('Density (/min)', 220, 659, bold: true, size: 9);
+      p2.drawText('Avg Duration (s)', 310, 659, bold: true, size: 9);
+      p2.drawText('Avg Amp (uV)', 400, 659, bold: true, size: 9);
+      p2.drawText('Avg Freq (Hz)', 490, 659, bold: true, size: 9);
 
-      double y2 = 605;
+      double y2 = 635;
       final List<dynamic> spindleSummaries = (spindleData != null && spindleData['summary'] != null)
           ? spindleData['summary'] as List<dynamic>
           : [];
@@ -1855,27 +1927,24 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
 
       // PAGE 3: Spectral features and Phase-Amplitude Coupling details
       final p3 = PdfPageBuilder();
-      p3.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
-      p3.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
-      p3.drawLine(50, 720, 562, 720, width: 1.0, gray: 0.2);
-
-      p3.drawText('QUANTITATIVE EEG: SPECTRAL POWER & PAC ANALYSIS', 50, 695, bold: true, size: 13);
-      p3.drawText('Spectral power and coupling calculated using FOOOF/IRASA/TensorPAC.', 50, 680, size: 9, gray: 0.4);
+      p3.drawText('QUANTITATIVE EEG: SPECTRAL POWER & PAC ANALYSIS', 50, 745, bold: true, size: 13);
+      p3.drawLine(50, 735, 562, 735, width: 1.5, gray: 0.1);
+      p3.drawText('Spectral power and coupling calculated using FOOOF/IRASA/TensorPAC.', 50, 715, size: 9, gray: 0.4);
 
       // Spectral Power Table
-      p3.drawText('EEG Spectral Band Power & ACW (averaged over 15s windows)', 50, 655, bold: true, size: 11);
-      p3.drawLine(50, 650, 562, 650, width: 0.5, gray: 0.4);
+      p3.drawText('EEG Spectral Band Power & ACW (averaged over 15s windows)', 50, 685, bold: true, size: 11);
+      p3.drawLine(50, 680, 562, 680, width: 0.5, gray: 0.4);
 
-      p3.drawRect(50, 625, 512, 18, gray: 0.85);
-      p3.drawText('Chan', 60, 629, bold: true, size: 9);
-      p3.drawText('Stage', 110, 629, bold: true, size: 9);
-      p3.drawText('Delta (1-4Hz)', 170, 629, bold: true, size: 9);
-      p3.drawText('Theta (4-8Hz)', 255, 629, bold: true, size: 9);
-      p3.drawText('Alpha (8-12Hz)', 340, 629, bold: true, size: 9);
-      p3.drawText('Sigma (10-16Hz)', 425, 629, bold: true, size: 9);
-      p3.drawText('ACW (s)', 510, 629, bold: true, size: 9);
+      p3.drawRect(50, 655, 512, 18, gray: 0.85);
+      p3.drawText('Chan', 60, 659, bold: true, size: 9);
+      p3.drawText('Stage', 110, 659, bold: true, size: 9);
+      p3.drawText('Delta (1-4Hz)', 170, 659, bold: true, size: 9);
+      p3.drawText('Theta (4-8Hz)', 255, 659, bold: true, size: 9);
+      p3.drawText('Alpha (8-12Hz)', 340, 659, bold: true, size: 9);
+      p3.drawText('Sigma (10-16Hz)', 425, 659, bold: true, size: 9);
+      p3.drawText('ACW (s)', 510, 659, bold: true, size: 9);
 
-      double y3 = 605;
+      double y3 = 635;
       final Map<String, dynamic> channelsData = (coreData['channels'] != null)
           ? coreData['channels'] as Map<String, dynamic>
           : {};
@@ -2311,10 +2380,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
             ),
           ],
           PlatformMenuItem(label: 'Save to…', onSelected: _saveScoring),
-          PlatformMenuItem(
-            label: 'Export Sleep Report (PDF)',
-            onSelected: _exportSleepReport,
-          ),
         ],
       ),
       // ─── Stages ───────────────────────────────────────────────────────
@@ -2400,6 +2465,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
           PlatformMenuItem(
             label: 'Zoom on selected EEG  [Z]',
             onSelected: _zoomOnSelectedEeg,
+          ),
+          PlatformMenuItem(
+            label: 'Export Sleep Report (PDF)',
+            onSelected: _exportSleepReport,
           ),
         ],
       ),
@@ -2564,10 +2633,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                 onPressed: _saveScoring,
                 child: const Text('Save to…'),
               ),
-              MenuItemButton(
-                onPressed: _exportSleepReport,
-                child: const Text('Export Sleep Report (PDF)'),
-              ),
             ],
             child: const Text('Scoring'),
           ),
@@ -2660,6 +2725,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
               MenuItemButton(
                 onPressed: _zoomOnSelectedEeg,
                 child: const Text('Zoom on selected EEG [Z]'),
+              ),
+              MenuItemButton(
+                onPressed: _exportSleepReport,
+                child: const Text('Export Sleep Report (PDF)'),
               ),
             ],
             child: const Text('Utilities'),
@@ -3248,7 +3317,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
                     unselectedLabelStyle: const TextStyle(fontSize: 13),
                     tabs: const [
                       Tab(text: 'Interactive Scoring'),
-                      Tab(text: 'Batch'),
+                      Tab(text: 'Consolidated Batch'),
                     ],
                   ),
                 ),
@@ -4618,6 +4687,7 @@ class _CommandBatchProgressDialog extends StatefulWidget {
 class _CommandBatchProgressDialogState
     extends State<_CommandBatchProgressDialog> {
   final List<String> _logs = [];
+  final ScrollController _scrollController = ScrollController();
   int _completed = 0;
   int _failed = 0;
   bool _finished = false;
@@ -4629,31 +4699,47 @@ class _CommandBatchProgressDialogState
     unawaited(_run());
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _addLog(String line) {
+    if (!mounted) return;
+    setState(() {
+      _logs.add(line);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
   Future<void> _run() async {
     final backend = EegBackend();
     for (final job in widget.jobs) {
       if (!mounted) return;
       setState(() {
         _current = job.label;
-        _logs.add('--- ${job.label} ---');
       });
+      _addLog('--- ${job.label} ---');
       final exitCode = await backend.runCommandStreamAsync(
         executable: job.executable,
         arguments: job.arguments,
-        onLine: (line) {
-          if (mounted) setState(() => _logs.add(line));
-        },
+        onLine: _addLog,
       );
       if (!mounted) return;
       setState(() {
         _completed++;
         if (exitCode != 0) _failed++;
-        _logs.add(
-          exitCode == 0
-              ? 'Completed ${job.label}'
-              : 'Failed ${job.label} with exit code $exitCode',
-        );
       });
+      _addLog(
+        exitCode == 0
+            ? 'Completed ${job.label}'
+            : 'Failed ${job.label} with exit code $exitCode',
+      );
     }
     if (mounted) setState(() => _finished = true);
   }
@@ -4684,6 +4770,7 @@ class _CommandBatchProgressDialogState
                 color: Colors.black87,
                 padding: const EdgeInsets.all(8),
                 child: ListView.builder(
+                  controller: _scrollController,
                   itemCount: _logs.length,
                   itemBuilder: (_, index) => Text(
                     _logs[index],
@@ -5476,6 +5563,7 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
   final Map<String, String> _statuses = {};
   final List<String> _logLines = [];
   final StreamController<String> _logsStream = StreamController<String>();
+  final ScrollController _scrollController = ScrollController();
   String _currentFile = '';
   int _currentIndex = 0;
   bool _isFinished = false;
@@ -5493,7 +5581,21 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
   @override
   void dispose() {
     _logsStream.close();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _addLog(String line) {
+    if (!mounted) return;
+    setState(() {
+      _logLines.add(line);
+    });
+    _logsStream.add(line);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   Future<void> _startBatch() async {
@@ -5510,9 +5612,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
         _currentFile = file;
         _statuses[file] = 'Scoring…';
         _logLines.clear();
-        _logLines.add('--- Starting auto-scoring for ${_basename(file)} ---');
       });
-      _logsStream.add('--- Starting auto-scoring for ${_basename(file)} ---');
+      _addLog('--- Starting auto-scoring for ${_basename(file)} ---');
 
       final args = <String>[];
       if (executable.endsWith('.py') ||
@@ -5545,18 +5646,10 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
       }
 
       try {
-        void onLine(String line) {
-          if (!mounted) return;
-          setState(() {
-            _logLines.add(line);
-          });
-          _logsStream.add(line);
-        }
-
         final exitCode = await EegBackend().runCommandStreamAsync(
           executable: executable,
           arguments: args,
-          onLine: onLine,
+          onLine: _addLog,
         );
         final outputJsonPath = _outputPathFromLogs(_logLines);
 
@@ -5564,11 +5657,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
           if (mounted) {
             setState(() {
               _statuses[file] = 'Completed';
-              _logLines.add(
-                '\nScoring finished successfully! Output saved to: $outputJsonPath',
-              );
             });
-            _logsStream.add(
+            _addLog(
               '\nScoring finished successfully! Output saved to: $outputJsonPath',
             );
           }
@@ -5576,18 +5666,16 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
           if (mounted) {
             setState(() {
               _statuses[file] = 'Failed';
-              _logLines.add('\nScoring failed with exit code $exitCode');
             });
-            _logsStream.add('\nScoring failed with exit code $exitCode');
+            _addLog('\nScoring failed with exit code $exitCode');
           }
         }
       } catch (e) {
         if (mounted) {
           setState(() {
             _statuses[file] = 'Failed';
-            _logLines.add('\nException occurred: $e');
           });
-          _logsStream.add('\nException occurred: $e');
+          _addLog('\nException occurred: $e');
         }
       }
     }
@@ -5742,6 +5830,7 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
                           return Scrollbar(
                             thumbVisibility: true,
                             child: ListView.builder(
+                              controller: _scrollController,
                               shrinkWrap: true,
                               itemCount: _logLines.length,
                               itemBuilder: (context, index) {

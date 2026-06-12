@@ -36,7 +36,7 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onefile --name autoscore-backend \
-            --collect-data gssc \
+            --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
             --collect-all lspopt \
@@ -155,7 +155,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onefile --name autoscore-backend `
-            --collect-data gssc `
+            --collect-all gssc `
             --collect-all mne `
             --collect-all yasa `
             --collect-all lspopt `
@@ -266,7 +266,7 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onefile --name autoscore-backend \
-            --collect-data gssc \
+            --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
             --collect-all lspopt \
