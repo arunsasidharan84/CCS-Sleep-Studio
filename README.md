@@ -84,6 +84,42 @@ ScoringNidra incorporates a comprehensive suite of automatic sleep scorers power
 
 ![Autoscoring Configuration and Model Run](screenshots/autoscoring_snapshot.png)
 
+## 🔬 Quantitative Sleep Analysis (analyseNidra)
+
+ScoringNidra includes a high-performance quantitative neurophysiology backend called **analyseNidra**, written in pure native Rust. It performs fast, multithreaded analysis of sleep architecture, spectral power, Phase-Amplitude Coupling (PAC), slow-waves, spindles, and regional statistics.
+
+By leveraging Rust's compiler optimizations and parallel execution (via `rayon`), the entire analysis runs over 6x faster than standard Python pipelines.
+
+### Features
+* **Spectral Analysis**: Fast Welch periodogram computation with median averaging.
+* **Aperiodic Fit**: Native Levenberg-Marquardt implementations of FOOOF (Fitting Oscillations & One-Over-F) and IRASA (Irregularly Resampled Auto-Spectral Analysis) to isolate true oscillatory peaks from the background aperiodic 1/f slope.
+* **Spindle Detection**: Port of the YASA (Yet Another Spindle Algorithm) spindle detection method.
+* **Slow-Wave Detection**: Port of YASA slow-wave detection.
+* **Phase-Amplitude Coupling (PAC)**: TensorPAC-compatible modulation index calculation for Slow-Wave/Sigma coupling.
+* **Regional Compilation**: Aggregates all spectral features and event detections across scalp channels.
+
+### Command-Line Usage & Parameters
+For advanced CLI workflows, the `analyse-nidra` executable can be invoked directly from the command line:
+
+```sh
+analyse-nidra <recording.edf> <scoring.json> [core.json|-] [pac.json|-] [slow-waves.json|-] [spindles.json|-] [regional.csv|-] [options]
+```
+
+#### Positional Arguments:
+1. `<recording.edf>`: **[Required]** Absolute path to the raw input sleep EEG recording (EDF format).
+2. `<scoring.json>`: **[Required]** Path to the epoch-by-epoch sleep scoring JSON file.
+3. `[core.json|-]`: Path to save the core spectral, temporal, and nonlinear features per stage/channel in JSON format. Use `-` to skip writing this file.
+4. `[pac.json|-]`: Path to save Phase-Amplitude Coupling (PAC) matrices. Use `-` to skip.
+5. `[slow-waves.json|-]`: Path to save detected slow wave events and summary statistics. Use `-` to skip.
+6. `[spindles.json|-]`: Path to save detected spindle events and summary statistics. Use `-` to skip.
+7. `[regional.csv|-]`: Path to compile and save the 252-column regional EEG metric CSV. Use `-` to skip.
+
+#### Named Options:
+- `--channels <names>`: Comma-separated list of EEG channels to include in the analysis (e.g., `--channels F3,F4,C3,C4,O1,O2`). Defaults to `F3,F4,C3,C4,O1,O2`.
+- `--references <names>`: Comma-separated list of reference channels (e.g., `--references M1,M2` or `A1,A2`). Samples from reference channels are averaged and subtracted sample-wise. If not specified, defaults to `M1,M2`. Can be omitted or left blank to run without re-referencing.
+
+![analyseNidra Region Analysis Configuration](screenshots/analyse_nidra_snapshot.png)
+
 ---
 
 ## 🎨 New UI Features

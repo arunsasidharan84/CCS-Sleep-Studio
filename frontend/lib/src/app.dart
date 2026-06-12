@@ -1581,6 +1581,29 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
     );
   }
 
+  String _getStageLatency(EegViewport v, SleepStage target) {
+    for (var i = 0; i < v.stages.length; i++) {
+      if (v.stages[i] == target) {
+        return ((i * v.epochSeconds) / 60.0).toStringAsFixed(1);
+      }
+    }
+    return 'N/A';
+  }
+
+  Future<void> _openFile(String path) async {
+    try {
+      if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isWindows) {
+        await Process.run('cmd.exe', ['/c', 'start', '""', path], runInShell: true);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [path]);
+      }
+    } catch (e) {
+      print('Error auto-opening sleep report: $e');
+    }
+  }
+
   Future<void> _exportSleepReport() async {
     final v = _viewport;
     if (v == null) {
@@ -1598,12 +1621,50 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
       return;
     }
     final path = output.toLowerCase().endsWith('.pdf') ? output : '$output.pdf';
-    final lines = _sleepReportLines(v);
-    await File(path).writeAsBytes(_buildSimplePdf(lines));
-    _setStatus('Exported sleep report to ${_basename(path)}');
-  }
 
-  List<String> _sleepReportLines(EegViewport v) {
+    // Attempt to load analyseNidra sidecar results if present
+    Map<String, dynamic>? coreData;
+    Map<String, dynamic>? spindleData;
+    Map<String, dynamic>? slowWaveData;
+    Map<String, dynamic>? pacData;
+
+    if (_activePath != null) {
+      final base = _sidecarPath(_activePath!, '');
+      final coreFile = File('${base}_analyse_core.json');
+      final spindleFile = File('${base}_analyse_spindles.json');
+      final slowWaveFile = File('${base}_analyse_slow_waves.json');
+      final pacFile = File('${base}_analyse_pac.json');
+
+      try {
+        if (await coreFile.exists()) {
+          coreData = jsonDecode(await coreFile.readAsString()) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        print('Error parsing core features sidecar: $e');
+      }
+      try {
+        if (await spindleFile.exists()) {
+          spindleData = jsonDecode(await spindleFile.readAsString()) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        print('Error parsing spindle features sidecar: $e');
+      }
+      try {
+        if (await slowWaveFile.exists()) {
+          slowWaveData = jsonDecode(await slowWaveFile.readAsString()) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        print('Error parsing slow-wave features sidecar: $e');
+      }
+      try {
+        if (await pacFile.exists()) {
+          pacData = jsonDecode(await pacFile.readAsString()) as Map<String, dynamic>;
+        }
+      } catch (e) {
+        print('Error parsing PAC features sidecar: $e');
+      }
+    }
+
     final scored = v.stages.where((s) => s.isScored).length;
     final sleepEpochs = v.stages
         .where(
@@ -1616,94 +1677,282 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome> with SingleTickerPr
         .length;
     final totalMinutes = v.epochCount * v.epochSeconds / 60.0;
     final sleepMinutes = sleepEpochs * v.epochSeconds / 60.0;
-    final efficiency = totalMinutes <= 0
-        ? 0.0
-        : sleepMinutes / totalMinutes * 100.0;
-    final lines = <String>[
-      'Scoring Hero Sleep Report',
-      'Recording: ${_basename(_activePath ?? v.sourceDescription)}',
-      'Epochs: ${v.epochCount} (${v.epochSeconds} s)',
-      'Scored epochs: $scored / ${v.epochCount}',
-      'Recording time: ${totalMinutes.toStringAsFixed(1)} min',
-      'Total sleep time: ${sleepMinutes.toStringAsFixed(1)} min',
-      'Sleep efficiency: ${efficiency.toStringAsFixed(1)} %',
-      '',
-      'Stage distribution',
-    ];
-    for (final stage in [
-      SleepStage.wake,
-      SleepStage.n1,
-      SleepStage.n2,
-      SleepStage.n3,
-      SleepStage.rem,
-      SleepStage.inconclusive,
-      SleepStage.unknown,
-    ]) {
-      final count = v.stages.where((s) => s == stage).length;
-      final minutes = count * v.epochSeconds / 60.0;
-      lines.add(
-        '${stage.label}: $count epochs, ${minutes.toStringAsFixed(1)} min',
-      );
-    }
-    lines.add('');
-    lines.add('Events');
-    final eventsByLabel = <String, (int, double)>{};
-    for (final event in v.scoredEvents) {
-      final old = eventsByLabel[event.label] ?? (0, 0.0);
-      eventsByLabel[event.label] = (old.$1 + 1, old.$2 + event.durationSeconds);
-    }
-    if (eventsByLabel.isEmpty) {
-      lines.add('No events marked.');
-    } else {
-      for (final entry in eventsByLabel.entries) {
-        lines.add(
-          '${entry.key}: ${entry.value.$1} events, ${entry.value.$2.toStringAsFixed(1)} s',
-        );
-      }
-    }
-    return lines;
-  }
+    final efficiency = totalMinutes <= 0 ? 0.0 : sleepMinutes / totalMinutes * 100.0;
 
-  List<int> _buildSimplePdf(List<String> lines) {
-    final escaped = lines
-        .take(42)
-        .map(
-          (line) => line
-              .replaceAll('\\', '\\\\')
-              .replaceAll('(', r'\(')
-              .replaceAll(')', r'\)'),
-        )
-        .toList();
-    final content = StringBuffer('BT\n/F1 12 Tf\n50 760 Td\n');
-    for (var i = 0; i < escaped.length; i++) {
-      if (i > 0) content.write('0 -16 Td\n');
-      content.write('(${escaped[i]}) Tj\n');
-    }
-    content.write('ET\n');
-    final stream = content.toString();
-    final objects = <String>[
-      '<< /Type /Catalog /Pages 2 0 R >>',
-      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-      '<< /Length ${stream.length} >>\nstream\n$stream\nendstream',
-      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    final n2Count = v.stages.where((s) => s == SleepStage.n2).length;
+    final n3Count = v.stages.where((s) => s == SleepStage.n3).length;
+    final nremMinutes = (n2Count + n3Count) * v.epochSeconds / 60.0;
+
+    final doc = SimplePdfDoc();
+
+    // ----------------- PAGE 1: SLEEP ARCHITECTURE -----------------
+    final p1 = PdfPageBuilder();
+    // Headers
+    p1.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
+    p1.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
+    p1.drawText('National Institute of Mental Health and Neurosciences, Bangalore, India', 50, 718, bold: false, size: 8);
+    p1.drawLine(50, 708, 562, 708, width: 1.5, gray: 0.1);
+
+    // Title
+    p1.drawText('CLINICAL SLEEP SCORING & ARCHITECTURE REPORT', 50, 680, bold: true, size: 13);
+
+    // Metadata Block
+    p1.drawRect(50, 580, 512, 85, fill: false, gray: 0.6);
+    p1.drawText('Recording Details', 60, 650, bold: true, size: 10);
+    p1.drawLine(60, 646, 170, 646, width: 0.5, gray: 0.5);
+
+    p1.drawText('File Name: ${_basename(_activePath ?? v.sourceDescription)}', 60, 630, size: 9);
+    p1.drawText('Total Epochs: ${v.epochCount} (${v.epochSeconds} seconds each)', 60, 615, size: 9);
+    p1.drawText('Total Duration: ${totalMinutes.toStringAsFixed(1)} minutes', 60, 600, size: 9);
+    p1.drawText('Scored Epochs: $scored / ${v.epochCount} (${(scored / v.epochCount * 100).toStringAsFixed(1)}%)', 60, 585, size: 9);
+
+    // Sleep Architecture Section
+    p1.drawText('Sleep Architecture Summary', 50, 550, bold: true, size: 11);
+    p1.drawLine(50, 545, 562, 545, width: 0.75, gray: 0.4);
+
+    // Table Header
+    p1.drawRect(50, 520, 512, 18, gray: 0.85);
+    p1.drawText('Sleep Stage', 60, 525, bold: true, size: 9);
+    p1.drawText('Epochs', 200, 525, bold: true, size: 9);
+    p1.drawText('Duration (min)', 320, 525, bold: true, size: 9);
+    p1.drawText('% of Sleep Time', 440, 525, bold: true, size: 9);
+
+    double y = 500;
+    final stagesList = [
+      (SleepStage.wake, 'Wake (W)'),
+      (SleepStage.n1, 'NREM 1 (N1)'),
+      (SleepStage.n2, 'NREM 2 (N2)'),
+      (SleepStage.n3, 'NREM 3 (N3)'),
+      (SleepStage.rem, 'REM (R)'),
     ];
-    final buffer = StringBuffer('%PDF-1.4\n');
-    final offsets = <int>[0];
-    for (var i = 0; i < objects.length; i++) {
-      offsets.add(buffer.length);
-      buffer.write('${i + 1} 0 obj\n${objects[i]}\nendobj\n');
+
+    for (final entry in stagesList) {
+      final count = v.stages.where((s) => s == entry.$1).length;
+      final minutes = count * v.epochSeconds / 60.0;
+      final pct = sleepMinutes <= 0 ? 0.0 : (entry.$1 == SleepStage.wake ? 0.0 : (minutes / sleepMinutes * 100.0));
+      final pctStr = entry.$1 == SleepStage.wake ? 'N/A' : '${pct.toStringAsFixed(1)} %';
+
+      p1.drawText(entry.$2, 60, y + 4, size: 9);
+      p1.drawText('$count', 200, y + 4, size: 9);
+      p1.drawText(minutes.toStringAsFixed(1), 320, y + 4, size: 9);
+      p1.drawText(pctStr, 440, y + 4, size: 9);
+      p1.drawLine(50, y, 562, y, width: 0.25, gray: 0.8);
+      y -= 18;
     }
-    final xrefOffset = buffer.length;
-    buffer.write('xref\n0 ${objects.length + 1}\n');
-    buffer.write('0000000000 65535 f \n');
-    for (final offset in offsets.skip(1)) {
-      buffer.write('${offset.toString().padLeft(10, '0')} 00000 n \n');
+
+    // Total Sleep Time Row
+    p1.drawRect(50, y, 512, 18, gray: 0.95);
+    p1.drawText('Total Sleep Time (TST)', 60, y + 4, bold: true, size: 9);
+    p1.drawText('$sleepEpochs', 200, y + 4, bold: true, size: 9);
+    p1.drawText(sleepMinutes.toStringAsFixed(1), 320, y + 4, bold: true, size: 9);
+    p1.drawText('100.0 %', 440, y + 4, bold: true, size: 9);
+    p1.drawLine(50, y, 562, y, width: 0.5, gray: 0.5);
+
+    y -= 30;
+
+    // Metrics Box
+    p1.drawRect(50, y - 50, 512, 60, fill: false, gray: 0.6);
+    p1.drawText('Sleep Efficiency: ${efficiency.toStringAsFixed(1)} %  (Total Sleep Time / Recording Time)', 65, y - 15, bold: true, size: 9);
+    p1.drawText('Latency to N1: ${_getStageLatency(v, SleepStage.n1)} min', 65, y - 30, size: 9);
+    p1.drawText('Latency to REM: ${_getStageLatency(v, SleepStage.rem)} min', 65, y - 45, size: 9);
+
+    final totalPages = coreData != null ? 3 : 1;
+    p1.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
+    p1.drawText('Page 1 of $totalPages', 520, 40, size: 8, bold: false);
+    doc.addPage(p1.build());
+
+    // ----------------- QUANTITATIVE DATA PAGES (analyseNidra) -----------------
+    if (coreData != null) {
+      // PAGE 2: Spindles and Slow Waves Summaries
+      final p2 = PdfPageBuilder();
+      p2.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
+      p2.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
+      p2.drawLine(50, 720, 562, 720, width: 1.0, gray: 0.2);
+
+      p2.drawText('QUANTITATIVE EEG ANALYSIS: SPINDLES & SLOW WAVES', 50, 695, bold: true, size: 13);
+      p2.drawText('Events detected during NREM sleep (N2 + N3) epochs.', 50, 680, size: 9, gray: 0.4);
+
+      // Spindles Table
+      p2.drawText('Sleep Spindles (YASA algorithm)', 50, 655, bold: true, size: 11);
+      p2.drawLine(50, 650, 562, 650, width: 0.5, gray: 0.4);
+
+      p2.drawRect(50, 625, 512, 18, gray: 0.85);
+      p2.drawText('Channel', 60, 629, bold: true, size: 9);
+      p2.drawText('Count', 140, 629, bold: true, size: 9);
+      p2.drawText('Density (/min)', 220, 629, bold: true, size: 9);
+      p2.drawText('Avg Duration (s)', 310, 629, bold: true, size: 9);
+      p2.drawText('Avg Amp (uV)', 400, 629, bold: true, size: 9);
+      p2.drawText('Avg Freq (Hz)', 490, 629, bold: true, size: 9);
+
+      double y2 = 605;
+      final List<dynamic> spindleSummaries = (spindleData != null && spindleData['summary'] != null)
+          ? spindleData['summary'] as List<dynamic>
+          : [];
+
+      for (final item in spindleSummaries) {
+        if (item is! Map<String, dynamic>) continue;
+        final chan = item['Channel'] ?? '';
+        final count = item['Count'] ?? 0;
+        final dur = item['Duration'] ?? 0.0;
+        final amp = item['Amplitude'] ?? 0.0;
+        final freq = item['Frequency'] ?? 0.0;
+        final density = nremMinutes > 0 ? (count / nremMinutes) : 0.0;
+
+        p2.drawText(chan.toString(), 60, y2 + 3, size: 9);
+        p2.drawText(count.toString(), 140, y2 + 3, size: 9);
+        p2.drawText(density.toStringAsFixed(2), 220, y2 + 3, size: 9);
+        p2.drawText(dur.toStringAsFixed(2), 310, y2 + 3, size: 9);
+        p2.drawText(amp.toStringAsFixed(1), 400, y2 + 3, size: 9);
+        p2.drawText(freq.toStringAsFixed(2), 490, y2 + 3, size: 9);
+
+        p2.drawLine(50, y2, 562, y2, width: 0.25, gray: 0.8);
+        y2 -= 18;
+      }
+
+      y2 -= 15;
+
+      // Slow Waves Table
+      p2.drawText('Slow Waves (YASA algorithm)', 50, y2, bold: true, size: 11);
+      p2.drawLine(50, y2 - 5, 562, y2 - 5, width: 0.5, gray: 0.4);
+      y2 -= 30;
+
+      p2.drawRect(50, y2, 512, 18, gray: 0.85);
+      p2.drawText('Channel', 60, y2 + 4, bold: true, size: 9);
+      p2.drawText('Count', 130, y2 + 4, bold: true, size: 9);
+      p2.drawText('Density (/min)', 200, y2 + 4, bold: true, size: 9);
+      p2.drawText('Avg PTP (uV)', 280, y2 + 4, bold: true, size: 9);
+      p2.drawText('Slope (uV/s)', 370, y2 + 4, bold: true, size: 9);
+      p2.drawText('Coupling (ndPAC)', 460, y2 + 4, bold: true, size: 9);
+
+      y2 -= 20;
+      final List<dynamic> slowWaveSummaries = (slowWaveData != null && slowWaveData['summary'] != null)
+          ? slowWaveData['summary'] as List<dynamic>
+          : [];
+
+      for (final item in slowWaveSummaries) {
+        if (item is! Map<String, dynamic>) continue;
+        final chan = item['Channel'] ?? '';
+        final count = item['Count'] ?? 0;
+        final ptp = item['PTP'] ?? 0.0;
+        final slope = item['Slope'] ?? 0.0;
+        final pacVal = item['ndPAC'] ?? 0.0;
+        final density = nremMinutes > 0 ? (count / nremMinutes) : 0.0;
+
+        p2.drawText(chan.toString(), 60, y2 + 3, size: 9);
+        p2.drawText(count.toString(), 130, y2 + 3, size: 9);
+        p2.drawText(density.toStringAsFixed(2), 200, y2 + 3, size: 9);
+        p2.drawText(ptp.toStringAsFixed(1), 280, y2 + 3, size: 9);
+        p2.drawText(slope.toStringAsFixed(1), 370, y2 + 3, size: 9);
+        p2.drawText(pacVal.toStringAsFixed(3), 460, y2 + 3, size: 9);
+
+        p2.drawLine(50, y2, 562, y2, width: 0.25, gray: 0.8);
+        y2 -= 18;
+      }
+
+      p2.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
+      p2.drawText('Page 2 of 3', 520, 40, size: 8, bold: false);
+      doc.addPage(p2.build());
+
+      // PAGE 3: Spectral features and Phase-Amplitude Coupling details
+      final p3 = PdfPageBuilder();
+      p3.drawText('NATIONAL INSTITUTE OF MENTAL HEALTH & NEUROSCIENCES (NIMHANS)', 50, 745, bold: true, size: 11);
+      p3.drawText('Centre for Consciousness Studies (CCS), Department of Neurophysiology', 50, 730, bold: false, size: 9);
+      p3.drawLine(50, 720, 562, 720, width: 1.0, gray: 0.2);
+
+      p3.drawText('QUANTITATIVE EEG: SPECTRAL POWER & PAC ANALYSIS', 50, 695, bold: true, size: 13);
+      p3.drawText('Spectral power and coupling calculated using FOOOF/IRASA/TensorPAC.', 50, 680, size: 9, gray: 0.4);
+
+      // Spectral Power Table
+      p3.drawText('EEG Spectral Band Power & ACW (averaged over 15s windows)', 50, 655, bold: true, size: 11);
+      p3.drawLine(50, 650, 562, 650, width: 0.5, gray: 0.4);
+
+      p3.drawRect(50, 625, 512, 18, gray: 0.85);
+      p3.drawText('Chan', 60, 629, bold: true, size: 9);
+      p3.drawText('Stage', 110, 629, bold: true, size: 9);
+      p3.drawText('Delta (1-4Hz)', 170, 629, bold: true, size: 9);
+      p3.drawText('Theta (4-8Hz)', 255, 629, bold: true, size: 9);
+      p3.drawText('Alpha (8-12Hz)', 340, 629, bold: true, size: 9);
+      p3.drawText('Sigma (10-16Hz)', 425, 629, bold: true, size: 9);
+      p3.drawText('ACW (s)', 510, 629, bold: true, size: 9);
+
+      double y3 = 605;
+      final Map<String, dynamic> channelsData = (coreData['channels'] != null)
+          ? coreData['channels'] as Map<String, dynamic>
+          : {};
+
+      for (final chan in channelsData.keys) {
+        final Map<String, dynamic> feats = channelsData[chan] is Map<String, dynamic>
+            ? channelsData[chan] as Map<String, dynamic>
+            : {};
+
+        for (final stage in ['N2', 'N3']) {
+          final delta = feats['${stage}_Delta_PSD'] ?? 0.0;
+          final theta = feats['${stage}_Theta_PSD'] ?? 0.0;
+          final alpha = feats['${stage}_Alpha_PSD'] ?? 0.0;
+          final sigma = feats['${stage}_Sigma_PSD'] ?? 0.0;
+          final acw = feats['${stage}_ACW'] ?? 0.0;
+
+          p3.drawText(chan, 60, y3 + 3, size: 9);
+          p3.drawText(stage, 110, y3 + 3, size: 9);
+          p3.drawText('${(delta * 100).toStringAsFixed(1)} %', 170, y3 + 3, size: 9);
+          p3.drawText('${(theta * 100).toStringAsFixed(1)} %', 255, y3 + 3, size: 9);
+          p3.drawText('${(alpha * 100).toStringAsFixed(1)} %', 340, y3 + 3, size: 9);
+          p3.drawText('${(sigma * 100).toStringAsFixed(1)} %', 425, y3 + 3, size: 9);
+          p3.drawText(acw.toStringAsFixed(2), 510, y3 + 3, size: 9);
+
+          p3.drawLine(50, y3, 562, y3, width: 0.25, gray: 0.8);
+          y3 -= 18;
+        }
+      }
+
+      y3 -= 15;
+
+      // Phase Amplitude Coupling (PAC) Section
+      p3.drawText('Phase-Amplitude Coupling (PAC) Modulation Index (MI)', 50, y3, bold: true, size: 11);
+      p3.drawLine(50, y3 - 5, 562, y3 - 5, width: 0.5, gray: 0.4);
+      y3 -= 30;
+
+      final Map<String, dynamic> pacMap = pacData ?? {};
+      p3.drawRect(50, y3, 512, 18, gray: 0.85);
+      p3.drawText('Channel', 60, y3 + 4, bold: true, size: 9);
+      p3.drawText('Max Coupling Index (MI)', 180, y3 + 4, bold: true, size: 9);
+      p3.drawText('Phase Frequency (Hz)', 320, y3 + 4, bold: true, size: 9);
+      p3.drawText('Amplitude Frequency (Hz)', 440, y3 + 4, bold: true, size: 9);
+
+      y3 -= 20;
+      if (pacMap.isEmpty) {
+        p3.drawText('No PAC data available.', 60, y3, size: 9);
+        p3.drawLine(50, y3 - 5, 562, y3 - 5, width: 0.25, gray: 0.8);
+        y3 -= 18;
+      } else {
+        for (final chan in pacMap.keys) {
+          final item = pacMap[chan];
+          if (item is! Map<String, dynamic>) continue;
+          final maxMi = item['maximum'] ?? 0.0;
+          final ampFreq = item['amplitude_frequency'] ?? 0.0;
+          final phaseFreq = item['phase_frequency'] ?? 0.0;
+
+          p3.drawText(chan, 60, y3 + 3, size: 9);
+          p3.drawText(maxMi.toStringAsExponential(3), 180, y3 + 3, size: 9);
+          p3.drawText(phaseFreq.toStringAsFixed(1), 320, y3 + 3, size: 9);
+          p3.drawText(ampFreq.toStringAsFixed(1), 440, y3 + 3, size: 9);
+
+          p3.drawLine(50, y3, 562, y3, width: 0.25, gray: 0.8);
+          y3 -= 18;
+        }
+      }
+
+      p3.drawText('Report generated by ScoringNidra.', 50, 40, size: 8, bold: false);
+      p3.drawText('Page 3 of 3', 520, 40, size: 8, bold: false);
+      doc.addPage(p3.build());
     }
-    buffer.write(
-      'trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF\n',
-    );
-    return buffer.toString().codeUnits;
+
+    final pdfBytes = doc.build();
+    await File(path).writeAsBytes(pdfBytes);
+    _setStatus('Exported sleep report to ${_basename(path)}');
+
+    // Auto-open PDF file
+    await _openFile(path);
   }
 
   void _zoomOnSelectedEeg() {
@@ -5800,3 +6049,89 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF Generation Utilities (custom implementation to avoid external dependencies)
+
+class PdfPageBuilder {
+  final List<String> commands = [];
+
+  void drawText(String text, double x, double y, {bool bold = false, double size = 10, double gray = 0.0}) {
+    final font = bold ? '/F2' : '/F1';
+    final escaped = text
+        .replaceAll('\\', '\\\\')
+        .replaceAll('(', r'\(')
+        .replaceAll(')', r'\)');
+    commands.add('BT $gray g $font $size Tf $x $y Td ($escaped) Tj ET');
+  }
+
+  void drawRect(double x, double y, double width, double height, {double gray = 0.9, bool fill = true}) {
+    if (fill) {
+      commands.add('$gray g $x $y $width $height re f 0 g');
+    } else {
+      commands.add('$gray G 0.5 w $x $y $width $height re S 0 G');
+    }
+  }
+
+  void drawLine(double x1, double y1, double x2, double y2, {double width = 0.5, double gray = 0.3}) {
+    commands.add('$width w $gray G $x1 $y1 m $x2 $y2 l S 0 G');
+  }
+
+  String build() {
+    return commands.join('\n');
+  }
+}
+
+class SimplePdfDoc {
+  final List<String> pages = [];
+
+  void addPage(String pageContent) {
+    pages.add(pageContent);
+  }
+
+  List<int> build() {
+    final numPages = pages.length;
+    final font1Idx = 2 * numPages + 3;
+    final font2Idx = 2 * numPages + 4;
+
+    final kids = List.generate(numPages, (i) => '${2 * i + 3} 0 R').join(' ');
+
+    final objects = <String>[
+      '<< /Type /Catalog /Pages 2 0 R >>', // Object 1
+      '<< /Type /Pages /Kids [$kids] /Count $numPages >>', // Object 2
+    ];
+
+    for (var i = 0; i < numPages; i++) {
+      final pageContent = pages[i];
+      final contentIdx = 2 * i + 4;
+      objects.add(
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 $font1Idx 0 R /F2 $font2Idx 0 R >> >> /Contents $contentIdx 0 R >>',
+      );
+      objects.add(
+        '<< /Length ${pageContent.length} >>\nstream\n$pageContent\nendstream',
+      );
+    }
+
+    // Add Helvetica and Helvetica-Bold fonts
+    objects.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    objects.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+    final buffer = StringBuffer('%PDF-1.4\n');
+    final offsets = <int>[0];
+    for (var i = 0; i < objects.length; i++) {
+      offsets.add(buffer.length);
+      buffer.write('${i + 1} 0 obj\n${objects[i]}\nendobj\n');
+    }
+    final xrefOffset = buffer.length;
+    buffer.write('xref\n0 ${objects.length + 1}\n');
+    buffer.write('0000000000 65535 f \n');
+    for (final offset in offsets.skip(1)) {
+      buffer.write('${offset.toString().padLeft(10, '0')} 00000 n \n');
+    }
+    buffer.write(
+      'trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF\n',
+    );
+    return buffer.toString().codeUnits;
+  }
+}
+
