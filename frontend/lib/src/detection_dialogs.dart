@@ -871,7 +871,7 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
         children: [
           const Icon(Icons.psychology, color: Colors.purple),
           const SizedBox(width: 8),
-          const Text('Automated Sleep Scoring'),
+          const Text('AutoscoreNidra — Automated Sleep Scoring'),
         ],
       ),
       content: SizedBox(
@@ -1534,7 +1534,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
         children: [
           const Icon(Icons.auto_awesome_motion, color: Colors.purple),
           const SizedBox(width: 8),
-          Text('Batch Automated Scoring (${widget.files.length} files)'),
+          Text('AutoscoreNidra Batch (${widget.files.length} files)'),
         ],
       ),
       content: SizedBox(
@@ -1866,7 +1866,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
             });
             Navigator.of(context).pop();
           },
-          child: const Text('Run Batch Scoring'),
+          child: const Text('Run AutoscoreNidra Batch'),
         ),
       ],
     );

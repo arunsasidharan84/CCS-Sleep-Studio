@@ -159,6 +159,16 @@ Jump to key epochs instantly using dedicated navigation controls:
 ![Hypnogram Disagreement Markers and Uncertainty Highlights](screenshots/annotations_markers.png)
 
 ### Morlet Wavelet Time-Frequency Panel
+
+The wavelet panel is disabled by default to preserve the primary scoring layout and avoid unnecessary scrolling. Enable it from the toolbar or configuration dialog when detailed time-frequency inspection is required.
+
+### AutoscoreNidra and AnalyseNidra
+
+* **AutoscoreNidra** independently scores each selected EEG channel and valid reference combination, then aggregates the epoch-wise probabilities into a consensus hypnogram.
+* It supports single-channel EEG while automatically using multi-montage consensus scoring when additional channels or references are available.
+* An optional, condition-agnostic SleepGPT pass refines the consensus stage sequence to reduce physiologically implausible transitions.
+* AutoscoreNidra provides single-recording and batch execution with validated backend invocation and live progress.
+* **AnalyseNidra** provides advanced sleep EEG analysis, regional CSV generation, master-sheet compilation, and the four-page quantitative PDF report.
 *   Complex Morlet wavelet decomposition via FFT-based convolution.
 *   4 normalization modes: Raw Power, L2-Normalized (unit energy), Z-Standardized, and dB (median baseline).
 *   Linear or logarithmic frequency scale.

@@ -9,11 +9,15 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
+import 'autoscore_command.dart';
 import 'config_dialog.dart';
 import 'detection_dialogs.dart';
 import 'eeg_backend.dart';
 import 'models.dart';
+import 'publication_sleep_report.dart';
+import 'regional_csv.dart';
 import 'scoring_io.dart';
 import 'signal_processing.dart' as sp;
 import 'timeline_painter.dart';
@@ -55,13 +59,14 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     with SingleTickerProviderStateMixin {
   final EegBackend _backend = EegBackend();
   final FocusNode _viewerFocusNode = FocusNode();
-  AppConfig _config = AppConfig();
+  AppConfig _config = AppConfig(tfEnabled: false);
 
   EegViewport? _viewport;
   LoadedEeg? _loadedEeg;
   List<SleepStage>? _comparisonStages;
   String? _activePath;
   String _status = 'Ready — load an EDF file to begin scoring';
+  String _appVersion = '';
   int _navigationSerial = 0;
   Timer? _tfRefreshTimer;
   late final TabController _tabController;
@@ -84,6 +89,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       TextEditingController(text: 'AF7,AF8');
   final TextEditingController _batchAnalyseRefController =
       TextEditingController(text: 'PPG');
+  List<String> _lastAnalyseRegionalFiles = const [];
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -92,6 +98,21 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _viewport = _backend.loadDemoViewport();
+    unawaited(_loadAppVersion());
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion =
+            'v${info.version}'
+            '${info.buildNumber.isEmpty ? '' : ' (build ${info.buildNumber})'}';
+      });
+    } on MissingPluginException {
+      // Package metadata is unavailable in widget tests without a host runner.
+    }
   }
 
   @override
@@ -260,7 +281,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       _loadedEeg = null;
       _comparisonStages = null;
       _viewport = _backend.loadDemoViewport();
-      _config = AppConfig();
+      _config = AppConfig(tfEnabled: false);
       _status = 'File closed — load an EDF file to begin scoring';
     });
   }
@@ -798,19 +819,18 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     if (v == null || eeg == null || path == null) return;
 
     final navigator = Navigator.of(context);
-    final executable = detectBackendExecutable();
-    final script = detectBackendScript();
-
-    final args = <String>[];
-    if (executable.endsWith('.py') ||
-        script.isNotEmpty &&
-            (executable.contains('python') || executable.contains('python3'))) {
-      if (script.isNotEmpty) {
-        args.add(script);
+    late final AutoscoreInvocation invocation;
+    try {
+      invocation = resolveAutoscoreInvocation();
+    } on StateError catch (error) {
+      _setStatus(error.message);
+      if (mounted) {
+        _showTextDialog('AutoscoreNidra unavailable', error.message);
       }
+      return;
     }
 
-    args.add(path);
+    final args = <String>[path];
 
     final algorithm = settings['algorithm'] as String;
     args.addAll(['--algorithm', algorithm]);
@@ -862,7 +882,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           builder: (context, setStateDialog) {
             setStateDialogRef = setStateDialog;
             return AlertDialog(
-              title: const Text('Auto-Scoring Progress'),
+              title: const Text('AutoscoreNidra Progress'),
               content: SizedBox(
                 width: 600,
                 height: 400,
@@ -934,7 +954,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     );
 
     Future.microtask(() async {
-      _setStatus('Spawning automated sleep scoring backend…');
+      _setStatus('Starting AutoscoreNidra backend…');
       try {
         void onLine(String line) {
           final update = _scoringProgressFromLine(line);
@@ -955,8 +975,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         }
 
         final exitCode = await _backend.runCommandStreamAsync(
-          executable: executable,
-          arguments: args,
+          executable: invocation.executable,
+          arguments: invocation.argumentsFor(args),
           onLine: onLine,
         );
         isDone = true;
@@ -990,26 +1010,26 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
               stages: scoringData.stages,
               stagesUncertain: scoringData.stagesUncertain,
             );
-            _status = 'Automated scoring completed with $algorithm';
+            _status = 'AutoscoreNidra completed with $algorithm';
           });
           navigator.pop();
         } else {
           logsController.add('\nScoring failed with exit code $exitCode');
           logLines.add('\nScoring failed with exit code $exitCode');
-          _setStatus('Automated sleep scoring failed. Exit code: $exitCode');
+          _setStatus('AutoscoreNidra failed. Exit code: $exitCode');
 
           navigator.pop();
           if (mounted) {
             showDialog(
               context: context,
               builder: (context) => AlertDialog(
-                title: const Text('Scoring Failed'),
+                title: const Text('AutoscoreNidra Failed'),
                 content: SizedBox(
                   width: 600,
                   height: 400,
                   child: SingleChildScrollView(
                     child: Text(
-                      'Auto-scoring process returned exit code $exitCode.\n\nLogs:\n${logLines.join('\n')}',
+                      'AutoscoreNidra returned exit code $exitCode.\n\nLogs:\n${logLines.join('\n')}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontFamily: 'Courier',
@@ -1030,20 +1050,20 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       } catch (e) {
         logsController.add('\nException occurred: $e');
         logLines.add('\nException occurred: $e');
-        _setStatus('Automated sleep scoring failed: $e');
+        _setStatus('AutoscoreNidra failed: $e');
         isDone = true;
         navigator.pop();
         if (mounted) {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Scoring Exception'),
+              title: const Text('AutoscoreNidra Exception'),
               content: SizedBox(
                 width: 600,
                 height: 400,
                 child: SingleChildScrollView(
                   child: Text(
-                    'Auto-scoring process encountered exception: $e\n\nLogs:\n${logLines.join('\n')}',
+                    'AutoscoreNidra encountered an exception: $e\n\nLogs:\n${logLines.join('\n')}',
                     style: const TextStyle(fontSize: 12, fontFamily: 'Courier'),
                   ),
                 ),
@@ -1076,7 +1096,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       return;
     }
     if (!path.toLowerCase().endsWith('.edf')) {
-      _setStatus('analyseNidra currently requires an EDF recording');
+      _setStatus('AnalyseNidra currently requires an EDF recording');
       return;
     }
     await autoSaveScoring(
@@ -1124,7 +1144,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       context: context,
       barrierDismissible: false,
       builder: (_) => _CommandBatchProgressDialog(
-        title: 'analyseNidra',
+        title: 'AnalyseNidra',
         jobs: [
           for (final job in jobs)
             _CommandJob(
@@ -1133,11 +1153,21 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
               arguments: _analyseNidraArguments(job, channels, references),
             ),
         ],
-        onFinished: (failed) => _setStatus(
-          failed == 0
-              ? 'analyseNidra completed for ${jobs.length} recording(s)'
-              : 'analyseNidra finished: ${jobs.length - failed} completed, $failed failed',
-        ),
+        onFinished: (failed) {
+          if (failed == 0) {
+            setState(() {
+              _lastAnalyseRegionalFiles = [
+                for (final job in jobs)
+                  '${_sidecarPath(job.edfPath, '')}_analyse_regional.csv',
+              ];
+            });
+          }
+          _setStatus(
+            failed == 0
+                ? 'AnalyseNidra completed for ${jobs.length} recording(s)'
+                : 'AnalyseNidra finished: ${jobs.length - failed} completed, $failed failed',
+          );
+        },
       ),
     );
   }
@@ -1156,6 +1186,46 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         ],
       ),
     );
+  }
+
+  Future<void> _compileAnalyseNidraMasterSheet([
+    List<String>? knownPaths,
+  ]) async {
+    var paths =
+        knownPaths?.where((path) => File(path).existsSync()).toList() ?? [];
+    if (paths.isEmpty) {
+      final result = await FilePicker.pickFiles(
+        dialogTitle: 'Select AnalyseNidra regional CSV files',
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        allowMultiple: true,
+      );
+      paths =
+          result?.files.map((file) => file.path).whereType<String>().toList() ??
+          [];
+    }
+    if (paths.isEmpty) return;
+
+    final output = await FilePicker.saveFile(
+      dialogTitle: 'Save AnalyseNidra master sheet',
+      fileName: 'AnalyseNidra_master_sheet.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (output == null) return;
+    final outputPath = output.toLowerCase().endsWith('.csv')
+        ? output
+        : '$output.csv';
+    try {
+      final compiled = await compileRegionalCsvFiles(paths);
+      await File(outputPath).writeAsString(compiled);
+      _setStatus(
+        'Compiled ${paths.length} AnalyseNidra CSV files into ${_basename(outputPath)}',
+      );
+      await _openFile(outputPath);
+    } catch (error) {
+      _showTextDialog('Master sheet compilation failed', error.toString());
+    }
   }
 
   void _executeBatchAutoScoring(
@@ -1182,7 +1252,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           eogChannels: List<String>.from(settings['eog'] as List? ?? const []),
           emgChannels: List<String>.from(settings['emg'] as List? ?? const []),
           onFinished: () {
-            _setStatus('Batch auto-scoring finished');
+            _setStatus('Batch AutoscoreNidra finished');
             // If the active file was one of the scored files, reload it
             final active = _activePath;
             if (active != null && files.contains(active)) {
@@ -1653,6 +1723,50 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   }
 
   Future<void> _exportSleepReport() async {
+    final viewport = _viewport;
+    if (viewport == null) {
+      _setStatus('Load an EDF first');
+      return;
+    }
+    final output = await FilePicker.saveFile(
+      dialogTitle: 'Export Publication-Grade Sleep Report (PDF)',
+      fileName: '${_basename(_activePath ?? 'sleep_report')}.report.pdf',
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (output == null) {
+      _setStatus('Report export cancelled');
+      return;
+    }
+    final outputPath = output.toLowerCase().endsWith('.pdf')
+        ? output
+        : '$output.pdf';
+
+    List<Map<String, String>> regionalRows = const [];
+    if (_activePath != null) {
+      final regionalPath =
+          '${_sidecarPath(_activePath!, '')}_analyse_regional.csv';
+      final regionalFile = File(regionalPath);
+      if (await regionalFile.exists()) {
+        regionalRows = parseCsvTable(await regionalFile.readAsString());
+      }
+    }
+
+    final bytes = buildPublicationSleepReport(
+      viewport: viewport,
+      recordingName: _basename(_activePath ?? viewport.sourceDescription),
+      regionalRows: regionalRows,
+    );
+    await File(outputPath).writeAsBytes(bytes);
+    _setStatus(
+      regionalRows.isEmpty
+          ? 'Exported report without AnalyseNidra regional metrics'
+          : 'Exported four-page AnalyseNidra report to ${_basename(outputPath)}',
+    );
+    await _openFile(outputPath);
+  }
+
+  Future<void> _exportSleepReportLegacy() async {
     final v = _viewport;
     if (v == null) {
       _setStatus('Load an EDF first');
@@ -2785,12 +2899,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           ),
           if (!buildLite) ...[
             PlatformMenuItem(
-              label: 'Run Auto-Scoring…',
+              label: 'Run AutoscoreNidra…',
               onSelected: _runAutoScoring,
-            ),
-            PlatformMenuItem(
-              label: 'Run Batch Auto-Scoring…',
-              onSelected: _runBatchAutoScoring,
             ),
           ],
           PlatformMenuItem(label: 'Save to…', onSelected: _saveScoring),
@@ -2860,12 +2970,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         menus: [
           if (!buildLite) ...[
             PlatformMenuItem(
-              label: 'analyseNidra — current recording…',
+              label: 'AnalyseNidra — Advanced Sleep EEG Analysis…',
               onSelected: _runAnalyseNidraCurrent,
-            ),
-            PlatformMenuItem(
-              label: 'analyseNidra — batch from scoring files…',
-              onSelected: _runAnalyseNidraBatch,
             ),
           ],
           PlatformMenuItem(
@@ -3035,11 +3141,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
               if (!buildLite) ...[
                 MenuItemButton(
                   onPressed: _runAutoScoring,
-                  child: const Text('Run Auto-Scoring…'),
-                ),
-                MenuItemButton(
-                  onPressed: _runBatchAutoScoring,
-                  child: const Text('Run Batch Auto-Scoring…'),
+                  child: const Text('Run AutoscoreNidra…'),
                 ),
               ],
               const Divider(height: 1),
@@ -3118,11 +3220,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
               if (!buildLite) ...[
                 MenuItemButton(
                   onPressed: _runAnalyseNidraCurrent,
-                  child: const Text('analyseNidra — current recording…'),
-                ),
-                MenuItemButton(
-                  onPressed: _runAnalyseNidraBatch,
-                  child: const Text('analyseNidra — batch from scoring files…'),
+                  child: const Text(
+                    'AnalyseNidra — Advanced Sleep EEG Analysis…',
+                  ),
                 ),
                 const Divider(height: 1),
               ],
@@ -3270,7 +3370,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                           Icon(Icons.psychology, color: Colors.purple),
                           SizedBox(width: 8),
                           Text(
-                            'Batch Automated Sleep Scoring',
+                            'AutoscoreNidra — Batch Automated Sleep Scoring',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -3324,7 +3424,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                         onPressed: () async {
                           final result = await FilePicker.pickFiles(
                             dialogTitle:
-                                'Select EEG files for batch auto-scoring',
+                                'Select EEG files for batch AutoscoreNidra',
                             type: FileType.custom,
                             allowedExtensions: ['edf', 'orb', 'signal'],
                             allowMultiple: true,
@@ -3493,7 +3593,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                   );
                                 },
                           child: const Text(
-                            'Run Batch Auto-Scoring',
+                            'Run Batch AutoscoreNidra',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -3524,7 +3624,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                         Icon(Icons.analytics, color: Colors.blue),
                         SizedBox(width: 8),
                         Text(
-                          'Batch AnalyseNidra (Region analysis)',
+                          'AnalyseNidra — Batch Advanced Sleep EEG Analysis',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -3762,6 +3862,33 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const Text(
+                      'Compile AnalyseNidra Regional Outputs',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _lastAnalyseRegionalFiles.isEmpty
+                              ? null
+                              : () => _compileAnalyseNidraMasterSheet(
+                                  _lastAnalyseRegionalFiles,
+                                ),
+                          icon: const Icon(Icons.table_view, size: 16),
+                          label: const Text('Compile Last Batch'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _compileAnalyseNidraMasterSheet,
+                          icon: const Icon(Icons.library_add, size: 16),
+                          label: const Text('Combine Existing CSVs…'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -3832,19 +3959,37 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                       bottom: BorderSide(color: Color(0xFFD0D0D0)),
                     ),
                   ),
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: Colors.black,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: Colors.blue,
-                    labelStyle: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    unselectedLabelStyle: const TextStyle(fontSize: 13),
-                    tabs: const [
-                      Tab(text: 'Interactive Scoring'),
-                      Tab(text: 'Batch'),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TabBar(
+                          controller: _tabController,
+                          labelColor: Colors.black,
+                          unselectedLabelColor: Colors.grey,
+                          indicatorColor: Colors.blue,
+                          labelStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          unselectedLabelStyle: const TextStyle(fontSize: 13),
+                          tabs: const [
+                            Tab(text: 'Interactive Scoring'),
+                            Tab(text: 'Batch'),
+                          ],
+                        ),
+                      ),
+                      if (_appVersion.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'ScoringNidra $_appVersion',
+                            style: const TextStyle(
+                              color: Color(0xFF555555),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -5035,77 +5180,6 @@ final _shortcuts = <ShortcutActivator, Intent>{
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-String detectBackendExecutable() {
-  final currentDir = Directory.current.path;
-
-  // 1. Packaged location checks
-  final execDir = File(Platform.resolvedExecutable).parent.path;
-  String packagedBin = '';
-  if (Platform.isWindows) {
-    packagedBin = '$execDir\\autoscore-backend.exe';
-  } else if (Platform.isMacOS) {
-    packagedBin = '$execDir/autoscore-backend';
-    if (!File(packagedBin).existsSync()) {
-      packagedBin = '$execDir/../Resources/autoscore-backend';
-    }
-  } else {
-    packagedBin = '$execDir/autoscore-backend';
-  }
-
-  if (File(packagedBin).existsSync()) {
-    return packagedBin;
-  }
-
-  // 2. Dev environment check (virtual environment python stager + script)
-  final devPaths = Platform.isWindows
-      ? [
-          '$currentDir\\..\\backend\\sleep_env\\Scripts\\python.exe',
-          '$currentDir\\backend\\sleep_env\\Scripts\\python.exe',
-          '$currentDir\\python_backend\\sleep_env\\Scripts\\python.exe',
-          '$currentDir\\sleep_env\\Scripts\\python.exe',
-        ]
-      : [
-          '$currentDir/../backend/sleep_env/bin/python',
-          '$currentDir/backend/sleep_env/bin/python',
-          '$currentDir/python_backend/sleep_env/bin/python',
-          '$currentDir/sleep_env/bin/python',
-        ];
-
-  for (final path in devPaths) {
-    if (File(path).existsSync()) {
-      return path;
-    }
-  }
-
-  // 3. Fallback to system python3 or autoscore-backend on PATH
-  if (Platform.isMacOS) {
-    for (final sysPath in [
-      '/opt/homebrew/bin/python3',
-      '/usr/local/bin/python3',
-    ]) {
-      if (File(sysPath).existsSync()) {
-        return sysPath;
-      }
-    }
-  }
-  return Platform.isWindows ? 'python.exe' : 'python3';
-}
-
-String detectBackendScript() {
-  final currentDir = Directory.current.path;
-  final scriptPaths = [
-    '$currentDir/../backend/cli.py',
-    '$currentDir/backend/cli.py',
-    '$currentDir/python_backend/cli.py',
-  ];
-  for (final path in scriptPaths) {
-    if (File(path).existsSync()) {
-      return path;
-    }
-  }
-  return '';
-}
-
 String detectAnalyseNidraExecutable() {
   final executableDir = File(Platform.resolvedExecutable).parent.path;
   final candidates = [
@@ -6237,8 +6311,19 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
   }
 
   Future<void> _startBatch() async {
-    final executable = detectBackendExecutable();
-    final script = detectBackendScript();
+    late final AutoscoreInvocation invocation;
+    try {
+      invocation = resolveAutoscoreInvocation();
+    } on StateError catch (error) {
+      for (final file in widget.files) {
+        _statuses[file] = 'Failed';
+      }
+      _addLog(error.message);
+      if (mounted) {
+        setState(() => _isFinished = true);
+      }
+      return;
+    }
 
     for (int i = 0; i < widget.files.length; i++) {
       if (_isCancelled) break;
@@ -6253,18 +6338,9 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
         _fileProgress = 0.0;
         _progressLabel = 'Starting ${_basename(file)}...';
       });
-      _addLog('--- Starting auto-scoring for ${_basename(file)} ---');
+      _addLog('--- Starting AutoscoreNidra for ${_basename(file)} ---');
 
-      final args = <String>[];
-      if (executable.endsWith('.py') ||
-          script.isNotEmpty &&
-              (executable.contains('python') ||
-                  executable.contains('python3'))) {
-        if (script.isNotEmpty) {
-          args.add(script);
-        }
-      }
-      args.add(file);
+      final args = <String>[file];
       args.addAll(['--algorithm', widget.algorithm]);
       args.addAll(['--sequence-correction', widget.correction]);
       if (widget.eegChannels.isNotEmpty) {
@@ -6287,8 +6363,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
 
       try {
         final exitCode = await EegBackend().runCommandStreamAsync(
-          executable: executable,
-          arguments: args,
+          executable: invocation.executable,
+          arguments: invocation.argumentsFor(args),
           onLine: _addLog,
         );
         final outputJsonPath = _outputPathFromLogs(_logLines);
@@ -6340,8 +6416,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
           const SizedBox(width: 8),
           Text(
             _isFinished
-                ? 'Batch Scoring Finished'
-                : 'Running Batch Auto-Scoring…',
+                ? 'AutoscoreNidra Batch Finished'
+                : 'Running Batch AutoscoreNidra…',
           ),
         ],
       ),

@@ -12,9 +12,9 @@
 
 **Version:** 1.1.3
 
-Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, and automated sleep staging.
+Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, automated sleep staging, advanced sleep EEG analysis and batch processing.
 
-Rebuilt from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **ScoringNidra** is a modernized, standalone recreation of the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files.
+Built from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **ScoringNidra** is inspired heavily from the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files and advanced analysis.
 
 ![ScoringNidra Main Window](screenshots/main.png)
 
@@ -22,15 +22,15 @@ Rebuilt from the ground up using **Flutter** for a lightweight, fluid UI, and **
 
 ## About
 
-**ScoringNidra** is designed to overcome the performance lag and dependency hurdles of traditional sleep scoring applications. By combining the reactive rendering of Flutter with the computational muscle of Rust (via background Isolates and FFI), the application effortlessly handles full-night EEG recordings, real-time filtering, dynamic Welch periodograms, and Morlet wavelet decompositions.
+**ScoringNidra** is designed to overcome the performance lag and dependency hurdles of traditional sleep scoring applications and incorporating advanced analysis done in sleep research. By combining the reactive rendering of Flutter with the computational muscle of Rust (via background Isolates and FFI), the application effortlessly handles full-night EEG recordings, real-time filtering, dynamic Welch periodograms, and Morlet wavelet decompositions.
 
 ---
 
 ## 📥 Download Standalone Releases
 
 We compile two distinct variants of **ScoringNidra** automatically via GitHub Actions:
-*   **ScoringNidra (Full)**: Includes manual scoring, loaders, detections, plus the packaged Python ML runtime to run automated staging models locally.
-*   **ScoringNidra-lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, and loaders, with a significantly smaller download size (does not bundle Python runtimes).
+*   **ScoringNidra (Full)**: Includes manual scoring, data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
+*   **ScoringNidra-lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
 
 | Operating System | Variant | Package Type | Download Link | Downloads |
 |------------------|---------|--------------|---------------|-----------|
@@ -43,12 +43,14 @@ We compile two distinct variants of **ScoringNidra** automatically via GitHub Ac
 
 ### For macOS Users
 Because the application is signed ad-hoc, you must clear the macOS Gatekeeper quarantine flag after extracting:
-1.  Open **Terminal** and navigate to your extracted folder.
-2.  Run the following command:
+1.  Download & Extract the zip folder into your **Downloads** folder.
+2.  Open **Terminal**.
+3.  Copy, Paste & Run the following command:
     ```sh
-    xattr -rd com.apple.quarantine ScoringNidra.app
+    xattr -rd com.apple.quarantine ~/ScoringNidra.app
     ```
-3.  Right-click `ScoringNidra.app` and choose **Open**.
+4.  Now you are ready to run the **ScoringNidra.app**.
+5.  Drag and drop the **ScoringNidra.app** into **Applications** folder so that you can open like any other App in future.
 
 ---
 
@@ -64,10 +66,13 @@ ScoringNidra overcomes the main performance bottlenecks of standard Python-based
 
 ---
 
-## 🤖 Automated Sleep Staging (Full App Only)
+## AutoscoreNidra — Automated Sleep Scoring (Full App Only)
 
-ScoringNidra incorporates a comprehensive suite of automatic sleep scorers powered by modern deep learning and machine learning models:
+**AutoscoreNidra** is ScoringNidra's automated sleep-scoring system. It provides a consistent UI, dependency preflight, live epoch progress, and local execution for modern deep-learning and machine-learning staging models:
 
+*   **Multi-Montage Consensus Scoring**: AutoscoreNidra independently scores every selected EEG channel and clinically valid reference combination. It then combines their epoch-wise probabilities into one consensus hypnogram, reducing dependence on any single channel or montage.
+*   **Optional SleepGPT Sequence Refinement**: After the base consensus scoring, SleepGPT can apply a condition-agnostic sequence correction pass. It uses the temporal sleep-stage sequence to reduce implausible transitions without requiring a diagnosis-specific model.
+*   **Single-Channel EEG Support**: AutoscoreNidra can score recordings containing only one usable EEG channel. When multiple channels or reference combinations are available, it automatically expands to the multi-montage consensus workflow.
 *   **9 Supported Staging Models**:
     1.  **YASA LightGBM Consensus**: Lightweight boosted tree stager.
     2.  **Offline U-Sleep Consensus**: Local convolutional neural network inference.
@@ -78,15 +83,14 @@ ScoringNidra incorporates a comprehensive suite of automatic sleep scorers power
     7.  **SleepTransformer**: Attention-based transformer stager.
     8.  **Dreamento**: Feature-engineered YASA classifier.
     9.  **SleepEEGpy**: Standard MNE/YASA scorer.
-*   **Sequence Correction (SleepGPT)**: An optional sequence correction pass applied to base stagers to correct unphysiological stage transitions.
-*   **Batch Auto-scoring**: Queue multiple EDF/ORB/SIGNAL files for sequential background auto-scoring. Includes live status monitoring and progress log output.
+*   **Batch AutoscoreNidra**: Queue multiple EDF/ORB/SIGNAL files for sequential background scoring with live status and epoch progress.
 *   **Interactive Checklists**: Configure stager EEG, EOG, EMG, and Reference signals dynamically using checklist selectors instead of manual comma-separated text input fields.
 
 ![Autoscoring Configuration and Model Run](screenshots/autoscoring_snapshot.png)
 
-## 🔬 Quantitative Sleep Analysis (analyseNidra)
+## AnalyseNidra — Advanced Sleep EEG Analysis
 
-ScoringNidra includes a high-performance quantitative neurophysiology backend called **analyseNidra**, written in pure native Rust. It performs fast, multithreaded analysis of sleep architecture, spectral power, Phase-Amplitude Coupling (PAC), slow-waves, spindles, and regional statistics.
+**AnalyseNidra** is the advanced quantitative neurophysiology subsystem, written in native Rust. It performs fast, multithreaded analysis of sleep architecture, spectral power, phase-amplitude coupling (PAC), slow waves, spindles, aperiodic dynamics, nonlinear complexity, and regional statistics.
 
 By leveraging Rust's compiler optimizations and parallel execution (via `rayon`), the entire analysis runs over 6x faster than standard Python pipelines.
 
@@ -94,9 +98,11 @@ By leveraging Rust's compiler optimizations and parallel execution (via `rayon`)
 * **Spectral Analysis**: Fast Welch periodogram computation with median averaging.
 * **Aperiodic Fit**: Native Levenberg-Marquardt implementations of FOOOF (Fitting Oscillations & One-Over-F) and IRASA (Irregularly Resampled Auto-Spectral Analysis) to isolate true oscillatory peaks from the background aperiodic 1/f slope.
 * **Spindle Detection**: Port of the YASA (Yet Another Spindle Algorithm) spindle detection method.
-* **Slow-Wave Detection**: Port of YASA slow-wave detection.
+* **Slow-Wave Detection**: Port of YASA slow-wave detection, including `sw_all_density_calc` normalized as slow-wave count per total NREM minute.
 * **Phase-Amplitude Coupling (PAC)**: TensorPAC-compatible modulation index calculation for Slow-Wave/Sigma coupling.
 * **Regional Compilation**: Aggregates all spectral features and event detections across scalp channels.
+* **Master-Sheet Compilation**: Combines regional CSV outputs from the latest batch or independently completed AnalyseNidra runs into one provenance-preserving CSV.
+* **Publication-Grade Sleep Report**: Generates a four-page PDF covering sleep continuity, thalamocortical coupling, FOOOF/IRASA aperiodic trends, oscillatory peaks, entropy, fractal dynamics, Lempel-Ziv complexity, and autocorrelation windows.
 
 ### Command-Line Usage & Parameters
 For advanced CLI workflows, the `analyse-nidra` executable can be invoked directly from the command line:
@@ -112,7 +118,7 @@ analyse-nidra <recording.edf> <scoring.json> [core.json|-] [pac.json|-] [slow-wa
 4. `[pac.json|-]`: Path to save Phase-Amplitude Coupling (PAC) matrices. Use `-` to skip.
 5. `[slow-waves.json|-]`: Path to save detected slow wave events and summary statistics. Use `-` to skip.
 6. `[spindles.json|-]`: Path to save detected spindle events and summary statistics. Use `-` to skip.
-7. `[regional.csv|-]`: Path to compile and save the 252-column regional EEG metric CSV. Use `-` to skip.
+7. `[regional.csv|-]`: Path to compile and save the 253-column regional EEG metric CSV. Use `-` to skip.
 
 #### Named Options:
 - `--channels <names>`: Comma-separated list of EEG channels to include in the analysis (e.g., `--channels F3,F4,C3,C4,O1,O2`). Defaults to `F3,F4,C3,C4,O1,O2`.
@@ -126,9 +132,9 @@ analyse-nidra <recording.edf> <scoring.json> [core.json|-] [pac.json|-] [slow-wa
 
 We have enriched the UI with several flexibility and control improvements:
 *   **Smooth Draggable Plot Borders**: Manually adjust the vertical boundaries between the Spectrogram, Hypnogram, and Periodogram panels in real time by dragging. Resizing is cumulative, smooth, locked to respect screen size limits, and is automatically saved to the recording's `.config.json` file.
-*   **Consolidated Batch Tab**: Consolidates all batch auto-scoring and batch AnalyseNidra setups under a dedicated, clean, multi-column "Batch" tab, with automatic tab switching when triggered from platform/in-app menus. (In Lite builds, Python automated scoring is completely hidden, exposing only the Rust-based AnalyseNidra features analysis).
+*   **Consolidated Batch Tab**: Houses Batch AutoscoreNidra, Batch AnalyseNidra, and AnalyseNidra master-sheet compilation in one workspace. Redundant batch menu commands are intentionally omitted.
 *   **Hypnogram Horizontal Zoom**: View the hypnogram step chart fully (Full Night) or zoom in on 100, 200, or 400 epoch windows centered around the active epoch. All mouse taps map correctly to coordinates within the zoomed viewport.
-*   **Wavelet Spectre Toggle**: Easily toggle the complex Morlet wavelet spectrogram panel on or off to save vertical screen space.
+*   **Wavelet Spectre Toggle**: The complex Morlet wavelet panel is off by default to avoid unnecessary computation and vertical scrolling, and can be enabled when needed.
 *   **Slow Wave Activity (SWA) Toggle**: Show or hide the SWA delta-power overlay on the hypnogram timeline, hiding its slider controls when inactive.
 *   **EEG Guide Customization**: Modify the thickness and color of the horizontal reference guide lines in the EEG viewport.
 *   **Centred Label Layout**: Stage labels on the Hypnogram panel are vertically centered on their corresponding colored bands.
@@ -242,4 +248,3 @@ flutter build macos --release
 flutter build windows --release
 iscc windows/installer.iss
 ```
-

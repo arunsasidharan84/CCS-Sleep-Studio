@@ -17,6 +17,12 @@ __pycache__/
 # OS files
 .DS_Store
 
+# Reproducible local build outputs
+/build/
+/dist/
+/bridge/target/
+/autoscore-backend.spec
+
 # Temporary outputs/JSONs
 *.json
 !**/Contents.json

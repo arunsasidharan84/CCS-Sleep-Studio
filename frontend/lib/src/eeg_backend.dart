@@ -318,7 +318,7 @@ class AppConfig {
           (json['spectrogramPowerMin'] as num?)?.toDouble() ?? -1.0,
       spectrogramPowerMax:
           (json['spectrogramPowerMax'] as num?)?.toDouble() ?? 3.0,
-      tfEnabled: safeBool(json['tfEnabled'], true),
+      tfEnabled: safeBool(json['tfEnabled'], false),
       tfDisplayMode: json['tfDisplayMode'] as String? ?? 'dB (median baseline)',
       tfFrequencyScale: json['tfFrequencyScale'] as String? ?? 'Linear',
       tfShowRidge: safeBool(json['tfShowRidge'], false),
@@ -428,7 +428,7 @@ class AppConfig {
       final amp = global['Reference_amplitude_line_muV'] as num?;
       final tfDisplay =
           global['Wavelet_display_mode'] as String? ?? 'dB (median baseline)';
-      final tfVis = _boolValue(global['Wavelet_panel_visible'], fallback: true);
+      final tfVis = _boolValue(global['Wavelet_panel_visible'], fallback: false);
       final tfScale = global['Wavelet_frequency_scale'] as String? ?? 'Linear';
       final tfRidge = _boolValue(global['Wavelet_show_ridge']);
       final tfAutoScale = _boolValue(
@@ -953,7 +953,7 @@ class EegBackend {
         }
         return result.exitCode;
       } on Object catch (error) {
-        onLine('Failed to start auto-scoring backend: $error');
+        onLine('Failed to start AutoscoreNidra backend: $error');
         return -99;
       }
     }

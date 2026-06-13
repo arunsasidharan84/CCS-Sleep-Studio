@@ -43,12 +43,20 @@ jobs:
             --collect-all lightgbm \
             --collect-all physioex \
             --collect-all braindecode \
+            --collect-all mne_bids \
+            --collect-all lightning_fabric \
             --collect-all lunapi \
             --collect-all safetensors \
             --collect-all usleep_api \
-            --add-data "backend/models:models" \
+            --add-data "backend/vendor/physioex/train/models/checkpoints:physioex/train/models/checkpoints" \
+            --add-data "backend/models:backend/models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
             backend_entry.py
+
+      - name: Validate AutoscoreNidra standalone backend
+        run: |
+          chmod +x dist/autoscore-backend
+          dist/autoscore-backend --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -109,6 +117,7 @@ jobs:
       - name: Copy Python backend into macOS App bundle (Full)
         run: |
           cp dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
+          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/autoscore-backend
 
       - name: Ad-hoc sign macOS app (Full)
         run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
@@ -167,12 +176,19 @@ jobs:
             --collect-all lightgbm `
             --collect-all physioex `
             --collect-all braindecode `
+            --collect-all mne_bids `
+            --collect-all lightning_fabric `
             --collect-all lunapi `
             --collect-all safetensors `
             --collect-all usleep_api `
-            --add-data "backend/models;models" `
+            --add-data "backend/vendor/physioex/train/models/checkpoints;physioex/train/models/checkpoints" `
+            --add-data "backend/models;backend/models" `
             --add-data "backend/sleepgpt-main;sleepgpt-main" `
             backend_entry.py
+
+      - name: Validate AutoscoreNidra standalone backend
+        shell: pwsh
+        run: dist\autoscore-backend.exe --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -228,6 +244,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item dist\autoscore-backend.exe frontend\build\windows\x64\runner\Release\
+          if (-not (Test-Path frontend\build\windows\x64\runner\Release\autoscore-backend.exe)) { exit 1 }
 
       - name: Package Windows app (Full Installer)
         run: iscc /F"ScoringNidra-Installer" frontend/windows/installer.iss
@@ -283,12 +300,20 @@ jobs:
             --collect-all lightgbm \
             --collect-all physioex \
             --collect-all braindecode \
+            --collect-all mne_bids \
+            --collect-all lightning_fabric \
             --collect-all lunapi \
             --collect-all safetensors \
             --collect-all usleep_api \
-            --add-data "backend/models:models" \
+            --add-data "backend/vendor/physioex/train/models/checkpoints:physioex/train/models/checkpoints" \
+            --add-data "backend/models:backend/models" \
             --add-data "backend/sleepgpt-main:sleepgpt-main" \
             backend_entry.py
+
+      - name: Validate AutoscoreNidra standalone backend
+        run: |
+          chmod +x dist/autoscore-backend
+          dist/autoscore-backend --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

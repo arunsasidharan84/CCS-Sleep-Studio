@@ -284,8 +284,8 @@ class PhysioExSequenceAlgorithm(LocalTorchEpochAlgorithm):
             from physioex.train.models import load_model
         except Exception as exc:
             raise AlgorithmUnavailable(
-                "PhysioEx is required for this pretrained adapter. "
-                "Install it into automated_sleep_scoring/vendor with `pip install --target automated_sleep_scoring/vendor physioex`."
+                "PhysioEx could not initialize for this pretrained adapter: "
+                f"{type(exc).__name__}: {exc}"
             ) from exc
         return load_model
 
