@@ -47,7 +47,7 @@ Because the application is signed ad-hoc, you must clear the macOS Gatekeeper qu
 2.  Open **Terminal**.
 3.  Copy, Paste & Run the following command:
     ```sh
-    xattr -rd com.apple.quarantine ~/ScoringNidra.app
+    xattr -rd com.apple.quarantine ~/Downloads/ScoringNidra.app
     ```
 4.  Now you are ready to run the **ScoringNidra.app**.
 5.  Drag and drop the **ScoringNidra.app** into **Applications** folder so that you can open like any other App in future.
