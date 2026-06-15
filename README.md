@@ -126,6 +126,8 @@ analyse-nidra <recording.edf> <scoring.json> [core.json|-] [pac.json|-] [slow-wa
 
 ![analyseNidra Region Analysis Configuration](screenshots/analyse_nidra_snapshot.png)
 
+![analyseNidra Region Analysis Configuration](screenshots/sleep_analysis_report.png)
+
 ---
 
 ## 🎨 New UI Features
