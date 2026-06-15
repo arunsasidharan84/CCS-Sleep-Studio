@@ -65,23 +65,37 @@ String _buildMacrostructurePage(
     (SleepStage.n3, 'N3', 'N3_duration'),
     (SleepStage.rem, 'REM', 'R_duration'),
   ];
+  final stageDurations = <SleepStage, double>{
+    for (final stageRow in stageRows)
+      stageRow.$1:
+          _number(row, stageRow.$3) ??
+          viewport.stages.where((stage) => stage == stageRow.$1).length *
+              viewport.epochSeconds /
+              60,
+  };
+  final totalStageMinutes = stageDurations.values.fold<double>(
+    0,
+    (sum, duration) => sum + duration,
+  );
+  final maxDuration = math.max(
+    1.0,
+    stageDurations.values.fold<double>(0, math.max),
+  );
   var y = 520.0;
   for (final stageRow in stageRows) {
     final color = _stageColor(stageRow.$1);
-    final duration =
-        _number(row, stageRow.$3) ??
-        viewport.stages.where((stage) => stage == stageRow.$1).length *
-            viewport.epochSeconds /
-            60;
-    final maxDuration = math.max(
-      1.0,
-      stageRows
-          .map((item) => _number(row, item.$3) ?? 0)
-          .fold<double>(0, math.max),
-    );
+    final duration = stageDurations[stageRow.$1] ?? 0;
+    final proportion = totalStageMinutes <= 0
+        ? 0.0
+        : 100 * duration / totalStageMinutes;
     p.text(stageRow.$2, 52, y + 3, bold: true, size: 8);
     p.rect(88, y, 250 * duration / maxDuration, 12, fill: color);
-    p.text('${duration.toStringAsFixed(1)} min', 345, y + 2, size: 8);
+    p.text(
+      '${duration.toStringAsFixed(1)} min (${proportion.toStringAsFixed(1)}%)',
+      345,
+      y + 2,
+      size: 8,
+    );
     y -= 20;
   }
 
@@ -247,7 +261,7 @@ String _buildAperiodicPage(List<Map<String, String>> rows) {
   );
 
   p.section('Stage-wise aperiodic trajectory (regional mean)', 50, 675);
-  final stages = ['N1', 'N2', 'N3', 'REM'];
+  final stages = ['W', 'N1', 'N2', 'N3', 'REM'];
   final fooofExponent = [
     for (final stage in stages) _regionalMean(rows, '${stage}_exponent_FOOOF'),
   ];
@@ -268,49 +282,59 @@ String _buildAperiodicPage(List<Map<String, String>> rows) {
   );
 
   p.section('Aperiodic parameterization and model validation', 50, 470);
-  p.text('Stage', 52, 447, bold: true, size: 7);
-  p.text('FOOOF offset', 105, 447, bold: true, size: 7);
-  p.text('FOOOF exponent', 185, 447, bold: true, size: 7);
-  p.text('FOOOF error', 280, 447, bold: true, size: 7);
-  p.text('IRASA intercept', 355, 447, bold: true, size: 7);
-  p.text('IRASA slope', 445, 447, bold: true, size: 7);
-  p.text('IRASA R2 / AUC', 510, 447, bold: true, size: 7);
+  p.text('Stage', 52, 447, bold: true, size: 6.5);
+  p.text('FOOOF offset', 92, 447, bold: true, size: 6.5);
+  p.text('FOOOF exponent', 165, 447, bold: true, size: 6.5);
+  p.text('FOOOF error', 245, 447, bold: true, size: 6.5);
+  p.text('IRASA intercept', 310, 447, bold: true, size: 6.5);
+  p.text('IRASA slope', 385, 447, bold: true, size: 6.5);
+  p.text('IRASA R2', 452, 447, bold: true, size: 6.5);
+  p.text('IRASA AUC', 510, 447, bold: true, size: 6.5);
   var y = 426.0;
   for (final stage in stages) {
     p.text(stage, 52, y, bold: true, size: 7.5);
     p.text(
       _format(_regionalMean(rows, '${stage}_offset_FOOOF')),
-      105,
+      92,
       y,
       size: 7.5,
     );
     p.text(
       _format(_regionalMean(rows, '${stage}_exponent_FOOOF')),
-      185,
+      165,
       y,
       size: 7.5,
     );
     p.text(
       _format(_regionalMean(rows, '${stage}_error_FOOOF')),
-      280,
+      245,
       y,
       size: 7.5,
     );
     p.text(
       _format(_regionalMean(rows, '${stage}_intercept_Irasa')),
-      355,
+      310,
       y,
       size: 7.5,
     );
     p.text(
       _format(_regionalMean(rows, '${stage}_slope_Irasa')),
-      445,
+      385,
       y,
       size: 7.5,
     );
-    final r2 = _format(_regionalMean(rows, '${stage}_rsquared_Irasa'));
-    final auc = _format(_regionalMean(rows, '${stage}_auc_Irasa'));
-    p.text('$r2 / $auc', 510, y, size: 7.5);
+    p.text(
+      _format(_regionalMean(rows, '${stage}_rsquared_Irasa')),
+      452,
+      y,
+      size: 7.2,
+    );
+    p.text(
+      _format(_regionalMean(rows, '${stage}_auc_Irasa')),
+      510,
+      y,
+      size: 7.2,
+    );
     y -= 20;
   }
 
@@ -370,8 +394,8 @@ String _buildAperiodicPage(List<Map<String, String>> rows) {
         : quality == 'Moderate confidence'
         ? _orange
         : _red;
-    final x = 50.0 + i * 128;
-    p.rect(x, 125, 116, 38, fill: color.withAlpha(32));
+    final x = 50.0 + i * 102;
+    p.rect(x, 125, 94, 38, fill: color.withAlpha(32));
     p.text(stage, x + 7, 148, bold: true, size: 8, color: color);
     p.text(quality, x + 7, 133, size: 7.5);
   }
@@ -394,7 +418,7 @@ String _buildComplexityPage(List<Map<String, String>> rows) {
   );
 
   final selectedRows = rows.take(3).toList();
-  final stages = ['N1', 'N2', 'N3', 'REM'];
+  final stages = ['W', 'N1', 'N2', 'N3', 'REM'];
   _heatmap(
     p,
     title: 'Signal entropy profile',
@@ -558,21 +582,6 @@ void _hypnogram(
     }
   }
 
-  if (viewport.showSwaPlot && viewport.swaPerEpoch.isNotEmpty) {
-    final swa = viewport.swaPerEpoch;
-    final minSwa = swa.reduce(math.min);
-    final maxSwa = swa.reduce(math.max);
-    final range = maxSwa - minSwa;
-    if (range > 1e-10) {
-      final points = <(double, double)>[];
-      for (var i = 0; i < viewport.stages.length && i < swa.length; i++) {
-        final normalized = (swa[i] - minSwa) / range;
-        points.add((x + (i + 0.5) * epochWidth, plotY(5.0 * normalized - 4.0)));
-      }
-      p.polyline(points, color: _charcoal.withAlpha(145), width: 0.7);
-    }
-  }
-
   final fullNightSeconds = viewport.stages.length * 30.0;
   if (fullNightSeconds > 0) {
     for (final event in viewport.scoredEvents) {
@@ -602,12 +611,6 @@ void _hypnogram(
       p.line(tx, y, tx, y - 3, color: _slate, width: 0.35);
       p.text(label, tx - 8, y - 12, size: 6.2, color: _slate);
     }
-  }
-
-  if (viewport.currentEpoch >= 0 &&
-      viewport.currentEpoch < viewport.stages.length) {
-    final cursorX = x + width * viewport.currentEpoch / viewport.stages.length;
-    p.line(cursorX, y, cursorX, y + height, color: _charcoal, width: 0.9);
   }
 }
 
@@ -727,7 +730,8 @@ void _heatmap(
   final gridX = x + labelWidth;
   final gridWidth = width - labelWidth;
   final cellWidth = gridWidth / math.max(1, stages.length);
-  final cellHeight = (height - 60) / math.max(1, rows.length);
+  final rowSlots = math.max(3, rows.length);
+  final cellHeight = (height - 60) / rowSlots;
   for (var c = 0; c < stages.length; c++) {
     p.text(
       stages[c],
@@ -760,6 +764,42 @@ void _heatmap(
       );
     }
   }
+  const colorSteps = 24;
+  final colorBarX = gridX;
+  final colorBarY = y - 60 - rows.length * cellHeight - 18;
+  final colorBarWidth = gridWidth;
+  final colorStepWidth = colorBarWidth / colorSteps;
+  for (var i = 0; i < colorSteps; i++) {
+    p.rect(
+      colorBarX + i * colorStepWidth,
+      colorBarY,
+      colorStepWidth + 0.2,
+      6,
+      fill: _heatColor(i / (colorSteps - 1)),
+    );
+  }
+  p.text(
+    minValue.toStringAsFixed(2),
+    colorBarX,
+    colorBarY - 10,
+    size: 5.5,
+    color: _slate,
+  );
+  p.text('Low', colorBarX + 30, colorBarY - 10, size: 5.5, color: _slate);
+  p.text(
+    'High',
+    colorBarX + colorBarWidth - 48,
+    colorBarY - 10,
+    size: 5.5,
+    color: _slate,
+  );
+  p.text(
+    maxValue.toStringAsFixed(2),
+    colorBarX + colorBarWidth - 24,
+    colorBarY - 10,
+    size: 5.5,
+    color: _slate,
+  );
 }
 
 double _sleepMinutes(EegViewport viewport) {

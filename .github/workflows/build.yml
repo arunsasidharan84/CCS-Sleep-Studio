@@ -51,6 +51,7 @@ jobs:
             --collect-all lightning_fabric \
             --collect-all lunapi \
             --collect-all safetensors \
+            --collect-all transformers \
             --collect-all usleep_api \
             --add-data "backend/vendor/physioex/train/models/checkpoints:physioex/train/models/checkpoints" \
             --add-data "backend/models:backend/models" \
@@ -187,6 +188,7 @@ jobs:
             --collect-all lightning_fabric `
             --collect-all lunapi `
             --collect-all safetensors `
+            --collect-all transformers `
             --collect-all usleep_api `
             --add-data "backend/vendor/physioex/train/models/checkpoints;physioex/train/models/checkpoints" `
             --add-data "backend/models;backend/models" `
@@ -315,6 +317,7 @@ jobs:
             --collect-all lightning_fabric \
             --collect-all lunapi \
             --collect-all safetensors \
+            --collect-all transformers \
             --collect-all usleep_api \
             --add-data "backend/vendor/physioex/train/models/checkpoints:physioex/train/models/checkpoints" \
             --add-data "backend/models:backend/models" \

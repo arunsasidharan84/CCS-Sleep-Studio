@@ -57,6 +57,11 @@ def main() -> None:
     parser.add_argument("--emg", default=None, help="Optional comma-separated EMG channels.")
     parser.add_argument("--sleepgpt-alpha", type=float, default=0.1)
     parser.add_argument("--sleepgpt-ngram", type=int, default=30)
+    parser.add_argument(
+        "--export-diagnostics",
+        action="store_true",
+        help="Also save consensus and per-montage probability JSON files.",
+    )
     parser.add_argument("--list-channels", action="store_true", help="Print detected channels and exit.")
     parser.add_argument("--check-models", action="store_true", help="Validate packaged model dependencies and exit.")
     args = parser.parse_args()
@@ -101,6 +106,7 @@ def main() -> None:
         sequence_correction=args.sequence_correction,
         sleepgpt_alpha=args.sleepgpt_alpha,
         sleepgpt_ngram=args.sleepgpt_ngram,
+        export_diagnostics=args.export_diagnostics,
         log=log,
     )
     print(f"\nAlgorithm: {result.algorithm}")

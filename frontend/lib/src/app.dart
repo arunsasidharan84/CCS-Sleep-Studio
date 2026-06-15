@@ -5269,7 +5269,7 @@ String? _detectMatchingEdf(String scoringPath) {
   final scoringStem = _basename(_sidecarPath(scoringPath, ''));
   final normalizedStem = scoringStem.replaceFirst(
     RegExp(
-      r'_(yasa|gssc|tinysleepnet|seqsleepnet|sleeptransformer|usleep|luna|dreamento|sleepeegpy)(?:_sleepgpt)?$',
+      r'_(yasa|gssc|tinysleepnet|seqsleepnet|sleeptransformer|usleep|luna|dreamento|sleepeegpy)(?:_sleepgpt)?(?:_scoring)?$',
       caseSensitive: false,
     ),
     '',

@@ -32,14 +32,22 @@ We compile two distinct variants of **ScoringNidra** automatically via GitHub Ac
 *   **ScoringNidra (Full)**: Includes manual scoring, data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
 *   **ScoringNidra-lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
 
-| Operating System | Variant | Package Type | Download Link | Downloads |
-|------------------|---------|--------------|---------------|-----------|
-| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) | [![macOS Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-macos.zip?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) |
-| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) | [![macOS Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-macos.zip?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
-| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) | [![Windows Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-Installer.exe?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
-| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) | [![Windows Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-Installer.exe?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
-| **Linux** | **Full** | x64 Tarball | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) | [![Linux Full downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-linux.tar.gz?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) |
-| | **Lite** | x64 Tarball | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) | [![Linux Lite downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/latest/ScoringNidra-lite-linux.tar.gz?label=downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) |
+[![Retained release asset downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/total?label=retained%20release%20downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases)
+
+| Operating System | Variant | Package Type | Download Link |
+|------------------|---------|--------------|---------------|
+| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) |
+| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
+| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
+| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
+| **Linux** | **Full** | x64 Tarball | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) |
+| | **Lite** | x64 Tarball | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) |
+
+The `latest` development release is a rolling prerelease. Each successful build
+replaces its assets, and GitHub starts the replacement assets with new download
+counters. The badge above therefore counts downloads only for assets that are
+still retained in GitHub Releases. Versioned releases such as `v1.1.5` retain
+their own permanent asset counters.
 
 ### For macOS Users
 Because the application is signed ad-hoc, you must clear the macOS Gatekeeper quarantine flag after extracting:
@@ -73,6 +81,7 @@ ScoringNidra overcomes the main performance bottlenecks of standard Python-based
 *   **Multi-Montage Consensus Scoring**: AutoscoreNidra independently scores every selected EEG channel and clinically valid reference combination. It then combines their epoch-wise probabilities into one consensus hypnogram, reducing dependence on any single channel or montage.
 *   **Optional SleepGPT Sequence Refinement**: After the base consensus scoring, SleepGPT can apply a condition-agnostic sequence correction pass. It uses the temporal sleep-stage sequence to reduce implausible transitions without requiring a diagnosis-specific model.
 *   **Single-Channel EEG Support**: AutoscoreNidra can score recordings containing only one usable EEG channel. When multiple channels or reference combinations are available, it automatically expands to the multi-montage consensus workflow.
+*   **Clear Scoring Filenames**: Final hypnograms use the suffix `_scoring.json`, for example `recording_yasa_scoring.json` or `recording_yasa_sleepgpt_scoring.json`, so they are easy to distinguish from AnalyseNidra and diagnostic JSON files.
 *   **9 Supported Staging Models**:
     1.  **YASA LightGBM Consensus**: Lightweight boosted tree stager.
     2.  **Offline U-Sleep Consensus**: Local convolutional neural network inference.

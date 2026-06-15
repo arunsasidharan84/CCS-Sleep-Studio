@@ -430,7 +430,9 @@ def run_sleepgpt_correction(
         sleepgpt_dir = Path(sys._MEIPASS) / "sleepgpt-main"
     else:
         workspace_root = Path(__file__).resolve().parents[1]
-        sleepgpt_dir = workspace_root / "sleepgpt-main"
+        sleepgpt_dir = workspace_root / "backend" / "sleepgpt-main"
+        if not sleepgpt_dir.exists():
+            sleepgpt_dir = workspace_root / "sleepgpt-main"
         if not sleepgpt_dir.exists():
             sleepgpt_dir = workspace_root / "CCS_SleepEEGAnalysis" / "sleepgpt-main"
         if not sleepgpt_dir.exists():
@@ -587,9 +589,10 @@ def score_file(
     sequence_correction: str = "none",
     sleepgpt_alpha: float = 0.1,
     sleepgpt_ngram: int = 30,
+    export_diagnostics: bool = False,
     log: LogFn = log_noop,
 ) -> ScoreResult:
-    """Score one data file and write ScoringHero-compatible JSON outputs."""
+    """Score one data file and write a ScoringHero-compatible JSON output."""
     requested_algorithm = algorithm.lower().strip()
     sequence_correction = sequence_correction.lower().strip()
     if requested_algorithm.endswith("_sleepgpt"):
@@ -649,17 +652,26 @@ def score_file(
             stages = corrected[: len(stages)]
             stage_algorithm = f"{requested_algorithm}_sleepgpt"
         else:
-            stage_algorithm = f"{requested_algorithm}_sleepgpt_unavailable_fallback_{requested_algorithm}"
+            log(
+                "SleepGPT correction was unavailable; saved the unchanged "
+                f"{requested_algorithm} consensus scoring."
+            )
 
     postfix = safe_postfix(stage_algorithm)
-    output_json = output_dir / f"{base}_{postfix}.json"
-    probability_json = output_dir / f"{base}_{safe_postfix(requested_algorithm)}_consensus_probabilities.json"
-    per_channel_json = output_dir / f"{base}_{safe_postfix(requested_algorithm)}_per_channel_probabilities.json"
+    output_json = output_dir / f"{base}_{postfix}_scoring.json"
+    probability_json = None
+    per_channel_json = None
 
     stage_records = build_scoringhero_stage_records(stages, consensus_prob, source=stage_algorithm)
     write_json(output_json, [stage_records, []])
-    write_json(probability_json, consensus_prob.to_dict(orient="records"))
-    write_json(per_channel_json, per_channel_prob.to_dict(orient="records"))
+    if export_diagnostics:
+        diagnostics_dir = output_dir / f"{base}_{safe_postfix(requested_algorithm)}_diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+        probability_json = diagnostics_dir / "consensus_probabilities.json"
+        per_channel_json = diagnostics_dir / "per_montage_probabilities.json"
+        write_json(probability_json, consensus_prob.to_dict(orient="records"))
+        write_json(per_channel_json, per_channel_prob.to_dict(orient="records"))
+        log(f"Saved diagnostic probabilities: {diagnostics_dir}")
     log("PROGRESS 1.00 Scoring complete")
     log(f"Saved ScoringHero JSON: {output_json}")
 

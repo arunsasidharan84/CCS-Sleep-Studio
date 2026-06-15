@@ -31,6 +31,7 @@ void main() {
         false,
         false,
       ],
+      showSwaPlot: true,
       scoredEvents: const [
         ScoredEvent(
           digit: 0,
@@ -56,6 +57,17 @@ void main() {
           'Chan': 'Central',
           'TRT': '480',
           'TST': '410',
+          'W_duration': '70',
+          'N1_duration': '20',
+          'N2_duration': '200',
+          'N3_duration': '100',
+          'R_duration': '90',
+          'W_exponent_FOOOF': '1.1',
+          'W_slope_Irasa': '1.3',
+          'W_rsquared_Irasa': '0.9',
+          'W_auc_Irasa': '-12.5',
+          'W_perm_entropy_nonlinear': '0.9',
+          'W_ACW': '0.08',
           'N2_exponent_FOOOF': '1.4',
           'N2_slope_Irasa': '-1.2',
           'N2_perm_entropy_nonlinear': '0.8',
@@ -71,6 +83,11 @@ void main() {
     expect(pdf, contains('CORTICAL COMPLEXITY LANDSCAPE'));
     expect(pdf, contains('(Event)'));
     expect(pdf, contains('0.39 0.58 0.93 rg'));
+    expect(pdf, contains('(70.0 min \\(14.6%\\))'));
+    expect(pdf, contains('(IRASA R2)'));
+    expect(pdf, contains('(IRASA AUC)'));
+    expect(pdf, contains('(Low)'));
+    expect(pdf, contains('(High)'));
   });
 
   test('optionally renders a supplied AnalyseNidra CSV', () {
