@@ -10,6 +10,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -480,5 +484,6 @@ jobs:
             dist/ScoringNidra-lite-linux.tar.gz
           draft: false
           make_latest: ${{ steps.release_info.outputs.tag != 'latest' && 'true' || 'false' }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
