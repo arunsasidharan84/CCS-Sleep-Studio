@@ -32,6 +32,31 @@ AutoscoreInvocation resolveAutoscoreInvocation({
   String join(List<String> parts) => parts.join(separator);
 
   final packagedCandidates = <String>[
+    if (windows)
+      join([executableDir, 'autoscore-backend', 'autoscore-backend.exe']),
+    if (!windows)
+      join([executableDir, 'autoscore-backend', 'autoscore-backend']),
+    if (macOS)
+      join([
+        executableDir,
+        '..',
+        'Resources',
+        'autoscore-backend',
+        'autoscore-backend',
+      ]),
+    if (!windows && !macOS)
+      join([
+        executableDir,
+        '..',
+        'lib',
+        'scoringnidra',
+        'autoscore-backend',
+        'autoscore-backend',
+      ]),
+    if (!windows)
+      join([currentDir, 'dist', 'autoscore-backend', 'autoscore-backend']),
+    if (windows)
+      join([currentDir, 'dist', 'autoscore-backend', 'autoscore-backend.exe']),
     if (windows) join([executableDir, 'autoscore-backend.exe']),
     if (!windows) join([executableDir, 'autoscore-backend']),
     if (macOS) join([executableDir, '..', 'Resources', 'autoscore-backend']),

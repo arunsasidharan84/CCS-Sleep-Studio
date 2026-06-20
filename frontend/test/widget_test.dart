@@ -36,6 +36,11 @@ void main() {
     await tester.tap(find.text('Batch'));
     await tester.pumpAndSettle();
 
+    final viewerShortcuts = tester.widget<Shortcuts>(
+      find.byKey(const Key('viewer-shortcuts')),
+    );
+    expect(viewerShortcuts.shortcuts, isEmpty);
+
     final eegField = find.byKey(const Key('batch-autoscore-eeg-channels'));
     expect(eegField, findsOneWidget);
     await tester.enterText(eegField, 'F3,F4');

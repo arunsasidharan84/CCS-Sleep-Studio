@@ -584,40 +584,25 @@ String _buildInterpretationPage(
   y = _interpretationBlock(
     p,
     'Sleep stages',
-    'Sleep normally cycles through light sleep (N1 and N2), deep sleep (N3), '
-        'and REM sleep. Deep sleep is associated with physical restoration, '
-        'while REM sleep supports memory and emotional processing. A single '
-        'night can vary because of age, medicines, illness, environment, and '
-        'the timing of the recording.',
+    _stageInterpretation(viewport, architecture),
     y,
   );
   y = _interpretationBlock(
     p,
     'Spindles, slow waves, and their timing',
-    'Spindles are short bursts of faster activity during NREM sleep. Slow '
-        'waves reflect synchronized deep-sleep activity. The coupling measures '
-        'describe whether spindle activity occurs at a consistent phase of a '
-        'slow wave. These features describe sleep microstructure; they are not '
-        'a diagnosis by themselves.',
+    _microstructureInterpretation(rows, architecture),
     y,
   );
   y = _interpretationBlock(
     p,
     'Background spectrum and oscillatory peaks',
-    'FOOOF and IRASA separate rhythmic EEG peaks from the broad 1/f background. '
-        'The exponent and slope summarize how quickly power falls at higher '
-        'frequencies. R-squared and error values indicate how well the models '
-        'fit the signal. Poor fit should be interpreted cautiously.',
+    _aperiodicInterpretation(rows),
     y,
   );
   y = _interpretationBlock(
     p,
     'Complexity and temporal memory',
-    'Entropy and fractal measures describe how predictable or varied the EEG '
-        'signal is. ACW estimates how long activity remains related to its '
-        'recent past. Higher or lower values are not automatically better; '
-        'interpretation depends on sleep stage, brain region, signal quality, '
-        'and the clinical question.',
+    _complexityInterpretation(rows),
     y,
   );
 
@@ -670,10 +655,175 @@ String _architectureInterpretation(
   final continuity = efficiency >= 85
       ? 'Most of the recorded period was spent asleep.'
       : 'A meaningful part of the recorded period was spent awake or transitioning between stages.';
+  final sol = _number(architecture, 'SOL');
+  final waso = _number(architecture, 'WASO');
+  final streaks = <(String, double)>[];
+  for (final stage in const ['N1', 'N2', 'N3', 'R']) {
+    final value = _number(architecture, '${stage}_longest_streak');
+    if (value != null) streaks.add((stage == 'R' ? 'REM' : stage, value));
+  }
+  streaks.sort((a, b) => b.$2.compareTo(a.$2));
+  final continuityValues = <String>[
+    if (sol != null) 'sleep-onset latency ${sol.toStringAsFixed(1)} min',
+    if (waso != null) 'wake after sleep onset ${waso.toStringAsFixed(1)} min',
+    if (streaks.isNotEmpty)
+      'longest sleep-stage streak ${streaks.first.$1} '
+          '${streaks.first.$2.toStringAsFixed(1)} min',
+  ].join(', ');
   return 'Estimated total sleep time was ${tst.toStringAsFixed(1)} minutes, '
-      'with sleep efficiency of ${efficiency.toStringAsFixed(1)}%. $continuity '
+      'with sleep efficiency of ${efficiency.toStringAsFixed(1)}%. '
+      '${continuityValues.isEmpty ? '' : '$continuityValues. '}$continuity '
       'Sleep efficiency alone does not identify the reason for wakefulness or '
       'fragmentation.';
+}
+
+String _stageInterpretation(
+  EegViewport viewport,
+  Map<String, String> architecture,
+) {
+  final tst = _number(architecture, 'TST') ?? _sleepMinutes(viewport);
+  final stages = <(String, double)>[];
+  for (final stage in const ['N1', 'N2', 'N3', 'R']) {
+    final duration = _number(architecture, '${stage}_duration');
+    if (duration != null) stages.add((stage == 'R' ? 'REM' : stage, duration));
+  }
+  if (stages.isEmpty || tst <= 0) {
+    return 'Stage-specific durations were not available for this recording. '
+        'Review the hypnogram for the observed sequence of N1, N2, N3, REM, and wake.';
+  }
+  stages.sort((a, b) => b.$2.compareTo(a.$2));
+  final dominant = stages.first;
+  final shares = stages
+      .map(
+        (item) =>
+            '${item.$1} ${item.$2.toStringAsFixed(1)} min '
+            '(${(100 * item.$2 / tst).toStringAsFixed(1)}%)',
+      )
+      .join(', ');
+  final remLatency = _number(architecture, 'R_onset');
+  final n3Latency = _number(architecture, 'N3_onset');
+  final latencies = <String>[
+    if (n3Latency != null) 'N3 onset ${n3Latency.toStringAsFixed(1)} min',
+    if (remLatency != null) 'REM onset ${remLatency.toStringAsFixed(1)} min',
+  ].join('; ');
+  return '$shares. ${dominant.$1} was the largest sleep-stage component in this recording. '
+      '${latencies.isEmpty ? '' : '$latencies. '}'
+      'These are within-recording observations, not age-adjusted reference classifications.';
+}
+
+String _microstructureInterpretation(
+  List<Map<String, String>> rows,
+  Map<String, String> architecture,
+) {
+  final spindleDensity = _rowMean(rows, 'sp_all_density');
+  final nremMinutes = _number(architecture, 'NREM_duration');
+  final slowWaveDensity =
+      _rowMean(rows, 'sw_all_density_calc') ??
+      ((nremMinutes ?? 0) > 0
+          ? (_rowMean(rows, 'sw_all_Count') ?? 0) / nremMinutes!
+          : null);
+  final mi = _rowMean(rows, 'pac_all_max_MI');
+  final ndPac = _rowMean(rows, 'sw_all_ndPAC');
+  final phase = _rowMean(rows, 'sw_all_PhaseAtSigmaPeak');
+  final strongest = _regionalExtreme(rows, 'pac_all_max_MI', highest: true);
+  final values = <String>[
+    if (spindleDensity != null)
+      'mean spindle density ${spindleDensity.toStringAsFixed(2)}/min',
+    if (slowWaveDensity != null)
+      'slow-wave density ${slowWaveDensity.toStringAsFixed(2)}/NREM min',
+    if (mi != null) 'PAC MI ${mi.toStringAsFixed(4)}',
+    if (ndPac != null) 'ndPAC ${ndPac.toStringAsFixed(4)}',
+    if (phase != null) 'sigma-peak phase ${phase.toStringAsFixed(2)} rad',
+  ];
+  if (values.isEmpty) {
+    return 'Spindle, slow-wave, and coupling values were not available in the supplied analysis output.';
+  }
+  final region = strongest == null
+      ? ''
+      : ' The highest regional PAC MI was in ${strongest.$1} '
+            '(${strongest.$2.toStringAsFixed(4)}).';
+  return '${values.join(', ')}.$region Phase direction depends on the analysis convention; '
+      'regional differences describe this recording and are not diagnostic thresholds.';
+}
+
+String _aperiodicInterpretation(List<Map<String, String>> rows) {
+  final exponent = _stageMeans(rows, 'exponent_FOOOF');
+  final slope = _stageMeans(rows, 'slope_Irasa');
+  final fit = _stageMeans(rows, 'rsquared_Irasa');
+  if (exponent.isEmpty && slope.isEmpty) {
+    return 'No stage-wise FOOOF or IRASA parameters were available in the supplied analysis output.';
+  }
+  final exponentRange = _metricRange(exponent, 'FOOOF exponent');
+  final slopeRange = _metricRange(slope, 'IRASA slope');
+  final fitText = fit.isEmpty
+      ? ''
+      : ' IRASA R2 ranged from ${fit.values.reduce(math.min).toStringAsFixed(3)} '
+            'to ${fit.values.reduce(math.max).toStringAsFixed(3)}; lower-fit stages warrant more caution.';
+  return '${[exponentRange, slopeRange].where((text) => text.isNotEmpty).join(' ')}$fitText '
+      'The direction summarizes stage differences within this subject after regional averaging.';
+}
+
+String _complexityInterpretation(List<Map<String, String>> rows) {
+  final entropy = _stageMeans(rows, 'perm_entropy_nonlinear');
+  final dfa = _stageMeans(rows, 'dfa_nonlinear');
+  final acw = _stageMeans(rows, 'ACW');
+  final lzc = _rowMean(rows, 'LZc');
+  if (entropy.isEmpty && dfa.isEmpty && acw.isEmpty && lzc == null) {
+    return 'Complexity and temporal-memory values were not available in the supplied analysis output.';
+  }
+  final parts = <String>[
+    if (entropy.isNotEmpty) _metricRange(entropy, 'permutation entropy'),
+    if (dfa.isNotEmpty) _metricRange(dfa, 'DFA'),
+    if (acw.isNotEmpty) _metricRange(acw, 'ACW'),
+    if (lzc != null) 'Global LZc was ${lzc.toStringAsFixed(3)}.',
+  ];
+  return '${parts.join(' ')} Higher entropy indicates less predictable signal structure, while ACW '
+      'reflects longer or shorter temporal persistence; neither direction is inherently better.';
+}
+
+double? _rowMean(List<Map<String, String>> rows, String key) {
+  final values = rows
+      .map((row) => _number(row, key))
+      .whereType<double>()
+      .toList();
+  if (values.isEmpty) return null;
+  return values.reduce((a, b) => a + b) / values.length;
+}
+
+Map<String, double> _stageMeans(List<Map<String, String>> rows, String suffix) {
+  final result = <String, double>{};
+  for (final stage in const ['W', 'N1', 'N2', 'N3', 'REM']) {
+    final value = _rowMean(rows, '${stage}_$suffix');
+    if (value != null) result[stage] = value;
+  }
+  return result;
+}
+
+(String, double)? _regionalExtreme(
+  List<Map<String, String>> rows,
+  String key, {
+  required bool highest,
+}) {
+  final available = <(String, double)>[];
+  for (final row in rows) {
+    final value = _number(row, key);
+    if (value != null) available.add((row['Chan'] ?? 'Unknown region', value));
+  }
+  if (available.isEmpty) return null;
+  available.sort((a, b) => a.$2.compareTo(b.$2));
+  return highest ? available.last : available.first;
+}
+
+String _metricRange(Map<String, double> values, String label) {
+  if (values.isEmpty) return '';
+  final ordered = values.entries.toList()
+    ..sort((a, b) => a.value.compareTo(b.value));
+  if (ordered.length == 1) {
+    return '$label was ${ordered.first.value.toStringAsFixed(3)} in ${ordered.first.key}.';
+  }
+  return '$label was lowest in ${ordered.first.key} '
+      '(${ordered.first.value.toStringAsFixed(3)}) and highest in ${ordered.last.key} '
+      '(${ordered.last.value.toStringAsFixed(3)}).';
 }
 
 double _interpretationBlock(_PdfPage p, String title, String body, double y) {

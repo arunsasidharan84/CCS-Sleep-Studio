@@ -70,6 +70,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   int _navigationSerial = 0;
   Timer? _tfRefreshTimer;
   late final TabController _tabController;
+  bool _textInputFocused = false;
 
   // SWA slider value (0–100). 100 = no smoothing, 0 = maximum smoothing.
   int _swaSlider = 100;
@@ -101,6 +102,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabChange);
+    FocusManager.instance.addListener(_handlePrimaryFocusChange);
     _viewport = _backend.loadDemoViewport();
     unawaited(_loadAppVersion());
   }
@@ -121,6 +124,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_handlePrimaryFocusChange);
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _tfRefreshTimer?.cancel();
     _viewerFocusNode.dispose();
@@ -131,6 +136,19 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     _batchAnalyseEegController.dispose();
     _batchAnalyseRefController.dispose();
     super.dispose();
+  }
+
+  void _handlePrimaryFocusChange() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final editingText =
+        focusContext?.widget is EditableText ||
+        focusContext?.findAncestorWidgetOfExactType<EditableText>() != null;
+    if (!mounted || editingText == _textInputFocused) return;
+    setState(() => _textInputFocused = editingText);
+  }
+
+  void _handleTabChange() {
+    if (mounted) setState(() {});
   }
 
   // ─── Status bar helpers ───────────────────────────────────────────────────
@@ -889,6 +907,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     String? outputJsonPath;
     StateSetter? setStateDialogRef;
     var dialogActive = true;
+    final startupStopwatch = Stopwatch()..start();
+    Timer? startupTimer;
 
     final dialogFuture = showDialog<void>(
       context: context,
@@ -910,7 +930,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
-                    LinearProgressIndicator(value: progress),
+                    LinearProgressIndicator(
+                      value: progress > 0 ? progress : null,
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '${(progress * 100).round()}%',
@@ -971,9 +993,20 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       dialogFuture.whenComplete(() {
         dialogActive = false;
         setStateDialogRef = null;
+        startupTimer?.cancel();
         scrollController.dispose();
       }),
     );
+    startupTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!dialogActive || progress > 0) {
+        startupTimer?.cancel();
+        return;
+      }
+      progressLabel =
+          'Launching packaged model runtime... '
+          '(${startupStopwatch.elapsed.inSeconds}s elapsed)';
+      setStateDialogRef?.call(() {});
+    });
 
     Future.microtask(() async {
       _setStatus('Starting AutoscoreNidra backend…');
@@ -983,6 +1016,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           if (update != null) {
             progress = math.max(progress, update.$1);
             progressLabel = update.$2;
+            if (progress > 0) startupTimer?.cancel();
           }
           if (logsController.isClosed) return;
           logsController.add(line);
@@ -1102,6 +1136,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           );
         }
       } finally {
+        startupTimer?.cancel();
         logsController.close();
       }
     });
@@ -3997,7 +4032,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     return PlatformMenuBar(
       menus: _platformMenus(),
       child: Shortcuts(
-        shortcuts: _shortcuts,
+        key: const Key('viewer-shortcuts'),
+        shortcuts: _tabController.index == 1 || _textInputFocused
+            ? const <ShortcutActivator, Intent>{}
+            : _shortcuts,
         child: Actions(
           actions: {
             _ScoreIntent: CallbackAction<_ScoreIntent>(
@@ -6625,6 +6663,8 @@ class _BatchProgressDialogState extends State<BatchProgressDialog> {
                         ? 0
                         : _isFinished
                         ? 1
+                        : _fileProgress <= 0
+                        ? null
                         : (_currentIndex + _fileProgress) / widget.files.length,
                   ),
                   const SizedBox(height: 8),

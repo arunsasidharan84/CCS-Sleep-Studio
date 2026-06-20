@@ -11,10 +11,13 @@ void main() {
       isMacOS: true,
       fileExists: (path) =>
           path ==
-          '/Applications/ScoringNidra.app/Contents/MacOS/../Resources/autoscore-backend',
+          '/Applications/ScoringNidra.app/Contents/MacOS/../Resources/autoscore-backend/autoscore-backend',
     );
 
-    expect(invocation.executable, contains('Resources/autoscore-backend'));
+    expect(
+      invocation.executable,
+      contains('Resources/autoscore-backend/autoscore-backend'),
+    );
     expect(invocation.argumentPrefix, isEmpty);
   });
 
@@ -42,12 +45,13 @@ void main() {
       isWindows: false,
       isMacOS: false,
       fileExists: (path) =>
-          path == '/usr/bin/../lib/scoringnidra/autoscore-backend',
+          path ==
+          '/usr/bin/../lib/scoringnidra/autoscore-backend/autoscore-backend',
     );
 
     expect(
       invocation.executable,
-      '/usr/bin/../lib/scoringnidra/autoscore-backend',
+      '/usr/bin/../lib/scoringnidra/autoscore-backend/autoscore-backend',
     );
   });
 

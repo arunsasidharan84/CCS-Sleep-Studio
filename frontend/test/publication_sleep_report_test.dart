@@ -57,6 +57,10 @@ void main() {
           'Chan': 'Central',
           'TRT': '480',
           'TST': '410',
+          'SOL': '18',
+          'WASO': '52',
+          'N2_longest_streak': '34',
+          'NREM_duration': '320',
           'W_duration': '70',
           'N1_duration': '20',
           'N2_duration': '200',
@@ -68,6 +72,11 @@ void main() {
           'W_auc_Irasa': '-12.5',
           'W_perm_entropy_nonlinear': '0.9',
           'W_ACW': '0.08',
+          'sp_all_density': '2.1',
+          'sw_all_Count': '160',
+          'sw_all_PhaseAtSigmaPeak': '1.2',
+          'sw_all_ndPAC': '0.15',
+          'pac_all_max_MI': '0.012',
           'N2_exponent_FOOOF': '1.4',
           'N2_slope_Irasa': '-1.2',
           'N2_perm_entropy_nonlinear': '0.8',
@@ -102,6 +111,10 @@ void main() {
     expect(pdf, contains('(IRASA AUC)'));
     expect(pdf, contains('(Low)'));
     expect(pdf, contains('(High)'));
+    expect(pdf, contains('latency 18.0 min'));
+    expect(pdf, contains('PAC MI 0.0120'));
+    expect(pdf, contains('FOOOF exponent was lowest'));
+    expect(pdf, contains('permutation entropy was lowest'));
   });
 
   test('optionally renders a supplied AnalyseNidra CSV', () {

@@ -13,25 +13,22 @@ else:
 
 configure_runtime()
 
-import warnings
-warnings.filterwarnings("ignore", message="DataFrame is highly fragmented")
-warnings.filterwarnings("ignore", message="Using padding='same'")
-try:
-    import pandas as pd
-    warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
-except Exception:
-    pass
-
 import argparse
 import json
 from pathlib import Path
 
-if __package__:
-    from .scorer import scan_channels, score_file
-    from .algorithms import algorithm_availability, available_algorithms
-else:
-    from scorer import scan_channels, score_file
-    from algorithms import algorithm_availability, available_algorithms
+
+ALGORITHM_KEYS = (
+    "dreamento",
+    "gssc",
+    "luna",
+    "seqsleepnet",
+    "sleepeegpy",
+    "sleeptransformer",
+    "tinysleepnet",
+    "usleep",
+    "yasa",
+)
 
 
 def parse_csv(value: str | None) -> list[str]:
@@ -45,11 +42,10 @@ def log(message: str) -> None:
 
 
 def main() -> None:
-    algorithms = available_algorithms()
     parser = argparse.ArgumentParser(description="Automated 30-second sleep staging from EEG.")
     parser.add_argument("data_file", nargs="?", help="Input EDF/BDF/GDF/FIF/SET file.")
     parser.add_argument("--out-dir", default=None, help="Output directory. Defaults beside the input file.")
-    parser.add_argument("--algorithm", choices=sorted(algorithms), default="yasa")
+    parser.add_argument("--algorithm", choices=ALGORITHM_KEYS, default="yasa")
     parser.add_argument("--sequence-correction", choices=["none", "sleepgpt"], default="none")
     parser.add_argument("--eeg", default=None, help="Comma-separated EEG channels. Auto-guessed if omitted.")
     parser.add_argument("--ref", default=None, help="Optional comma-separated reference channels.")
@@ -65,6 +61,15 @@ def main() -> None:
     parser.add_argument("--list-channels", action="store_true", help="Print detected channels and exit.")
     parser.add_argument("--check-models", action="store_true", help="Validate packaged model dependencies and exit.")
     args = parser.parse_args()
+
+    log("PROGRESS 0.01 Initializing scientific and model dependencies")
+    if __package__:
+        from .scorer import scan_channels, score_file
+        from .algorithms import algorithm_availability
+    else:
+        from scorer import scan_channels, score_file
+        from algorithms import algorithm_availability
+    log("PROGRESS 0.03 Model dependencies initialized")
 
     if args.check_models:
         availability = algorithm_availability()

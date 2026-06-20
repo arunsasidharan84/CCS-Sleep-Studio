@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Python standalone backend
         run: |
-          pyinstaller --onefile --name autoscore-backend \
+          pyinstaller --onedir --name autoscore-backend \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
@@ -64,8 +64,8 @@ jobs:
 
       - name: Validate AutoscoreNidra standalone backend
         run: |
-          chmod +x dist/autoscore-backend
-          dist/autoscore-backend --check-models
+          chmod +x dist/autoscore-backend/autoscore-backend
+          dist/autoscore-backend/autoscore-backend --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -125,8 +125,8 @@ jobs:
 
       - name: Copy Python backend into macOS App bundle (Full)
         run: |
-          cp dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
-          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/autoscore-backend
+          cp -R dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
+          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/autoscore-backend/autoscore-backend
 
       - name: Ad-hoc sign macOS app (Full)
         run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
@@ -180,7 +180,7 @@ jobs:
       - name: Build Python standalone backend
         shell: pwsh
         run: |
-          pyinstaller --onefile --name autoscore-backend `
+          pyinstaller --onedir --name autoscore-backend `
             --collect-all gssc `
             --collect-all mne `
             --collect-all yasa `
@@ -201,7 +201,7 @@ jobs:
 
       - name: Validate AutoscoreNidra standalone backend
         shell: pwsh
-        run: dist\autoscore-backend.exe --check-models
+        run: dist\autoscore-backend\autoscore-backend.exe --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -256,8 +256,8 @@ jobs:
       - name: Copy Python backend into Windows runner build output (Full)
         shell: pwsh
         run: |
-          Copy-Item dist\autoscore-backend.exe frontend\build\windows\x64\runner\Release\
-          if (-not (Test-Path frontend\build\windows\x64\runner\Release\autoscore-backend.exe)) { exit 1 }
+          Copy-Item -Recurse dist\autoscore-backend frontend\build\windows\x64\runner\Release\
+          if (-not (Test-Path frontend\build\windows\x64\runner\Release\autoscore-backend\autoscore-backend.exe)) { exit 1 }
 
       - name: Package Windows app (Full Installer)
         run: iscc /F"ScoringNidra-Installer" frontend/windows/installer.iss
@@ -309,7 +309,7 @@ jobs:
 
       - name: Build Python standalone backend
         run: |
-          pyinstaller --onefile --name autoscore-backend \
+          pyinstaller --onedir --name autoscore-backend \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
@@ -330,8 +330,8 @@ jobs:
 
       - name: Validate AutoscoreNidra standalone backend
         run: |
-          chmod +x dist/autoscore-backend
-          dist/autoscore-backend --check-models
+          chmod +x dist/autoscore-backend/autoscore-backend
+          dist/autoscore-backend/autoscore-backend --check-models
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -394,7 +394,7 @@ jobs:
 
       - name: Copy Python and Rust backend into Linux bundle (Full)
         run: |
-          cp dist/autoscore-backend frontend/build/linux/x64/release/bundle/
+          cp -a dist/autoscore-backend frontend/build/linux/x64/release/bundle/
           cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
 
       - name: Build Linux installer (Full)
@@ -424,9 +424,9 @@ jobs:
             almalinux:9 bash -lc '
               dnf install -y /packages/ScoringNidra-linux-x86_64.rpm &&
               test -x /usr/bin/scoringnidra &&
-              test -x /usr/lib/scoringnidra/autoscore-backend &&
+              test -x /usr/lib/scoringnidra/autoscore-backend/autoscore-backend &&
               ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/app-ldd.txt &&
-              ldd /usr/lib/scoringnidra/autoscore-backend > /tmp/backend-ldd.txt &&
+              ldd /usr/lib/scoringnidra/autoscore-backend/autoscore-backend > /tmp/backend-ldd.txt &&
               ! grep -E "not found|version .* not found" /tmp/app-ldd.txt /tmp/backend-ldd.txt
             '
 
