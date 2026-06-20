@@ -64,7 +64,7 @@ Summary:        $description
 License:        Proprietary
 URL:            https://github.com/arunsasidharan84/ScoringNidra
 BuildArch:      x86_64
-Requires:       gtk3, glibc, libstdc++, util-linux-libs, xz-libs
+Requires:       gtk3, glibc, libstdc++, xz-libs
 Conflicts:      $conflicts
 
 %description
