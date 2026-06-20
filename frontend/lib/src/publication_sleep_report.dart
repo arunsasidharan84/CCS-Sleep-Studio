@@ -2,10 +2,27 @@ import 'dart:math' as math;
 
 import 'models.dart';
 
+class ReportMetadata {
+  const ReportMetadata({
+    this.title = 'ScoringNidra Sleep EEG Report',
+    this.studySite = '',
+    this.investigatorName = '',
+    this.subjectId = '',
+    this.subjectDetails = '',
+  });
+
+  final String title;
+  final String studySite;
+  final String investigatorName;
+  final String subjectId;
+  final String subjectDetails;
+}
+
 List<int> buildPublicationSleepReport({
   required EegViewport viewport,
   required String recordingName,
   required List<Map<String, String>> regionalRows,
+  ReportMetadata metadata = const ReportMetadata(),
 }) {
   final report = _PdfDocument();
   final architecture = regionalRows.isEmpty
@@ -14,11 +31,14 @@ List<int> buildPublicationSleepReport({
   final regions = regionalRows.isEmpty ? <Map<String, String>>[] : regionalRows;
 
   report.addPage(
-    _buildMacrostructurePage(viewport, recordingName, architecture),
+    _buildMacrostructurePage(viewport, recordingName, architecture, metadata),
   );
   report.addPage(_buildMicrostructurePage(regions));
   report.addPage(_buildAperiodicPage(regions));
   report.addPage(_buildComplexityPage(regions));
+  report.addPage(
+    _buildInterpretationPage(viewport, architecture, regions, metadata),
+  );
   return report.build();
 }
 
@@ -26,17 +46,38 @@ String _buildMacrostructurePage(
   EegViewport viewport,
   String recordingName,
   Map<String, String> row,
+  ReportMetadata metadata,
 ) {
   final p = _PdfPage();
-  _header(p, 'EXECUTIVE SLEEP SUMMARY & CONTINUITY', 'Page 1 of 4');
+  final reportTitle = metadata.title.trim().isEmpty
+      ? 'ScoringNidra Sleep EEG Report'
+      : metadata.title.trim();
+  _header(p, reportTitle.toUpperCase(), 'Page 1 of 5');
   p.text(recordingName, 50, 704, bold: true, size: 10);
+  final studyLine = [
+    if (metadata.studySite.trim().isNotEmpty)
+      'Study site: ${metadata.studySite.trim()}',
+    if (metadata.investigatorName.trim().isNotEmpty)
+      'Investigator: ${metadata.investigatorName.trim()}',
+  ].join('  |  ');
+  final subjectLine = [
+    if (metadata.subjectId.trim().isNotEmpty)
+      'Subject: ${metadata.subjectId.trim()}',
+    if (metadata.subjectDetails.trim().isNotEmpty)
+      metadata.subjectDetails.trim(),
+  ].join('  |  ');
   p.text(
-    '${viewport.epochCount} epochs | ${viewport.epochSeconds}s epoch length',
+    studyLine.isEmpty
+        ? '${viewport.epochCount} epochs | ${viewport.epochSeconds}s epoch length'
+        : studyLine,
     50,
-    689,
-    size: 8,
+    690,
+    size: 7.5,
     color: _slate,
   );
+  if (subjectLine.isNotEmpty) {
+    p.text(subjectLine, 50, 678, size: 7.5, color: _slate);
+  }
 
   final cards = <(String, String)>[
     ('TRT', _metric(row, 'TRT', fallback: viewport.totalDurationSeconds / 60)),
@@ -51,7 +92,7 @@ String _buildMacrostructurePage(
   ];
   for (var i = 0; i < cards.length; i++) {
     final x = 50.0 + (i % 3) * 172;
-    final y = 642.0 - (i ~/ 3) * 53;
+    final y = 625.0 - (i ~/ 3) * 53;
     p.rect(x, y, 158, 42, fill: _paleBlue);
     p.text(cards[i].$1, x + 9, y + 27, size: 7.5, color: _slate);
     p.text(cards[i].$2, x + 9, y + 9, bold: true, size: 12, color: _navy);
@@ -146,7 +187,7 @@ String _buildMacrostructurePage(
 
 String _buildMicrostructurePage(List<Map<String, String>> rows) {
   final p = _PdfPage();
-  _header(p, 'THALAMOCORTICAL MICROSTRUCTURE', 'Page 2 of 4');
+  _header(p, 'THALAMOCORTICAL MICROSTRUCTURE', 'Page 2 of 5');
   p.text(
     'Spindle and slow-wave morphometry with phase-amplitude coupling',
     50,
@@ -251,7 +292,7 @@ String _buildMicrostructurePage(List<Map<String, String>> rows) {
 
 String _buildAperiodicPage(List<Map<String, String>> rows) {
   final p = _PdfPage();
-  _header(p, 'NEURAL EXCITABILITY & APERIODIC TRENDS', 'Page 3 of 4');
+  _header(p, 'NEURAL EXCITABILITY & APERIODIC TRENDS', 'Page 3 of 5');
   p.text(
     'FOOOF and IRASA parameterization separates periodic peaks from the 1/f background',
     50,
@@ -408,7 +449,7 @@ String _buildAperiodicPage(List<Map<String, String>> rows) {
 
 String _buildComplexityPage(List<Map<String, String>> rows) {
   final p = _PdfPage();
-  _header(p, 'CORTICAL COMPLEXITY LANDSCAPE', 'Page 4 of 4');
+  _header(p, 'CORTICAL COMPLEXITY LANDSCAPE', 'Page 4 of 5');
   p.text(
     'Information theory, fractal dynamics, long-range correlations, compression, and temporal memory',
     50,
@@ -425,7 +466,7 @@ String _buildComplexityPage(List<Map<String, String>> rows) {
     x: 50,
     y: 650,
     width: 245,
-    height: 165,
+    height: 120,
     rows: selectedRows,
     stages: stages,
     metrics: const [
@@ -440,7 +481,7 @@ String _buildComplexityPage(List<Map<String, String>> rows) {
     x: 317,
     y: 650,
     width: 245,
-    height: 165,
+    height: 120,
     rows: selectedRows,
     stages: stages,
     metrics: const [
@@ -454,14 +495,14 @@ String _buildComplexityPage(List<Map<String, String>> rows) {
   p.section(
     'Information compression: global LZc versus stage-wise Lempel-Ziv',
     50,
-    442,
+    480,
   );
-  p.text('Region', 52, 419, bold: true, size: 7);
-  p.text('Global LZc', 125, 419, bold: true, size: 7);
+  p.text('Region', 52, 457, bold: true, size: 7);
+  p.text('Global LZc', 125, 457, bold: true, size: 7);
   for (var i = 0; i < stages.length; i++) {
-    p.text(stages[i], 220 + i * 72, 419, bold: true, size: 7);
+    p.text(stages[i], 220 + i * 72, 457, bold: true, size: 7);
   }
-  var y = 397.0;
+  var y = 435.0;
   for (final row in selectedRows) {
     p.text(row['Chan'] ?? '-', 52, y, bold: true, size: 7.5);
     p.text(_metric(row, 'LZc', decimals: 3), 125, y, size: 7.5);
@@ -515,6 +556,156 @@ String _buildComplexityPage(List<Map<String, String>> rows) {
     'Complexity metrics are descriptive qEEG measures and are not standalone diagnostic biomarkers.',
   );
   return p.build();
+}
+
+String _buildInterpretationPage(
+  EegViewport viewport,
+  Map<String, String> architecture,
+  List<Map<String, String>> rows,
+  ReportMetadata metadata,
+) {
+  final p = _PdfPage();
+  _header(p, 'UNDERSTANDING YOUR RESULTS', 'Page 5 of 5');
+  p.text(
+    'A plain-language guide to the measurements in this report',
+    50,
+    704,
+    size: 9,
+    color: _slate,
+  );
+
+  var y = 670.0;
+  y = _interpretationBlock(
+    p,
+    'Sleep amount and continuity',
+    _architectureInterpretation(viewport, architecture),
+    y,
+  );
+  y = _interpretationBlock(
+    p,
+    'Sleep stages',
+    'Sleep normally cycles through light sleep (N1 and N2), deep sleep (N3), '
+        'and REM sleep. Deep sleep is associated with physical restoration, '
+        'while REM sleep supports memory and emotional processing. A single '
+        'night can vary because of age, medicines, illness, environment, and '
+        'the timing of the recording.',
+    y,
+  );
+  y = _interpretationBlock(
+    p,
+    'Spindles, slow waves, and their timing',
+    'Spindles are short bursts of faster activity during NREM sleep. Slow '
+        'waves reflect synchronized deep-sleep activity. The coupling measures '
+        'describe whether spindle activity occurs at a consistent phase of a '
+        'slow wave. These features describe sleep microstructure; they are not '
+        'a diagnosis by themselves.',
+    y,
+  );
+  y = _interpretationBlock(
+    p,
+    'Background spectrum and oscillatory peaks',
+    'FOOOF and IRASA separate rhythmic EEG peaks from the broad 1/f background. '
+        'The exponent and slope summarize how quickly power falls at higher '
+        'frequencies. R-squared and error values indicate how well the models '
+        'fit the signal. Poor fit should be interpreted cautiously.',
+    y,
+  );
+  y = _interpretationBlock(
+    p,
+    'Complexity and temporal memory',
+    'Entropy and fractal measures describe how predictable or varied the EEG '
+        'signal is. ACW estimates how long activity remains related to its '
+        'recent past. Higher or lower values are not automatically better; '
+        'interpretation depends on sleep stage, brain region, signal quality, '
+        'and the clinical question.',
+    y,
+  );
+
+  final availableRegions = rows
+      .map((row) => row['Chan']?.trim())
+      .whereType<String>()
+      .where((value) => value.isNotEmpty)
+      .join(', ');
+  _interpretationBlock(
+    p,
+    'Important limitations',
+    'This automated report summarizes ${availableRegions.isEmpty ? 'the available EEG channels' : availableRegions}. '
+        'Automated staging and qEEG measurements can be affected by artifacts, '
+        'electrode quality, montage selection, and missing data. Results should '
+        'be reviewed with the original recording by a qualified sleep or EEG '
+        'professional and should not be used alone for diagnosis or treatment.',
+    y,
+  );
+
+  final identity = [
+    if (metadata.studySite.trim().isNotEmpty) metadata.studySite.trim(),
+    if (metadata.investigatorName.trim().isNotEmpty)
+      metadata.investigatorName.trim(),
+    if (metadata.subjectId.trim().isNotEmpty) metadata.subjectId.trim(),
+  ].join(' | ');
+  _footer(
+    p,
+    identity.isEmpty
+        ? 'Review this report together with the full polysomnographic record and clinical history.'
+        : identity,
+  );
+  return p.build();
+}
+
+String _architectureInterpretation(
+  EegViewport viewport,
+  Map<String, String> architecture,
+) {
+  final tst = _number(architecture, 'TST') ?? _sleepMinutes(viewport);
+  final trt =
+      _number(architecture, 'TRT') ?? viewport.totalDurationSeconds / 60;
+  final efficiency =
+      _number(architecture, 'Sleep_efficiency') ??
+      (trt > 0 ? 100 * tst / trt : null);
+  if (efficiency == null) {
+    return 'The architecture page shows how recording time was divided among '
+        'wake and sleep stages. Longer uninterrupted stage streaks suggest more '
+        'continuous sleep; short repeated streaks suggest more transitions.';
+  }
+  final continuity = efficiency >= 85
+      ? 'Most of the recorded period was spent asleep.'
+      : 'A meaningful part of the recorded period was spent awake or transitioning between stages.';
+  return 'Estimated total sleep time was ${tst.toStringAsFixed(1)} minutes, '
+      'with sleep efficiency of ${efficiency.toStringAsFixed(1)}%. $continuity '
+      'Sleep efficiency alone does not identify the reason for wakefulness or '
+      'fragmentation.';
+}
+
+double _interpretationBlock(_PdfPage p, String title, String body, double y) {
+  p.rect(50, y - 92, 512, 94, fill: _offWhite);
+  p.text(title, 62, y - 18, bold: true, size: 10, color: _navy);
+  _wrappedText(p, body, 62, y - 36, maxCharacters: 92);
+  return y - 104;
+}
+
+void _wrappedText(
+  _PdfPage p,
+  String text,
+  double x,
+  double y, {
+  int maxCharacters = 90,
+  double size = 7.5,
+  double lineHeight = 11,
+}) {
+  final words = text.split(RegExp(r'\s+'));
+  var line = '';
+  var lineY = y;
+  for (final word in words) {
+    final candidate = line.isEmpty ? word : '$line $word';
+    if (candidate.length > maxCharacters && line.isNotEmpty) {
+      p.text(line, x, lineY, size: size, color: _charcoal);
+      line = word;
+      lineY -= lineHeight;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line.isNotEmpty) p.text(line, x, lineY, size: size, color: _charcoal);
 }
 
 void _header(_PdfPage p, String title, String page) {
@@ -723,6 +914,7 @@ void _heatmap(
     }
   }
   final numeric = cells.map((cell) => cell.$2).whereType<double>().toList();
+  final hasNumeric = numeric.isNotEmpty;
   final minValue = numeric.isEmpty ? 0.0 : numeric.reduce(math.min);
   final maxValue = numeric.isEmpty ? 1.0 : numeric.reduce(math.max);
   final range = math.max(maxValue - minValue, 1e-9);
@@ -747,7 +939,7 @@ void _heatmap(
     for (var c = 0; c < stages.length; c++) {
       final value = cells[r * stages.length + c].$2;
       final t = value == null ? 0.0 : (value - minValue) / range;
-      final color = _heatColor(t);
+      final color = value == null ? _lightGray : _heatColor(t);
       p.rect(
         gridX + c * cellWidth,
         rowY,
@@ -755,12 +947,13 @@ void _heatmap(
         cellHeight - 2,
         fill: color,
       );
+      final valueText = value == null ? '-' : value.toStringAsFixed(2);
       p.text(
-        value == null ? '-' : value.toStringAsFixed(2),
-        gridX + c * cellWidth + 5,
+        valueText,
+        gridX + c * cellWidth + cellWidth / 2 - valueText.length * 1.55,
         rowY + cellHeight / 2 - 2,
         size: 5.8,
-        color: t > 0.6 ? _white : _charcoal,
+        color: value != null && t > 0.6 ? _white : _charcoal,
       );
     }
   }
@@ -769,37 +962,41 @@ void _heatmap(
   final colorBarY = y - 60 - rows.length * cellHeight - 18;
   final colorBarWidth = gridWidth;
   final colorStepWidth = colorBarWidth / colorSteps;
-  for (var i = 0; i < colorSteps; i++) {
-    p.rect(
-      colorBarX + i * colorStepWidth,
-      colorBarY,
-      colorStepWidth + 0.2,
-      6,
-      fill: _heatColor(i / (colorSteps - 1)),
+  if (!hasNumeric) {
+    p.text('No available data', colorBarX, colorBarY, size: 6, color: _slate);
+  } else {
+    for (var i = 0; i < colorSteps; i++) {
+      p.rect(
+        colorBarX + i * colorStepWidth,
+        colorBarY,
+        colorStepWidth + 0.2,
+        6,
+        fill: _heatColor(i / (colorSteps - 1)),
+      );
+    }
+    p.text(
+      minValue.toStringAsFixed(2),
+      colorBarX,
+      colorBarY - 10,
+      size: 5.5,
+      color: _slate,
+    );
+    p.text('Low', colorBarX + 30, colorBarY - 10, size: 5.5, color: _slate);
+    p.text(
+      'High',
+      colorBarX + colorBarWidth - 48,
+      colorBarY - 10,
+      size: 5.5,
+      color: _slate,
+    );
+    p.text(
+      maxValue.toStringAsFixed(2),
+      colorBarX + colorBarWidth - 24,
+      colorBarY - 10,
+      size: 5.5,
+      color: _slate,
     );
   }
-  p.text(
-    minValue.toStringAsFixed(2),
-    colorBarX,
-    colorBarY - 10,
-    size: 5.5,
-    color: _slate,
-  );
-  p.text('Low', colorBarX + 30, colorBarY - 10, size: 5.5, color: _slate);
-  p.text(
-    'High',
-    colorBarX + colorBarWidth - 48,
-    colorBarY - 10,
-    size: 5.5,
-    color: _slate,
-  );
-  p.text(
-    maxValue.toStringAsFixed(2),
-    colorBarX + colorBarWidth - 24,
-    colorBarY - 10,
-    size: 5.5,
-    color: _slate,
-  );
 }
 
 double _sleepMinutes(EegViewport viewport) {

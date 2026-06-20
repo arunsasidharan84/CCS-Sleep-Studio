@@ -35,6 +35,41 @@ void main() {
     ]);
   });
 
+  test('finds the backend from an installed Linux launcher path', () {
+    final invocation = resolveAutoscoreInvocation(
+      resolvedExecutable: '/usr/bin/scoringnidra',
+      currentDirectory: '/home/researcher',
+      isWindows: false,
+      isMacOS: false,
+      fileExists: (path) =>
+          path == '/usr/bin/../lib/scoringnidra/autoscore-backend',
+    );
+
+    expect(
+      invocation.executable,
+      '/usr/bin/../lib/scoringnidra/autoscore-backend',
+    );
+  });
+
+  test('prefers a validated development standalone backend', () {
+    final invocation = resolveAutoscoreInvocation(
+      resolvedExecutable: '/tmp/ScoringNidra',
+      currentDirectory: '/workspace/ScoringNidra',
+      isWindows: false,
+      isMacOS: true,
+      fileExists: (path) =>
+          path == '/workspace/ScoringNidra/dist/autoscore-backend' ||
+          path == '/workspace/ScoringNidra/backend_entry.py' ||
+          path == '/opt/homebrew/bin/python3',
+    );
+
+    expect(
+      invocation.executable,
+      '/workspace/ScoringNidra/dist/autoscore-backend',
+    );
+    expect(invocation.argumentPrefix, isEmpty);
+  });
+
   test('never falls back to Python without a backend script', () {
     expect(
       () => resolveAutoscoreInvocation(

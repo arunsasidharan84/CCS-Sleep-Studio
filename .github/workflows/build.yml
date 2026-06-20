@@ -281,7 +281,7 @@ jobs:
 
   build-linux:
     name: Linux
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -289,7 +289,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libblkid-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libblkid-dev dpkg-dev rpm
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -376,10 +376,16 @@ jobs:
         run: |
           cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
 
-      - name: Package Linux app (Lite)
+      - name: Build Linux installer (Lite)
         run: |
-          mkdir -p dist
-          tar -czf dist/ScoringNidra-lite-linux.tar.gz -C frontend/build/linux/x64/release/bundle .
+          bash scripts/package_linux_deb.sh \
+            frontend/build/linux/x64/release/bundle \
+            dist/ScoringNidra-lite-linux-amd64.deb \
+            lite
+          bash scripts/package_linux_rpm.sh \
+            frontend/build/linux/x64/release/bundle \
+            dist/ScoringNidra-lite-linux-x86_64.rpm \
+            lite
 
       # 2. Build and Package Full version
       - name: Build Linux app (Full)
@@ -391,25 +397,57 @@ jobs:
           cp dist/autoscore-backend frontend/build/linux/x64/release/bundle/
           cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
 
-      - name: Package Linux app (Full)
+      - name: Build Linux installer (Full)
         run: |
-          mkdir -p dist
-          tar -czf dist/ScoringNidra-linux.tar.gz -C frontend/build/linux/x64/release/bundle .
+          bash scripts/package_linux_deb.sh \
+            frontend/build/linux/x64/release/bundle \
+            dist/ScoringNidra-linux-amd64.deb \
+            full
+          bash scripts/package_linux_rpm.sh \
+            frontend/build/linux/x64/release/bundle \
+            dist/ScoringNidra-linux-x86_64.rpm \
+            full
+
+      - name: Validate RPM installers on AlmaLinux 9
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/dist:/packages:ro" \
+            almalinux:9 bash -lc '
+              dnf install -y /packages/ScoringNidra-lite-linux-x86_64.rpm &&
+              test -x /usr/bin/scoringnidra &&
+              test -f /usr/share/applications/scoringnidra.desktop &&
+              ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/ldd.txt &&
+              ! grep -E "not found|version .* not found" /tmp/ldd.txt
+            '
+          docker run --rm \
+            -v "${{ github.workspace }}/dist:/packages:ro" \
+            almalinux:9 bash -lc '
+              dnf install -y /packages/ScoringNidra-linux-x86_64.rpm &&
+              test -x /usr/bin/scoringnidra &&
+              test -x /usr/lib/scoringnidra/autoscore-backend &&
+              ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/app-ldd.txt &&
+              ldd /usr/lib/scoringnidra/autoscore-backend > /tmp/backend-ldd.txt &&
+              ! grep -E "not found|version .* not found" /tmp/app-ldd.txt /tmp/backend-ldd.txt
+            '
 
       # 3. Upload Artifacts
       - name: Upload Linux Full artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-linux
-          path: dist/ScoringNidra-linux.tar.gz
+          name: ScoringNidra-linux-installers
+          path: |
+            dist/ScoringNidra-linux-amd64.deb
+            dist/ScoringNidra-linux-x86_64.rpm
           if-no-files-found: error
           retention-days: 1
 
       - name: Upload Linux Lite artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-lite-linux
-          path: dist/ScoringNidra-lite-linux.tar.gz
+          name: ScoringNidra-lite-linux-installers
+          path: |
+            dist/ScoringNidra-lite-linux-amd64.deb
+            dist/ScoringNidra-lite-linux-x86_64.rpm
           if-no-files-found: error
           retention-days: 1
 
@@ -446,13 +484,13 @@ jobs:
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-linux
+          name: ScoringNidra-linux-installers
           path: dist
 
       - name: Download Linux Lite artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-lite-linux
+          name: ScoringNidra-lite-linux-installers
           path: dist
 
       - name: Generate Release Tag & Name
@@ -480,8 +518,10 @@ jobs:
             dist/ScoringNidra-lite-macos.zip
             dist/ScoringNidra-Installer.exe
             dist/ScoringNidra-lite-Installer.exe
-            dist/ScoringNidra-linux.tar.gz
-            dist/ScoringNidra-lite-linux.tar.gz
+            dist/ScoringNidra-linux-amd64.deb
+            dist/ScoringNidra-lite-linux-amd64.deb
+            dist/ScoringNidra-linux-x86_64.rpm
+            dist/ScoringNidra-lite-linux-x86_64.rpm
           draft: false
           make_latest: ${{ steps.release_info.outputs.tag != 'latest' && 'true' || 'false' }}
           generate_release_notes: true

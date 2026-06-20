@@ -156,6 +156,13 @@ def infer_channel_groups(channel_names: Sequence[str]) -> ChannelGuess:
     }
     ref_standards = {"M1", "M2", "A1", "A2"}
 
+    def is_eeg_root(root: str) -> bool:
+        if root in eeg_standards:
+            return True
+        if re.fullmatch(r"(?:FP|AF|F|FT|FC|T|C|TP|CP|P|PO|O)(?:Z|\d{1,2})", root):
+            return True
+        return bool(re.fullmatch(r"EEG\d*", root))
+
     eeg: list[str] = []
     ref: list[str] = []
     eog: list[str] = []
@@ -189,7 +196,12 @@ def infer_channel_groups(channel_names: Sequence[str]) -> ChannelGuess:
             continue
         if not is_prereferenced_channel(original) and clean_root in prereferenced_eeg_roots:
             continue
-        eeg.append(original)
+        if is_eeg_root(clean_root):
+            eeg.append(original)
+
+    if not eeg and len(channel_names) == 1 and not (ref or eog or emg):
+        # Preserve the documented single-channel workflow for generic labels.
+        eeg.append(channel_names[0])
 
     eog_by_root: dict[str, str] = {}
     for channel in eog:

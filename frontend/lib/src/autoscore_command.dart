@@ -35,6 +35,10 @@ AutoscoreInvocation resolveAutoscoreInvocation({
     if (windows) join([executableDir, 'autoscore-backend.exe']),
     if (!windows) join([executableDir, 'autoscore-backend']),
     if (macOS) join([executableDir, '..', 'Resources', 'autoscore-backend']),
+    if (!windows && !macOS)
+      join([executableDir, '..', 'lib', 'scoringnidra', 'autoscore-backend']),
+    if (!windows) join([currentDir, 'dist', 'autoscore-backend']),
+    if (windows) join([currentDir, 'dist', 'autoscore-backend.exe']),
   ];
   for (final candidate in packagedCandidates) {
     if (exists(candidate)) {

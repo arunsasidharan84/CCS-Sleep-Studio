@@ -8,7 +8,7 @@ import 'package:scoring_nidra/src/publication_sleep_report.dart';
 import 'package:scoring_nidra/src/regional_csv.dart';
 
 void main() {
-  test('builds a four-page quantitative sleep report', () {
+  test('builds a five-page quantitative sleep report', () {
     final viewport = EegBackend().loadDemoViewport().copyWith(
       currentEpoch: 4,
       stages: const [
@@ -74,11 +74,25 @@ void main() {
           'N2_ACW': '0.12',
         },
       ],
+      metadata: const ReportMetadata(
+        title: 'University Sleep Study',
+        studySite: 'Clinical Neurophysiology Laboratory',
+        investigatorName: 'Dr Investigator',
+        subjectId: 'SUB-001',
+        subjectDetails: 'Adult research participant',
+      ),
     );
     final pdf = latin1.decode(bytes);
+    if (const bool.fromEnvironment('REPORT_PREVIEW')) {
+      File('/tmp/ScoringNidra_report_preview.pdf').writeAsBytesSync(bytes);
+    }
 
     expect(pdf, startsWith('%PDF-1.4'));
-    expect(pdf, contains('/Count 4'));
+    expect(pdf, contains('/Count 5'));
+    expect(pdf, contains('UNIVERSITY SLEEP STUDY'));
+    expect(pdf, contains('(Study site: Clinical Neurophysiology Laboratory'));
+    expect(pdf, contains('(UNDERSTANDING YOUR RESULTS)'));
+    expect(pdf, contains('(Important limitations)'));
     expect(pdf, contains('THALAMOCORTICAL MICROSTRUCTURE'));
     expect(pdf, contains('CORTICAL COMPLEXITY LANDSCAPE'));
     expect(pdf, contains('(Event)'));
@@ -103,6 +117,13 @@ void main() {
       viewport: EegBackend().loadDemoViewport(),
       recordingName: csv.uri.pathSegments.last,
       regionalRows: parseCsvTable(csv.readAsStringSync()),
+      metadata: const ReportMetadata(
+        title: 'Clinical Sleep EEG Study',
+        studySite: 'Neurophysiology Laboratory',
+        investigatorName: 'Study Investigator',
+        subjectId: 'Preview Subject',
+        subjectDetails: 'Research report preview',
+      ),
     );
     File(outputPath).writeAsBytesSync(bytes);
 

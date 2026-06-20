@@ -78,10 +78,14 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   final List<String> _batchStagingFiles = [];
   String _batchStagingAlgorithm = 'yasa';
   String _batchStagingCorrection = 'none';
-  final List<String> _batchStagingEeg = [];
-  final List<String> _batchStagingRef = [];
-  final List<String> _batchStagingEog = [];
-  final List<String> _batchStagingEmg = [];
+  final TextEditingController _batchStagingEegController =
+      TextEditingController();
+  final TextEditingController _batchStagingRefController =
+      TextEditingController();
+  final TextEditingController _batchStagingEogController =
+      TextEditingController();
+  final TextEditingController _batchStagingEmgController =
+      TextEditingController();
 
   // Batch AnalyseNidra State
   final List<Map<String, String>> _batchAnalysePairs = [];
@@ -120,6 +124,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     _tabController.dispose();
     _tfRefreshTimer?.cancel();
     _viewerFocusNode.dispose();
+    _batchStagingEegController.dispose();
+    _batchStagingRefController.dispose();
+    _batchStagingEogController.dispose();
+    _batchStagingEmgController.dispose();
+    _batchAnalyseEegController.dispose();
+    _batchAnalyseRefController.dispose();
     super.dispose();
   }
 
@@ -222,6 +232,11 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             _config.distanceBetweenChannelsUv;
         activeConfig.referenceAmplitudeLineUv =
             _config.referenceAmplitudeLineUv;
+        activeConfig.reportTitle = _config.reportTitle;
+        activeConfig.studySite = _config.studySite;
+        activeConfig.investigatorName = _config.investigatorName;
+        activeConfig.subjectId = _config.subjectId;
+        activeConfig.subjectDetails = _config.subjectDetails;
       }
       activeConfig.bindLoadedChannels(
         rawEeg.channelLabels,
@@ -873,8 +888,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     var progressLabel = 'Starting scoring backend...';
     String? outputJsonPath;
     StateSetter? setStateDialogRef;
+    var dialogActive = true;
 
-    showDialog(
+    final dialogFuture = showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
@@ -940,7 +956,6 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                 TextButton(
                   onPressed: isDone
                       ? () {
-                          scrollController.dispose();
                           navigator.pop();
                         }
                       : null,
@@ -952,6 +967,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         );
       },
     );
+    unawaited(
+      dialogFuture.whenComplete(() {
+        dialogActive = false;
+        setStateDialogRef = null;
+        scrollController.dispose();
+      }),
+    );
 
     Future.microtask(() async {
       _setStatus('Starting AutoscoreNidra backend…');
@@ -962,9 +984,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             progress = math.max(progress, update.$1);
             progressLabel = update.$2;
           }
+          if (logsController.isClosed) return;
           logsController.add(line);
           logLines.add(line);
-          setStateDialogRef?.call(() {});
+          if (dialogActive) setStateDialogRef?.call(() {});
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (scrollController.hasClients) {
               scrollController.jumpTo(
@@ -974,13 +997,14 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
           });
         }
 
+        onLine('Backend launched. Loading model dependencies…');
         final exitCode = await _backend.runCommandStreamAsync(
           executable: invocation.executable,
           arguments: invocation.argumentsFor(args),
           onLine: onLine,
         );
         isDone = true;
-        setStateDialogRef?.call(() {});
+        if (dialogActive) setStateDialogRef?.call(() {});
         outputJsonPath = _outputPathFromLogs(logLines);
 
         if (exitCode == 0 &&
@@ -1012,13 +1036,13 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             );
             _status = 'AutoscoreNidra completed with $algorithm';
           });
-          navigator.pop();
+          if (dialogActive) navigator.pop();
         } else {
           logsController.add('\nScoring failed with exit code $exitCode');
           logLines.add('\nScoring failed with exit code $exitCode');
           _setStatus('AutoscoreNidra failed. Exit code: $exitCode');
 
-          navigator.pop();
+          if (dialogActive) navigator.pop();
           if (mounted) {
             showDialog(
               context: context,
@@ -1052,7 +1076,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         logLines.add('\nException occurred: $e');
         _setStatus('AutoscoreNidra failed: $e');
         isDone = true;
-        navigator.pop();
+        if (dialogActive) navigator.pop();
         if (mounted) {
           showDialog(
             context: context,
@@ -1756,12 +1780,19 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       viewport: viewport,
       recordingName: _basename(_activePath ?? viewport.sourceDescription),
       regionalRows: regionalRows,
+      metadata: ReportMetadata(
+        title: _config.reportTitle,
+        studySite: _config.studySite,
+        investigatorName: _config.investigatorName,
+        subjectId: _config.subjectId,
+        subjectDetails: _config.subjectDetails,
+      ),
     );
     await File(outputPath).writeAsBytes(bytes);
     _setStatus(
       regionalRows.isEmpty
           ? 'Exported report without AnalyseNidra regional metrics'
-          : 'Exported four-page AnalyseNidra report to ${_basename(outputPath)}',
+          : 'Exported five-page AnalyseNidra report to ${_basename(outputPath)}',
     );
     await _openFile(outputPath);
   }
@@ -3345,556 +3376,614 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   }
 
   Widget _buildBatchProcessingTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left Column: Batch Auto-Scoring
-          if (!buildLite) ...[
-            Expanded(
-              child: Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: Color(0xFFD0D0D0)),
-                ),
-                color: Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.psychology, color: Colors.purple),
-                          SizedBox(width: 8),
-                          Text(
-                            'AutoscoreNidra — Batch Automated Sleep Scoring',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: math.max(1080, constraints.maxWidth - 32),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Column: Batch Auto-Scoring
+                if (!buildLite) ...[
+                  Expanded(
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: Color(0xFFD0D0D0)),
+                      ),
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.psychology, color: Colors.purple),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'AutoscoreNidra — Batch Automated Sleep Scoring',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      const Text(
-                        'Selected Recording Files (EDF/ORB/SIGNAL):',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        height: 150,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFD0D0D0)),
-                          borderRadius: BorderRadius.circular(4),
-                          color: const Color(0xFFF9F9F9),
-                        ),
-                        child: _batchStagingFiles.isEmpty
-                            ? const Center(child: Text('No files selected'))
-                            : ListView.builder(
-                                itemCount: _batchStagingFiles.length,
-                                itemBuilder: (context, index) {
-                                  final f = _batchStagingFiles[index];
-                                  return ListTile(
-                                    dense: true,
-                                    title: Text(_basename(f)),
-                                    subtitle: Text(f),
-                                    trailing: IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        size: 16,
-                                        color: Colors.red,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _batchStagingFiles.removeAt(index);
-                                        });
+                            const Divider(height: 24),
+                            const Text(
+                              'Selected Recording Files (EDF/ORB/SIGNAL):',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 150,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: const Color(0xFFD0D0D0),
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                color: const Color(0xFFF9F9F9),
+                              ),
+                              child: _batchStagingFiles.isEmpty
+                                  ? const Center(
+                                      child: Text('No files selected'),
+                                    )
+                                  : ListView.builder(
+                                      itemCount: _batchStagingFiles.length,
+                                      itemBuilder: (context, index) {
+                                        final f = _batchStagingFiles[index];
+                                        return ListTile(
+                                          dense: true,
+                                          title: Text(_basename(f)),
+                                          subtitle: Text(f),
+                                          trailing: IconButton(
+                                            icon: const Icon(
+                                              Icons.delete,
+                                              size: 16,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () {
+                                              setState(() {
+                                                _batchStagingFiles.removeAt(
+                                                  index,
+                                                );
+                                              });
+                                            },
+                                          ),
+                                        );
                                       },
                                     ),
-                                  );
-                                },
-                              ),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add Recording Files…'),
-                        onPressed: () async {
-                          final result = await FilePicker.pickFiles(
-                            dialogTitle:
-                                'Select EEG files for batch AutoscoreNidra',
-                            type: FileType.custom,
-                            allowedExtensions: ['edf', 'orb', 'signal'],
-                            allowMultiple: true,
-                          );
-                          if (result != null) {
-                            setState(() {
-                              for (final file in result.files) {
-                                if (file.path != null &&
-                                    !_batchStagingFiles.contains(file.path!)) {
-                                  _batchStagingFiles.add(file.path!);
-                                }
-                              }
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _batchStagingAlgorithm,
-                        decoration: const InputDecoration(
-                          labelText: 'Base Scorer Algorithm',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'yasa',
-                            child: Text('YASA LightGBM Consensus'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'usleep',
-                            child: Text('Offline U-Sleep Consensus'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'luna',
-                            child: Text('Luna POPS Stager'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'gssc',
-                            child: Text('Greifswald Classifier (GSSC)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'tinysleepnet',
-                            child: Text('TinySleepNet (PhysioEx)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'seqsleepnet',
-                            child: Text('SeqSleepNet (PhysioEx)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'sleeptransformer',
-                            child: Text('SleepTransformer (PhysioEx)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'dreamento',
-                            child: Text('Dreamento (YASA-based)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'sleepeegpy',
-                            child: Text('SleepEEGpy (YASA-based)'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _batchStagingAlgorithm = v);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _batchStagingCorrection,
-                        decoration: const InputDecoration(
-                          labelText: 'Sequence Correction',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'none',
-                            child: Text('None (Raw consensus predictions)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'sleepgpt',
-                            child: Text('SleepGPT Language Model'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _batchStagingCorrection = v);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Channel Mapping Configuration:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'EEG Channels (comma-separated)',
-                          hintText: 'e.g. AF7,AF8 or F3,F4',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        initialValue: _batchStagingEeg.join(','),
-                        onChanged: (v) {
-                          setState(() {
-                            _batchStagingEeg.clear();
-                            _batchStagingEeg.addAll(
-                              v
-                                  .split(',')
-                                  .map((e) => e.trim())
-                                  .where((e) => e.isNotEmpty),
-                            );
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'Reference Channels (comma-separated)',
-                          hintText: 'e.g. PPG or M1,M2',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        initialValue: _batchStagingRef.join(','),
-                        onChanged: (v) {
-                          setState(() {
-                            _batchStagingRef.clear();
-                            _batchStagingRef.addAll(
-                              v
-                                  .split(',')
-                                  .map((e) => e.trim())
-                                  .where((e) => e.isNotEmpty),
-                            );
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _batchStagingFiles.isEmpty
-                              ? null
-                              : () {
-                                  final settings = {
-                                    'algorithm': _batchStagingAlgorithm,
-                                    'sequence_correction':
-                                        _batchStagingCorrection,
-                                    'sleepgpt_alpha': 0.1,
-                                    'sleepgpt_ngram': 30,
-                                    'eeg': _batchStagingEeg,
-                                    'ref': _batchStagingRef,
-                                    'eog': _batchStagingEog,
-                                    'emg': _batchStagingEmg,
-                                  };
-                                  _executeBatchAutoScoring(
-                                    _batchStagingFiles,
-                                    settings,
-                                  );
-                                },
-                          child: const Text(
-                            'Run Batch AutoscoreNidra',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-          ],
-          // Right Column: Batch AnalyseNidra
-          Expanded(
-            child: Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Color(0xFFD0D0D0)),
-              ),
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.analytics, color: Colors.blue),
-                        SizedBox(width: 8),
-                        Text(
-                          'AnalyseNidra — Batch Advanced Sleep EEG Analysis',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    const Text(
-                      'File Mappings (EEG file <-> Scoring file):',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 150,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFD0D0D0)),
-                        borderRadius: BorderRadius.circular(4),
-                        color: const Color(0xFFF9F9F9),
-                      ),
-                      child: _batchAnalysePairs.isEmpty
-                          ? const Center(child: Text('No file pairs mapped'))
-                          : ListView.builder(
-                              itemCount: _batchAnalysePairs.length,
-                              itemBuilder: (context, index) {
-                                final pair = _batchAnalysePairs[index];
-                                final eeg = pair['eegPath'] ?? '';
-                                final scoring = pair['scoringPath'] ?? '';
-                                return ListTile(
-                                  dense: true,
-                                  title: Text('EEG: ${_basename(eeg)}'),
-                                  subtitle: Text(
-                                    'Scoring: ${_basename(scoring)}',
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.edit,
-                                          size: 16,
-                                          color: Colors.grey,
-                                        ),
-                                        tooltip: 'Select scoring file',
-                                        onPressed: () async {
-                                          final result =
-                                              await FilePicker.pickFiles(
-                                                dialogTitle:
-                                                    'Select scoring JSON file',
-                                                type: FileType.custom,
-                                                allowedExtensions: ['json'],
-                                              );
-                                          if (result != null &&
-                                              result.files.single.path !=
-                                                  null) {
-                                            setState(() {
-                                              pair['scoringPath'] =
-                                                  result.files.single.path!;
-                                            });
-                                          }
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          size: 16,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            _batchAnalysePairs.removeAt(index);
-                                          });
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
                             ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.add_circle_outline, size: 16),
-                          label: const Text('Add EEG File…'),
-                          onPressed: () async {
-                            final result = await FilePicker.pickFiles(
-                              dialogTitle: 'Select EEG file (EDF/ORB/SIGNAL)',
-                              type: FileType.custom,
-                              allowedExtensions: ['edf', 'orb', 'signal'],
-                            );
-                            if (result != null &&
-                                result.files.single.path != null) {
-                              setState(() {
-                                _batchAnalysePairs.add({
-                                  'eegPath': result.files.single.path!,
-                                  'scoringPath': '',
-                                });
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.settings_suggest, size: 16),
-                          label: const Text('Auto-pair Directory…'),
-                          onPressed: () async {
-                            final dir = await FilePicker.getDirectoryPath(
-                              dialogTitle:
-                                  'Select directory to auto-pair files',
-                            );
-                            if (dir != null) {
-                              final directory = Directory(dir);
-                              if (directory.existsSync()) {
-                                final files = directory.listSync();
-                                final List<String> eegs = [];
-                                final List<String> scorings = [];
-                                for (final file in files) {
-                                  if (file is File) {
-                                    final ext = file.path
-                                        .split('.')
-                                        .last
-                                        .toLowerCase();
-                                    if (ext == 'edf' ||
-                                        ext == 'orb' ||
-                                        ext == 'signal') {
-                                      eegs.add(file.path);
-                                    } else if (ext == 'json') {
-                                      scorings.add(file.path);
-                                    }
-                                  }
-                                }
-
-                                setState(() {
-                                  for (final eeg in eegs) {
-                                    final eegName = _basename(
-                                      eeg,
-                                    ).split('.').first;
-                                    String matchedScoring = '';
-                                    for (final scoring in scorings) {
-                                      final scName = _basename(
-                                        scoring,
-                                      ).split('.').first;
-                                      if (scName.contains(eegName) ||
-                                          eegName.contains(scName)) {
-                                        matchedScoring = scoring;
-                                        break;
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add Recording Files…'),
+                              onPressed: () async {
+                                final result = await FilePicker.pickFiles(
+                                  dialogTitle:
+                                      'Select EEG files for batch AutoscoreNidra',
+                                  type: FileType.custom,
+                                  allowedExtensions: ['edf', 'orb', 'signal'],
+                                  allowMultiple: true,
+                                );
+                                if (result != null) {
+                                  setState(() {
+                                    for (final file in result.files) {
+                                      if (file.path != null &&
+                                          !_batchStagingFiles.contains(
+                                            file.path!,
+                                          )) {
+                                        _batchStagingFiles.add(file.path!);
                                       }
                                     }
-                                    _batchAnalysePairs.add({
-                                      'eegPath': eeg,
-                                      'scoringPath': matchedScoring,
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _batchStagingAlgorithm,
+                              decoration: const InputDecoration(
+                                labelText: 'Base Scorer Algorithm',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'yasa',
+                                  child: Text('YASA LightGBM Consensus'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'usleep',
+                                  child: Text('Offline U-Sleep Consensus'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'luna',
+                                  child: Text('Luna POPS Stager'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'gssc',
+                                  child: Text('Greifswald Classifier (GSSC)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'tinysleepnet',
+                                  child: Text('TinySleepNet (PhysioEx)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'seqsleepnet',
+                                  child: Text('SeqSleepNet (PhysioEx)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'sleeptransformer',
+                                  child: Text('SleepTransformer (PhysioEx)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'dreamento',
+                                  child: Text('Dreamento (YASA-based)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'sleepeegpy',
+                                  child: Text('SleepEEGpy (YASA-based)'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _batchStagingAlgorithm = v);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _batchStagingCorrection,
+                              decoration: const InputDecoration(
+                                labelText: 'Sequence Correction',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'none',
+                                  child: Text(
+                                    'None (Raw consensus predictions)',
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'sleepgpt',
+                                  child: Text('SleepGPT Language Model'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _batchStagingCorrection = v);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Channel Mapping Configuration:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              key: const Key('batch-autoscore-eeg-channels'),
+                              controller: _batchStagingEegController,
+                              decoration: const InputDecoration(
+                                labelText: 'EEG Channels (comma-separated)',
+                                hintText: 'e.g. AF7,AF8 or F3,F4',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              key: const Key(
+                                'batch-autoscore-reference-channels',
+                              ),
+                              controller: _batchStagingRefController,
+                              decoration: const InputDecoration(
+                                labelText:
+                                    'Reference Channels (comma-separated)',
+                                hintText: 'e.g. PPG or M1,M2',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _batchStagingEogController,
+                              decoration: const InputDecoration(
+                                labelText: 'EOG Channels (optional)',
+                                hintText: 'e.g. LOC,ROC',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _batchStagingEmgController,
+                              decoration: const InputDecoration(
+                                labelText: 'EMG Channels (optional)',
+                                hintText: 'e.g. EMG1,EMG2',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 40,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.purple,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _batchStagingFiles.isEmpty
+                                    ? null
+                                    : () {
+                                        final settings = {
+                                          'algorithm': _batchStagingAlgorithm,
+                                          'sequence_correction':
+                                              _batchStagingCorrection,
+                                          'sleepgpt_alpha': 0.1,
+                                          'sleepgpt_ngram': 30,
+                                          'eeg': _parseChannelList(
+                                            _batchStagingEegController.text,
+                                          ),
+                                          'ref': _parseChannelList(
+                                            _batchStagingRefController.text,
+                                          ),
+                                          'eog': _parseChannelList(
+                                            _batchStagingEogController.text,
+                                          ),
+                                          'emg': _parseChannelList(
+                                            _batchStagingEmgController.text,
+                                          ),
+                                        };
+                                        _executeBatchAutoScoring(
+                                          _batchStagingFiles,
+                                          settings,
+                                        );
+                                      },
+                                child: const Text(
+                                  'Run Batch AutoscoreNidra',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                // Right Column: Batch AnalyseNidra
+                Expanded(
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(color: Color(0xFFD0D0D0)),
+                    ),
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.analytics, color: Colors.blue),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'AnalyseNidra — Batch Advanced Sleep EEG Analysis',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          const Text(
+                            'File Mappings (EEG file <-> Scoring file):',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 150,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFFD0D0D0),
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              color: const Color(0xFFF9F9F9),
+                            ),
+                            child: _batchAnalysePairs.isEmpty
+                                ? const Center(
+                                    child: Text('No file pairs mapped'),
+                                  )
+                                : ListView.builder(
+                                    itemCount: _batchAnalysePairs.length,
+                                    itemBuilder: (context, index) {
+                                      final pair = _batchAnalysePairs[index];
+                                      final eeg = pair['eegPath'] ?? '';
+                                      final scoring = pair['scoringPath'] ?? '';
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text('EEG: ${_basename(eeg)}'),
+                                        subtitle: Text(
+                                          'Scoring: ${_basename(scoring)}',
+                                        ),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ),
+                                              tooltip: 'Select scoring file',
+                                              onPressed: () async {
+                                                final result =
+                                                    await FilePicker.pickFiles(
+                                                      dialogTitle:
+                                                          'Select scoring JSON file',
+                                                      type: FileType.custom,
+                                                      allowedExtensions: [
+                                                        'json',
+                                                      ],
+                                                    );
+                                                if (result != null &&
+                                                    result.files.single.path !=
+                                                        null) {
+                                                  setState(() {
+                                                    pair['scoringPath'] = result
+                                                        .files
+                                                        .single
+                                                        .path!;
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                size: 16,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _batchAnalysePairs.removeAt(
+                                                    index,
+                                                  );
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ElevatedButton.icon(
+                                icon: const Icon(
+                                  Icons.add_circle_outline,
+                                  size: 16,
+                                ),
+                                label: const Text('Add EEG File…'),
+                                onPressed: () async {
+                                  final result = await FilePicker.pickFiles(
+                                    dialogTitle:
+                                        'Select EEG file (EDF/ORB/SIGNAL)',
+                                    type: FileType.custom,
+                                    allowedExtensions: ['edf', 'orb', 'signal'],
+                                  );
+                                  if (result != null &&
+                                      result.files.single.path != null) {
+                                    setState(() {
+                                      _batchAnalysePairs.add({
+                                        'eegPath': result.files.single.path!,
+                                        'scoringPath': '',
+                                      });
                                     });
                                   }
-                                });
-                              }
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _batchAnalyseEegController,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'EEG Channels for analysis (comma-separated)',
-                        hintText: 'e.g. AF7,AF8',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _batchAnalyseRefController,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Reference Channels for analysis (comma-separated)',
-                        hintText: 'e.g. PPG',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: _batchAnalysePairs.isEmpty
-                            ? null
-                            : () {
-                                final validPairs = _batchAnalysePairs
-                                    .where(
-                                      (p) =>
-                                          (p['eegPath'] ?? '').isNotEmpty &&
-                                          (p['scoringPath'] ?? '').isNotEmpty,
-                                    )
-                                    .toList();
-                                if (validPairs.isEmpty) {
-                                  _setStatus(
-                                    'Error: Mapped pairs must have both EEG and Scoring files.',
-                                  );
-                                  return;
-                                }
-
-                                final jobs = validPairs.map((pair) {
-                                  return _AnalyseNidraJob(
-                                    edfPath: pair['eegPath']!,
-                                    scoringPath: pair['scoringPath']!,
-                                    mappedScoringPath: pair['scoringPath']!,
-                                  );
-                                }).toList();
-
-                                final chans = _batchAnalyseEegController.text
-                                    .split(',')
-                                    .map((e) => e.trim())
-                                    .where((e) => e.isNotEmpty)
-                                    .toList();
-                                final refs = _batchAnalyseRefController.text
-                                    .split(',')
-                                    .map((e) => e.trim())
-                                    .where((e) => e.isNotEmpty)
-                                    .toList();
-
-                                _runAnalyseNidraJobs(jobs, chans, refs);
-                              },
-                        child: const Text(
-                          'Run Batch AnalyseNidra',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    const Text(
-                      'Compile AnalyseNidra Regional Outputs',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _lastAnalyseRegionalFiles.isEmpty
-                              ? null
-                              : () => _compileAnalyseNidraMasterSheet(
-                                  _lastAnalyseRegionalFiles,
+                                },
+                              ),
+                              ElevatedButton.icon(
+                                icon: const Icon(
+                                  Icons.settings_suggest,
+                                  size: 16,
                                 ),
-                          icon: const Icon(Icons.table_view, size: 16),
-                          label: const Text('Compile Last Batch'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _compileAnalyseNidraMasterSheet,
-                          icon: const Icon(Icons.library_add, size: 16),
-                          label: const Text('Combine Existing CSVs…'),
-                        ),
-                      ],
+                                label: const Text('Auto-pair Directory…'),
+                                onPressed: () async {
+                                  final dir = await FilePicker.getDirectoryPath(
+                                    dialogTitle:
+                                        'Select directory to auto-pair files',
+                                  );
+                                  if (dir != null) {
+                                    final directory = Directory(dir);
+                                    if (directory.existsSync()) {
+                                      final files = directory.listSync();
+                                      final List<String> eegs = [];
+                                      final List<String> scorings = [];
+                                      for (final file in files) {
+                                        if (file is File) {
+                                          final ext = file.path
+                                              .split('.')
+                                              .last
+                                              .toLowerCase();
+                                          if (ext == 'edf' ||
+                                              ext == 'orb' ||
+                                              ext == 'signal') {
+                                            eegs.add(file.path);
+                                          } else if (ext == 'json') {
+                                            scorings.add(file.path);
+                                          }
+                                        }
+                                      }
+
+                                      setState(() {
+                                        for (final eeg in eegs) {
+                                          final eegName = _basename(
+                                            eeg,
+                                          ).split('.').first;
+                                          String matchedScoring = '';
+                                          for (final scoring in scorings) {
+                                            final scName = _basename(
+                                              scoring,
+                                            ).split('.').first;
+                                            if (scName.contains(eegName) ||
+                                                eegName.contains(scName)) {
+                                              matchedScoring = scoring;
+                                              break;
+                                            }
+                                          }
+                                          _batchAnalysePairs.add({
+                                            'eegPath': eeg,
+                                            'scoringPath': matchedScoring,
+                                          });
+                                        }
+                                      });
+                                    }
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _batchAnalyseEegController,
+                            decoration: const InputDecoration(
+                              labelText:
+                                  'EEG Channels for analysis (comma-separated)',
+                              hintText: 'e.g. AF7,AF8',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _batchAnalyseRefController,
+                            decoration: const InputDecoration(
+                              labelText:
+                                  'Reference Channels for analysis (comma-separated)',
+                              hintText: 'e.g. PPG',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 40,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _batchAnalysePairs.isEmpty
+                                  ? null
+                                  : () {
+                                      final validPairs = _batchAnalysePairs
+                                          .where(
+                                            (p) =>
+                                                (p['eegPath'] ?? '')
+                                                    .isNotEmpty &&
+                                                (p['scoringPath'] ?? '')
+                                                    .isNotEmpty,
+                                          )
+                                          .toList();
+                                      if (validPairs.isEmpty) {
+                                        _setStatus(
+                                          'Error: Mapped pairs must have both EEG and Scoring files.',
+                                        );
+                                        return;
+                                      }
+
+                                      final jobs = validPairs.map((pair) {
+                                        return _AnalyseNidraJob(
+                                          edfPath: pair['eegPath']!,
+                                          scoringPath: pair['scoringPath']!,
+                                          mappedScoringPath:
+                                              pair['scoringPath']!,
+                                        );
+                                      }).toList();
+
+                                      final chans = _batchAnalyseEegController
+                                          .text
+                                          .split(',')
+                                          .map((e) => e.trim())
+                                          .where((e) => e.isNotEmpty)
+                                          .toList();
+                                      final refs = _batchAnalyseRefController
+                                          .text
+                                          .split(',')
+                                          .map((e) => e.trim())
+                                          .where((e) => e.isNotEmpty)
+                                          .toList();
+
+                                      _runAnalyseNidraJobs(jobs, chans, refs);
+                                    },
+                              child: const Text(
+                                'Run Batch AnalyseNidra',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(),
+                          const Text(
+                            'Compile AnalyseNidra Regional Outputs',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: _lastAnalyseRegionalFiles.isEmpty
+                                    ? null
+                                    : () => _compileAnalyseNidraMasterSheet(
+                                        _lastAnalyseRegionalFiles,
+                                      ),
+                                icon: const Icon(Icons.table_view, size: 16),
+                                label: const Text('Compile Last Batch'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _compileAnalyseNidraMasterSheet,
+                                icon: const Icon(Icons.library_add, size: 16),
+                                label: const Text('Combine Existing CSVs…'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -5479,6 +5568,15 @@ class _CommandBatchProgressDialogState
 }
 
 String _basename(String path) => path.split(Platform.pathSeparator).last;
+
+List<String> _parseChannelList(String value) {
+  final seen = <String>{};
+  return value
+      .split(',')
+      .map((channel) => channel.trim())
+      .where((channel) => channel.isNotEmpty && seen.add(channel))
+      .toList();
+}
 
 Future<List<(double, double)>> _runKComplexIsolate(
   List<double> signal,

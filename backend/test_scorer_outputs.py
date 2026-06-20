@@ -29,6 +29,32 @@ class _DummyAlgorithm:
 
 
 class ScorerOutputTests(unittest.TestCase):
+    def test_channel_inference_excludes_non_eeg_psg_signals(self) -> None:
+        channels = [
+            "F3:M2",
+            "C4:M1",
+            "E1:M2",
+            "EMG1",
+            "M1",
+            "SpO2",
+            "Pulse",
+            "Flow Th",
+            "RIP Abd",
+            "Pos.",
+            "Batt. Ext",
+        ]
+
+        inferred = scorer.infer_channel_groups(channels)
+
+        self.assertEqual(inferred.eeg, ["C4:M1", "F3:M2"])
+        self.assertEqual(inferred.eog, ["E1:M2"])
+        self.assertEqual(inferred.emg, ["EMG1"])
+        self.assertEqual(inferred.ref, ["M1"])
+
+    def test_single_generic_channel_remains_supported(self) -> None:
+        inferred = scorer.infer_channel_groups(["Channel 1"])
+        self.assertEqual(inferred.eeg, ["Channel 1"])
+
     def _score(self, output_dir: Path, *, export_diagnostics: bool):
         with (
             patch("backend.algorithms.available_algorithms", return_value={"yasa": _DummyAlgorithm()}),

@@ -193,6 +193,11 @@ class AppConfig {
     this.referenceLineThickness = 0.5,
     this.referenceLineColor = 'Light Grey',
     this.hypnogramZoom = 'Full Night',
+    this.reportTitle = 'ScoringNidra Sleep EEG Report',
+    this.studySite = '',
+    this.investigatorName = '',
+    this.subjectId = '',
+    this.subjectDetails = '',
     this.channels = const [],
   });
 
@@ -234,6 +239,11 @@ class AppConfig {
   double referenceLineThickness;
   String referenceLineColor;
   String hypnogramZoom;
+  String reportTitle;
+  String studySite;
+  String investigatorName;
+  String subjectId;
+  String subjectDetails;
   List<ChannelConfig> channels;
 
   Map<String, dynamic> toJson() {
@@ -271,6 +281,11 @@ class AppConfig {
       'referenceLineThickness': referenceLineThickness,
       'referenceLineColor': referenceLineColor,
       'hypnogramZoom': hypnogramZoom,
+      'reportTitle': reportTitle,
+      'studySite': studySite,
+      'investigatorName': investigatorName,
+      'subjectId': subjectId,
+      'subjectDetails': subjectDetails,
       'channels': channels.map((c) => c.toJson()).toList(),
     };
   }
@@ -342,6 +357,12 @@ class AppConfig {
           (json['referenceLineThickness'] as num?)?.toDouble() ?? 0.5,
       referenceLineColor: json['referenceLineColor'] as String? ?? 'Light Grey',
       hypnogramZoom: json['hypnogramZoom'] as String? ?? 'Full Night',
+      reportTitle:
+          json['reportTitle'] as String? ?? 'ScoringNidra Sleep EEG Report',
+      studySite: json['studySite'] as String? ?? '',
+      investigatorName: json['investigatorName'] as String? ?? '',
+      subjectId: json['subjectId'] as String? ?? '',
+      subjectDetails: json['subjectDetails'] as String? ?? '',
       channels:
           (json['channels'] as List<dynamic>?)
               ?.map(
@@ -398,6 +419,11 @@ class AppConfig {
       'Reference_line_thickness': referenceLineThickness,
       'Reference_line_color': referenceLineColor,
       'Hypnogram_zoom': hypnogramZoom,
+      'Report_title': reportTitle,
+      'Study_site': studySite,
+      'Investigator_name': investigatorName,
+      'Subject_id': subjectId,
+      'Subject_details': subjectDetails,
     };
     final channelsList = channels.map((c) => c.toJson()).toList();
     return [global, channelsList];
@@ -428,7 +454,10 @@ class AppConfig {
       final amp = global['Reference_amplitude_line_muV'] as num?;
       final tfDisplay =
           global['Wavelet_display_mode'] as String? ?? 'dB (median baseline)';
-      final tfVis = _boolValue(global['Wavelet_panel_visible'], fallback: false);
+      final tfVis = _boolValue(
+        global['Wavelet_panel_visible'],
+        fallback: false,
+      );
       final tfScale = global['Wavelet_frequency_scale'] as String? ?? 'Linear';
       final tfRidge = _boolValue(global['Wavelet_show_ridge']);
       final tfAutoScale = _boolValue(
@@ -509,6 +538,12 @@ class AppConfig {
       final referenceLineColor =
           global['Reference_line_color'] as String? ?? 'Light Grey';
       final hypnogramZoom = global['Hypnogram_zoom'] as String? ?? 'Full Night';
+      final reportTitle =
+          global['Report_title'] as String? ?? 'ScoringNidra Sleep EEG Report';
+      final studySite = global['Study_site'] as String? ?? '';
+      final investigatorName = global['Investigator_name'] as String? ?? '';
+      final subjectId = global['Subject_id'] as String? ?? '';
+      final subjectDetails = global['Subject_details'] as String? ?? '';
 
       return AppConfig(
         spectrogramChannelIndex: indexOfChannel(specCh),
@@ -559,6 +594,11 @@ class AppConfig {
         referenceLineThickness: referenceLineThickness,
         referenceLineColor: referenceLineColor,
         hypnogramZoom: hypnogramZoom,
+        reportTitle: reportTitle,
+        studySite: studySite,
+        investigatorName: investigatorName,
+        subjectId: subjectId,
+        subjectDetails: subjectDetails,
         channels: channels,
       );
     }
@@ -1636,7 +1676,12 @@ class EegBackend {
         eeg.epochTfPower.isNotEmpty &&
             old.currentEpoch < eeg.epochTfPower.length
         ? eeg.epochTfPower[old.currentEpoch]
-        : await _timeFrequencyForEpoch(eeg, old.currentEpoch, cfg, isCancelled: isCancelled);
+        : await _timeFrequencyForEpoch(
+            eeg,
+            old.currentEpoch,
+            cfg,
+            isCancelled: isCancelled,
+          );
     final tfLimits = _effectiveTfPowerLimits(eeg, cfg, tfPower);
 
     ui.Image? tfImage;

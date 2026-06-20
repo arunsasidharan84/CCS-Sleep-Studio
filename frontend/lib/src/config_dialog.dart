@@ -49,6 +49,11 @@ class _ConfigDialogState extends State<ConfigDialog> {
   late final TextEditingController _hypnogramFlexCtrl;
   late final TextEditingController _periodogramFlexCtrl;
   late final TextEditingController _refLineThicknessCtrl;
+  late final TextEditingController _reportTitleCtrl;
+  late final TextEditingController _studySiteCtrl;
+  late final TextEditingController _investigatorCtrl;
+  late final TextEditingController _subjectIdCtrl;
+  late final TextEditingController _subjectDetailsCtrl;
 
   @override
   void initState() {
@@ -88,6 +93,11 @@ class _ConfigDialogState extends State<ConfigDialog> {
       referenceLineThickness: widget.config.referenceLineThickness,
       referenceLineColor: widget.config.referenceLineColor,
       hypnogramZoom: widget.config.hypnogramZoom,
+      reportTitle: widget.config.reportTitle,
+      studySite: widget.config.studySite,
+      investigatorName: widget.config.investigatorName,
+      subjectId: widget.config.subjectId,
+      subjectDetails: widget.config.subjectDetails,
       channels: widget.config.channels.isNotEmpty
           ? widget.config.channels.map((c) => c.copy()).toList()
           : widget.channelLabels
@@ -150,6 +160,11 @@ class _ConfigDialogState extends State<ConfigDialog> {
     _refLineThicknessCtrl = TextEditingController(
       text: _working.referenceLineThickness.toStringAsFixed(2),
     );
+    _reportTitleCtrl = TextEditingController(text: _working.reportTitle);
+    _studySiteCtrl = TextEditingController(text: _working.studySite);
+    _investigatorCtrl = TextEditingController(text: _working.investigatorName);
+    _subjectIdCtrl = TextEditingController(text: _working.subjectId);
+    _subjectDetailsCtrl = TextEditingController(text: _working.subjectDetails);
   }
 
   @override
@@ -171,6 +186,11 @@ class _ConfigDialogState extends State<ConfigDialog> {
     _hypnogramFlexCtrl.dispose();
     _periodogramFlexCtrl.dispose();
     _refLineThicknessCtrl.dispose();
+    _reportTitleCtrl.dispose();
+    _studySiteCtrl.dispose();
+    _investigatorCtrl.dispose();
+    _subjectIdCtrl.dispose();
+    _subjectDetailsCtrl.dispose();
     super.dispose();
   }
 
@@ -178,7 +198,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   Widget build(BuildContext context) {
     final labels = _working.channels.map((channel) => channel.name).toList();
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: AlertDialog(
         title: const Text('Configuration Window'),
         contentPadding: EdgeInsets.zero,
@@ -193,6 +213,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
                 indicatorColor: Colors.blue,
                 tabs: [
                   Tab(text: 'Configuration'),
+                  Tab(text: 'Report'),
                   Tab(text: 'Channels'),
                   Tab(text: 'Events'),
                   Tab(text: 'Spectrogram'),
@@ -307,6 +328,59 @@ class _ConfigDialogState extends State<ConfigDialog> {
                                 ),
                               ],
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Report identity and subject metadata
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'PDF report header and subject information',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'These optional fields are saved with the configuration and appear on page 1 of exported reports.',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 20),
+                          _ReportTextField(
+                            label: 'Custom report title',
+                            controller: _reportTitleCtrl,
+                            onChanged: (value) =>
+                                _working.reportTitle = value.trim(),
+                          ),
+                          _ReportTextField(
+                            label: 'Place / institution of study',
+                            controller: _studySiteCtrl,
+                            onChanged: (value) =>
+                                _working.studySite = value.trim(),
+                          ),
+                          _ReportTextField(
+                            label: 'Investigator name',
+                            controller: _investigatorCtrl,
+                            onChanged: (value) =>
+                                _working.investigatorName = value.trim(),
+                          ),
+                          _ReportTextField(
+                            label: 'Subject identifier',
+                            controller: _subjectIdCtrl,
+                            onChanged: (value) =>
+                                _working.subjectId = value.trim(),
+                          ),
+                          _ReportTextField(
+                            label: 'Subject details',
+                            controller: _subjectDetailsCtrl,
+                            maxLines: 3,
+                            onChanged: (value) =>
+                                _working.subjectDetails = value.trim(),
                           ),
                         ],
                       ),
@@ -898,7 +972,45 @@ class _ConfigDialogState extends State<ConfigDialog> {
       eegPanelTimeUnit: cfg.eegPanelTimeUnit,
       distanceBetweenChannelsUv: cfg.distanceBetweenChannelsUv,
       referenceAmplitudeLineUv: cfg.referenceAmplitudeLineUv,
+      reportTitle: cfg.reportTitle,
+      studySite: cfg.studySite,
+      investigatorName: cfg.investigatorName,
+      subjectId: cfg.subjectId,
+      subjectDetails: cfg.subjectDetails,
       channels: cfg.channels.map((c) => c.copy()).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReportTextField extends StatelessWidget {
+  const _ReportTextField({
+    required this.label,
+    required this.controller,
+    required this.onChanged,
+    this.maxLines = 1,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          alignLabelWithHint: maxLines > 1,
+        ),
+      ),
     );
   }
 }
@@ -1837,6 +1949,11 @@ class _FilterDialogState extends State<FilterDialog> {
       eegPanelTimeUnit: widget.config.eegPanelTimeUnit,
       distanceBetweenChannelsUv: widget.config.distanceBetweenChannelsUv,
       referenceAmplitudeLineUv: widget.config.referenceAmplitudeLineUv,
+      reportTitle: widget.config.reportTitle,
+      studySite: widget.config.studySite,
+      investigatorName: widget.config.investigatorName,
+      subjectId: widget.config.subjectId,
+      subjectDetails: widget.config.subjectDetails,
       channels: widget.config.channels.map((c) => c.copy()).toList(),
     );
   }

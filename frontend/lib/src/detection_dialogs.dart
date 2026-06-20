@@ -806,6 +806,39 @@ class _MtSpindleDialogState extends State<MtSpindleDialog> {
   }
 }
 
+({bool eeg, bool ref, bool eog, bool emg}) _classifyScoringChannel(
+  String label,
+) {
+  final upper = label.trim().toUpperCase();
+  var root = upper.replaceFirst(RegExp(r'^EEG\s+'), '');
+  root = root.split(':').first;
+  root = root.split(RegExp(r'[-_\s]')).first;
+  final isEog =
+      upper.contains('EOG') ||
+      upper.contains('LOC') ||
+      upper.contains('ROC') ||
+      root == 'E1' ||
+      root == 'E2';
+  final isEmg =
+      upper.contains('EMG') || upper.contains('CHIN') || upper.contains('MYO');
+  final isRef =
+      upper == 'M1' ||
+      upper == 'M2' ||
+      upper == 'A1' ||
+      upper == 'A2' ||
+      upper == 'REF' ||
+      upper.startsWith('REF ');
+  final isEegRoot = RegExp(
+    r'^(?:(?:FP|AF|F|FT|FC|T|C|TP|CP|P|PO|O)(?:Z|\d{1,2})|EEG\d*)$',
+  ).hasMatch(root);
+  return (
+    eeg: isEegRoot && !isEog && !isEmg && !isRef,
+    ref: isRef,
+    eog: isEog,
+    emg: isEmg,
+  );
+}
+
 class AutoScoringDialog extends StatefulWidget {
   const AutoScoringDialog({
     super.key,
@@ -835,32 +868,18 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
   void initState() {
     super.initState();
     for (final ch in widget.channelLabels) {
-      final upper = ch.toUpperCase();
-
-      bool isEog =
-          upper.contains('EOG') ||
-          upper.contains('LOC') ||
-          upper.contains('ROC') ||
-          upper.contains('E1') ||
-          upper.contains('E2');
-      bool isEmg =
-          upper.contains('EMG') ||
-          upper.contains('CHIN') ||
-          upper.contains('MYO');
-      bool isRef =
-          upper == 'M1' ||
-          upper == 'M2' ||
-          upper == 'A1' ||
-          upper == 'A2' ||
-          upper == 'REF' ||
-          upper.startsWith('REF ');
-
-      bool isEeg = !isEog && !isEmg && !isRef;
-
-      _eegChannels[ch] = isEeg;
-      _refChannels[ch] = isRef;
-      _eogChannels[ch] = isEog;
-      _emgChannels[ch] = isEmg;
+      final group = _classifyScoringChannel(ch);
+      _eegChannels[ch] = group.eeg;
+      _refChannels[ch] = group.ref;
+      _eogChannels[ch] = group.eog;
+      _emgChannels[ch] = group.emg;
+    }
+    if (widget.channelLabels.length == 1 &&
+        !_eegChannels.values.any((selected) => selected) &&
+        !_refChannels.values.any((selected) => selected) &&
+        !_eogChannels.values.any((selected) => selected) &&
+        !_emgChannels.values.any((selected) => selected)) {
+      _eegChannels[widget.channelLabels.single] = true;
     }
   }
 
@@ -871,7 +890,9 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
         children: [
           const Icon(Icons.psychology, color: Colors.purple),
           const SizedBox(width: 8),
-          const Text('AutoscoreNidra — Automated Sleep Scoring'),
+          const Expanded(
+            child: Text('AutoscoreNidra — Automated Sleep Scoring'),
+          ),
         ],
       ),
       content: SizedBox(
@@ -898,6 +919,7 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _algorithm,
                           decoration: const InputDecoration(
                             isDense: true,
@@ -993,6 +1015,7 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _correction,
                           decoration: const InputDecoration(
                             isDense: true,
@@ -1240,7 +1263,7 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
               return;
             }
 
-            widget.onRun({
+            final settings = <String, dynamic>{
               'algorithm': _algorithm,
               'sequence_correction': _correction,
               'eeg': eeg,
@@ -1249,8 +1272,11 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
               'emg': emg,
               'sleepgpt_alpha': _sleepgptAlpha,
               'sleepgpt_ngram': _sleepgptNgram,
-            });
+            };
             Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onRun(settings);
+            });
           },
           child: const Text('Run Scoring'),
         ),
@@ -1308,7 +1334,6 @@ class _AutoScoringDialogState extends State<AutoScoringDialog> {
             borderRadius: BorderRadius.circular(4),
           ),
           child: Scrollbar(
-            thumbVisibility: true,
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: list.length,
@@ -1430,9 +1455,7 @@ class _AnalyseNidraDialogState extends State<AnalyseNidraDialog> {
             if (channels.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text(
-                    'Select at least one EEG channel.',
-                  ),
+                  content: Text('Select at least one EEG channel.'),
                 ),
               );
               return;
@@ -1497,28 +1520,18 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
     _emgChannels = {};
 
     for (final channel in widget.channelLabels) {
-      final upper = channel.toUpperCase();
-      bool isEog = upper.contains('EOG') ||
-          upper.contains('LOC') ||
-          upper.contains('ROC') ||
-          upper.contains('E1') ||
-          upper.contains('E2');
-      bool isEmg = upper.contains('EMG') ||
-          upper.contains('CHIN') ||
-          upper.contains('MYO');
-      bool isRef = upper == 'M1' ||
-          upper == 'M2' ||
-          upper == 'A1' ||
-          upper == 'A2' ||
-          upper == 'REF' ||
-          upper.startsWith('REF ');
-
-      bool isEeg = !isEog && !isEmg && !isRef;
-
-      _eegChannels[channel] = isEeg;
-      _refChannels[channel] = isRef;
-      _eogChannels[channel] = isEog;
-      _emgChannels[channel] = isEmg;
+      final group = _classifyScoringChannel(channel);
+      _eegChannels[channel] = group.eeg;
+      _refChannels[channel] = group.ref;
+      _eogChannels[channel] = group.eog;
+      _emgChannels[channel] = group.emg;
+    }
+    if (widget.channelLabels.length == 1 &&
+        !_eegChannels.values.any((selected) => selected) &&
+        !_refChannels.values.any((selected) => selected) &&
+        !_eogChannels.values.any((selected) => selected) &&
+        !_emgChannels.values.any((selected) => selected)) {
+      _eegChannels[widget.channelLabels.single] = true;
     }
   }
 
@@ -1558,6 +1571,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
               ),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _algorithm,
                 decoration: const InputDecoration(
                   isDense: true,
@@ -1644,6 +1658,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
               ),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _correction,
                 decoration: const InputDecoration(
                   isDense: true,
@@ -1854,7 +1869,7 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
               );
               return;
             }
-            widget.onRun({
+            final settings = <String, dynamic>{
               'algorithm': _algorithm,
               'sequence_correction': _correction,
               'sleepgpt_alpha': _sleepgptAlpha,
@@ -1863,8 +1878,11 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
               'ref': ref,
               'eog': eog,
               'emg': emg,
-            });
+            };
             Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onRun(settings);
+            });
           },
           child: const Text('Run AutoscoreNidra Batch'),
         ),
@@ -1922,7 +1940,6 @@ class _BatchAutoScoringDialogState extends State<BatchAutoScoringDialog> {
             borderRadius: BorderRadius.circular(4),
           ),
           child: Scrollbar(
-            thumbVisibility: true,
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: list.length,

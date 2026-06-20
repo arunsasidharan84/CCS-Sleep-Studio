@@ -40,8 +40,20 @@ We compile two distinct variants of **ScoringNidra** automatically via GitHub Ac
 | | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
 | **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
 | | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
-| **Linux** | **Full** | x64 Tarball | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux.tar.gz) |
-| | **Lite** | x64 Tarball | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux.tar.gz) |
+| **Linux (Debian/Ubuntu)** | **Full** | x64 DEB Installer | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux-amd64.deb) |
+| | **Lite** | x64 DEB Installer | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux-amd64.deb) |
+| **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | [Download Linux Full RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux-x86_64.rpm) |
+| | **Lite** | x86_64 RPM Installer | [Download Linux Lite RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux-x86_64.rpm) |
+
+On Debian, Ubuntu, Linux Mint, and compatible distributions, open the downloaded
+`.deb` in the software installer or run `sudo apt install ./ScoringNidra-linux-amd64.deb`.
+The installer registers ScoringNidra in the desktop application menu and adds
+the `scoringnidra` command.
+
+On Red Hat Enterprise Linux 9, AlmaLinux 9, Rocky Linux 9, and compatible
+systems, install the RPM with
+`sudo dnf install ./ScoringNidra-linux-x86_64.rpm`. Each release is smoke-tested
+inside AlmaLinux 9 before publication.
 
 The `latest` development release is a rolling prerelease. Each successful build
 replaces its assets, and GitHub starts the replacement assets with new download
@@ -111,7 +123,7 @@ By leveraging Rust's compiler optimizations and parallel execution (via `rayon`)
 * **Phase-Amplitude Coupling (PAC)**: TensorPAC-compatible modulation index calculation for Slow-Wave/Sigma coupling.
 * **Regional Compilation**: Aggregates all spectral features and event detections across scalp channels.
 * **Master-Sheet Compilation**: Combines regional CSV outputs from the latest batch or independently completed AnalyseNidra runs into one provenance-preserving CSV.
-* **Publication-Grade Sleep Report**: Generates a four-page PDF covering sleep continuity, thalamocortical coupling, FOOOF/IRASA aperiodic trends, oscillatory peaks, entropy, fractal dynamics, Lempel-Ziv complexity, and autocorrelation windows.
+* **Publication-Grade Sleep Report**: Generates a five-page PDF covering sleep continuity, thalamocortical coupling, FOOOF/IRASA aperiodic trends, oscillatory peaks, entropy, fractal dynamics, Lempel-Ziv complexity, autocorrelation windows, and a plain-English interpretation guide. Configurable study, investigator, and subject metadata can be added from the Report tab in Configuration.
 
 ### Command-Line Usage & Parameters
 For advanced CLI workflows, the `analyse-nidra` executable can be invoked directly from the command line:
