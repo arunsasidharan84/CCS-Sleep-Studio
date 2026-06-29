@@ -25,6 +25,7 @@ Future<void> autoSaveScoring(
   List<ScoredEvent> events = const [],
   List<bool>? stagesUncertain,
   List<double?>? stagesConfidence,
+  List<Map<SleepStage, double>>? stageProbabilities,
 }) async {
   if (activePath == null) return;
   final jsonPath = _jsonPathForEdf(activePath);
@@ -37,6 +38,7 @@ Future<void> autoSaveScoring(
       events: events,
       stagesUncertain: stagesUncertain,
       stagesConfidence: stagesConfidence,
+      stageProbabilities: stageProbabilities,
     );
   } catch (_) {
     // Auto-save failure is non-fatal
@@ -48,16 +50,20 @@ Future<void> writeMappedScoringJson(
   List<SleepStage> stages, {
   int epochSeconds = 30,
   String? sourcePath,
+  List<ScoredEvent> events = const [],
   List<bool>? stagesUncertain,
   List<double?>? stagesConfidence,
+  List<Map<SleepStage, double>>? stageProbabilities,
 }) {
   return _writeJsonScoring(
     path,
     stages,
     epochSeconds,
     sourcePath ?? path,
+    events: events,
     stagesUncertain: stagesUncertain,
     stagesConfidence: stagesConfidence,
+    stageProbabilities: stageProbabilities,
   );
 }
 
@@ -182,6 +188,7 @@ Future<void> _writeJsonScoring(
   List<ScoredEvent> events = const [],
   List<bool>? stagesUncertain,
   List<double?>? stagesConfidence,
+  List<Map<SleepStage, double>>? stageProbabilities,
 }) async {
   final entries = <Map<String, dynamic>>[];
   for (var i = 0; i < stages.length; i++) {
@@ -193,6 +200,10 @@ Future<void> _writeJsonScoring(
     final confVal = stagesConfidence != null && i < stagesConfidence.length
         ? stagesConfidence[i]
         : null;
+    final probabilities =
+        stageProbabilities != null && i < stageProbabilities.length
+        ? _probabilityJson(stageProbabilities[i])
+        : null;
     entries.add({
       'epoch': i + 1,
       'start': i * epochSeconds.toDouble(),
@@ -200,6 +211,8 @@ Future<void> _writeJsonScoring(
       'stage': stage.isScored ? stage.label : null,
       'digit': stage.isScored ? stage.code : null,
       'confidence': confVal ?? (isUncertain ? 0.0 : null),
+      if (probabilities != null && probabilities.isNotEmpty)
+        'probabilities': probabilities,
       'channels': <String>[],
       'clean': 1,
       'source': stage.isScored ? 'human' : null,
@@ -243,6 +256,11 @@ Future<ScoringLoadResult> _loadJsonScoring(String path, int epochCount) async {
 
   final stages = List.filled(epochCount, SleepStage.unknown);
   final stagesUncertain = List.filled(epochCount, false);
+  final stagesConfidence = List<double?>.filled(epochCount, null);
+  final stageProbabilities = List<Map<SleepStage, double>>.filled(
+    epochCount,
+    const <SleepStage, double>{},
+  );
   for (final entry in entries) {
     if (entry is Map<String, dynamic>) {
       final epochOneBased = (entry['epoch'] as num?)?.toInt();
@@ -252,12 +270,50 @@ Future<ScoringLoadResult> _loadJsonScoring(String path, int epochCount) async {
       final stageStr = entry['stage'] as String?;
       stages[idx] = SleepStage.fromLabel(stageStr);
       final confidence = entry['confidence'] as num?;
+      stagesConfidence[idx] = confidence?.toDouble();
       if (confidence != null && confidence.toDouble() == 0.0) {
         stagesUncertain[idx] = true;
       }
+      final probabilities = _parseProbabilityMap(entry['probabilities']);
+      if (probabilities.isNotEmpty) {
+        stageProbabilities[idx] = probabilities;
+      }
     }
   }
-  return ScoringLoadResult(stages, stagesUncertain);
+  return ScoringLoadResult(
+    stages,
+    stagesUncertain,
+    stagesConfidence: stagesConfidence,
+    stageProbabilities: stageProbabilities,
+  );
+}
+
+Map<String, double> _probabilityJson(Map<SleepStage, double> probabilities) {
+  final output = <String, double>{};
+  for (final entry in probabilities.entries) {
+    if (entry.key == SleepStage.unknown ||
+        entry.key == SleepStage.inconclusive) {
+      continue;
+    }
+    output[entry.key.shortLabel == 'REM' ? 'R' : entry.key.shortLabel] =
+        entry.value;
+  }
+  return output;
+}
+
+Map<SleepStage, double> _parseProbabilityMap(dynamic value) {
+  if (value is! Map) return const {};
+  final output = <SleepStage, double>{};
+  for (final entry in value.entries) {
+    final stage = _stageFromYasaLabel(entry.key.toString());
+    final probability = entry.value is num
+        ? (entry.value as num).toDouble()
+        : double.tryParse(entry.value.toString());
+    if (stage != SleepStage.unknown && probability != null) {
+      output[stage] = probability.clamp(0.0, 1.0);
+    }
+  }
+  return output;
 }
 
 List<ScoredEvent> _parseEvents(List<dynamic> annotations) {
@@ -350,6 +406,7 @@ Future<ScoringLoadResult?> importScoringDialog(
       parsed.stages,
       parsed.stagesUncertain,
       stagesConfidence: parsed.stagesConfidence,
+      stageProbabilities: parsed.stageProbabilities,
       sourceFormat: detection.displayName,
     );
     onStatus(
@@ -1036,11 +1093,13 @@ class ScoringLoadResult {
   final List<SleepStage> stages;
   final List<bool> stagesUncertain;
   final List<double?> stagesConfidence;
+  final List<Map<SleepStage, double>> stageProbabilities;
   final String sourceFormat;
   ScoringLoadResult(
     this.stages,
     this.stagesUncertain, {
     this.stagesConfidence = const [],
+    this.stageProbabilities = const [],
     this.sourceFormat = '',
   });
 }

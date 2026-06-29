@@ -54,6 +54,16 @@ def main() -> None:
     parser.add_argument("--sleepgpt-alpha", type=float, default=0.1)
     parser.add_argument("--sleepgpt-ngram", type=int, default=30)
     parser.add_argument(
+        "--apply-sleepgpt",
+        default=None,
+        help="Apply SleepGPT sequence correction to an existing ScoringNidra JSON and exit.",
+    )
+    parser.add_argument(
+        "--output-json",
+        default=None,
+        help="Output path for --apply-sleepgpt. Defaults beside the input scoring file.",
+    )
+    parser.add_argument(
         "--export-diagnostics",
         action="store_true",
         help="Also save consensus and per-montage probability JSON files.",
@@ -76,6 +86,20 @@ def main() -> None:
         print(json.dumps(availability, indent=2), flush=True)
         if not all(item["available"] for item in availability.values()):
             raise SystemExit(2)
+        return
+    if args.apply_sleepgpt:
+        if __package__:
+            from .scorer import apply_sleepgpt_to_scoring_file
+        else:
+            from scorer import apply_sleepgpt_to_scoring_file
+        output = apply_sleepgpt_to_scoring_file(
+            args.apply_sleepgpt,
+            output_json=args.output_json,
+            alpha=args.sleepgpt_alpha,
+            ngram=args.sleepgpt_ngram,
+            log=log,
+        )
+        print(f"Output: {output}", flush=True)
         return
     if not args.data_file:
         parser.error("data_file is required unless --check-models is used")

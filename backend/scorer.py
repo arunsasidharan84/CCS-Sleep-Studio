@@ -95,6 +95,82 @@ def log_noop(message: str) -> None:
     del message
 
 
+def _stage_label_to_key(label: str | None) -> str:
+    normalized = str(label or "").strip().upper()
+    return {
+        "WAKE": "W",
+        "W": "W",
+        "N1": "N1",
+        "N2": "N2",
+        "N3": "N3",
+        "REM": "R",
+        "R": "R",
+    }.get(normalized, "W")
+
+
+def _probabilities_from_scoringhero(records: Sequence[dict[str, object]]) -> pd.DataFrame:
+    rows: list[dict[str, float]] = []
+    for record in records:
+        row = {stage: 0.0 for stage in STAGE_COLUMNS}
+        probabilities = record.get("probabilities")
+        if isinstance(probabilities, dict):
+            for key, value in probabilities.items():
+                stage = _stage_label_to_key(str(key))
+                if stage in row:
+                    try:
+                        row[stage] = float(value)
+                    except (TypeError, ValueError):
+                        pass
+            total = sum(row.values())
+            if total > 0:
+                rows.append({key: value / total for key, value in row.items()})
+                continue
+
+        stage = _stage_label_to_key(record.get("stage"))
+        row[stage] = 1.0
+        rows.append(row)
+    return pd.DataFrame(rows, columns=STAGE_COLUMNS)
+
+
+def apply_sleepgpt_to_scoring_file(
+    scoring_json: str | Path,
+    output_json: str | Path | None = None,
+    alpha: float = 0.1,
+    ngram: int = 30,
+    log: LogFn = log_noop,
+) -> Path:
+    """Apply SleepGPT sequence correction to an existing ScoringNidra JSON."""
+    scoring_json = Path(scoring_json)
+    with scoring_json.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, list) or not payload or not isinstance(payload[0], list):
+        raise ValueError("Scoring file must use ScoringNidra/ScoringHero [stages, annotations] JSON format.")
+
+    stage_records = payload[0]
+    annotations = payload[1] if len(payload) > 1 and isinstance(payload[1], list) else []
+    if not stage_records:
+        raise ValueError("Scoring file contains no epochs.")
+
+    probabilities = _probabilities_from_scoringhero(stage_records)
+    log(f"Loaded {len(probabilities)} epochs from existing hypnogram.")
+    corrected = run_sleepgpt_correction(probabilities, alpha=alpha, ngram=ngram, max_runtime_sec=None, log=log)
+    if not corrected:
+        raise RuntimeError("SleepGPT correction was unavailable or failed.")
+
+    corrected = corrected[: len(stage_records)]
+    corrected_records = build_scoringhero_stage_records(
+        corrected,
+        probabilities,
+        source="manual_sleepgpt",
+    )
+    output_path = Path(output_json) if output_json else scoring_json.with_name(
+        f"{scoring_json.stem}_sleepgpt_scoring.json"
+    )
+    write_json(output_path, [corrected_records, annotations])
+    log(f"Saved SleepGPT-corrected scoring JSON: {output_path}")
+    return output_path
+
+
 def normalize_channel_label(name: str) -> str:
     """Return a readable channel label for loose matching."""
     label = name.strip()
@@ -382,7 +458,8 @@ def run_yasa_consensus(
     per_channel_rows: list[pd.DataFrame] = []
     montages_used: list[str] = []
 
-    for eeg in eeg_channels:
+    total_montages = max(len(eeg_channels), 1)
+    for montage_index, eeg in enumerate(eeg_channels, start=1):
         try:
             if ref_channels and not is_prereferenced_channel(eeg):
                 ref = _clinical_reference_for(eeg, ref_channels)
@@ -403,6 +480,11 @@ def run_yasa_consensus(
                 eeg_for_yasa = eeg
                 montage_name = eeg
 
+            progress = 0.24 + 0.58 * ((montage_index - 1) / total_montages)
+            log(
+                f"PROGRESS {progress:.2f} Running YASA montage "
+                f"{montage_index}/{total_montages}: {montage_name}"
+            )
             log(f"Running YASA on {montage_name}.")
             sls = yasa.SleepStaging(staged_raw, eeg_name=eeg_for_yasa, eog_name=eog_name, emg_name=emg_name)
             prob = _normalize_yasa_probabilities(sls.predict_proba())
@@ -411,6 +493,11 @@ def run_yasa_consensus(
             per_channel_rows.append(prob)
             yprobs.append(prob[STAGE_COLUMNS])
             montages_used.append(montage_name)
+            progress = 0.24 + 0.58 * (montage_index / total_montages)
+            log(
+                f"PROGRESS {progress:.2f} Finished YASA montage "
+                f"{montage_index}/{total_montages}: {montage_name}"
+            )
         except Exception as exc:
             log(f"YASA failed for {eeg}: {exc}")
             log(traceback.format_exc())
@@ -563,6 +650,13 @@ def build_scoringhero_stage_records(
             value = probs.loc[index, stage]
             if not pd.isna(value):
                 confidence = round(float(value), 6)
+        probability_payload = None
+        if probs is not None:
+            probability_payload = {
+                col: round(float(probs.loc[index, col]), 6)
+                for col in STAGE_COLUMNS
+                if not pd.isna(probs.loc[index, col])
+            }
 
         records.append(
             {
@@ -572,6 +666,7 @@ def build_scoringhero_stage_records(
                 "stage": SCORINGHERO_STAGE_LABELS.get(stage),
                 "digit": SCORINGHERO_STAGE_DIGITS.get(stage),
                 "confidence": confidence,
+                "probabilities": probability_payload,
                 "channels": [],
                 "clean": 1,
                 "source": source,

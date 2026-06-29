@@ -157,20 +157,15 @@ void _drawColorbar(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Returns a list of (label, fractional_x) pairs for the time axis.
-List<(String, double)> _timeTicks(double totalSeconds) {
-  const stepOptions = [3600.0, 1800.0, 900.0, 600.0, 300.0, 180.0, 120.0, 60.0];
-  double step = 3600.0;
-  for (final s in stepOptions) {
-    if (totalSeconds / s >= 2) {
-      step = s;
-      break;
-    }
-  }
+List<(String, double)> _timeTicks(
+  double totalSeconds, {
+  String unit = 'Hours',
+  DateTime? recordingStartTime,
+}) {
+  final step = _niceTimeStep(totalSeconds, maxTicks: 7);
   final ticks = <(String, double)>[];
   for (double t = step; t < totalSeconds; t += step) {
-    final h = (t / 3600).floor();
-    final m = ((t % 3600) / 60).round();
-    final label = m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
+    final label = _formatTimeTick(t, unit, recordingStartTime);
     ticks.add((label, t / totalSeconds));
   }
   return ticks;
@@ -179,42 +174,54 @@ List<(String, double)> _timeTicks(double totalSeconds) {
 List<(String, double)> _timeTicksZoomed(
   double startSeconds,
   double visibleSeconds,
+  String unit,
+  DateTime? recordingStartTime,
 ) {
-  const stepOptions = [
-    3600.0,
-    1800.0,
-    900.0,
-    600.0,
-    300.0,
-    180.0,
-    120.0,
-    60.0,
-    30.0,
-  ];
-  double step = 3600.0;
-  for (final s in stepOptions) {
-    if (visibleSeconds / s >= 2) {
-      step = s;
-      break;
-    }
-  }
+  final step = _niceTimeStep(visibleSeconds, maxTicks: 8);
 
   final ticks = <(String, double)>[];
   final firstTickTime = ((startSeconds / step).ceil() * step);
   for (double t = firstTickTime; t < startSeconds + visibleSeconds; t += step) {
-    final h = (t / 3600).floor();
-    final m = ((t % 3600) / 60).round();
-    final s = (t % 60).round();
-    String label;
-    if (step < 60.0) {
-      label =
-          '${h}h${m.toString().padLeft(2, '0')}m${s.toString().padLeft(2, '0')}s';
-    } else {
-      label = m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
-    }
+    final label = _formatTimeTick(t, unit, recordingStartTime);
     ticks.add((label, (t - startSeconds) / visibleSeconds));
   }
   return ticks;
+}
+
+double _niceTimeStep(double visibleSeconds, {required int maxTicks}) {
+  const stepOptions = [
+    30.0,
+    60.0,
+    120.0,
+    300.0,
+    600.0,
+    900.0,
+    1800.0,
+    3600.0,
+    7200.0,
+    10800.0,
+    14400.0,
+    21600.0,
+    43200.0,
+    86400.0,
+  ];
+  for (final step in stepOptions) {
+    if (visibleSeconds / step <= maxTicks) return step;
+  }
+  return stepOptions.last;
+}
+
+String _formatTimeTick(double seconds, String unit, DateTime? startTime) {
+  if (unit == 'Clock time' && startTime != null) {
+    final time = startTime.add(Duration(seconds: seconds.round()));
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
+  }
+  if (unit == 'Seconds') return '${seconds.round()}s';
+  if (unit == 'Minutes') return '${(seconds / 60).toStringAsFixed(0)}m';
+  final h = (seconds / 3600).floor();
+  final m = ((seconds % 3600) / 60).round();
+  return m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
 }
 
 Color _refColorForName(String name) {
@@ -416,7 +423,11 @@ class SpectrogramPainter extends CustomPainter {
   void _drawXTicks(Canvas canvas, Size size, double plotH) {
     final totalSec = viewport.totalDurationSeconds;
     if (totalSec <= 0) return;
-    final ticks = _timeTicks(totalSec);
+    final ticks = _timeTicks(
+      totalSec,
+      unit: viewport.eegPanelTimeUnit,
+      recordingStartTime: viewport.recordingStartTime,
+    );
     final tickPaint = Paint()
       ..color = Colors.black38
       ..strokeWidth = 0.5;
@@ -536,7 +547,8 @@ class HypnogramPainter extends CustomPainter {
     _drawDisagreementBands(canvas, size, stages);
     _drawYAxisLabels(canvas, size);
     _drawHypnogramSteps(canvas, size, stages);
-    _drawSwaOverlay(canvas, size);
+    _drawHypnogramOverlay(canvas, size);
+    _drawLightsMarkers(canvas, size);
     _drawEventOverlay(canvas, size);
     _drawEpochIndicator(canvas, size);
     _drawXAxisTicks(canvas, size);
@@ -719,8 +731,12 @@ class HypnogramPainter extends CustomPainter {
     }
   }
 
-  void _drawSwaOverlay(Canvas canvas, Size size) {
-    if (!viewport.showSwaPlot) return;
+  void _drawHypnogramOverlay(Canvas canvas, Size size) {
+    if (viewport.hypnogramOverlayMode == 'Off') return;
+    if (viewport.hypnogramOverlayMode == 'Sleep-stage probability') {
+      _drawProbabilityOverlay(canvas, size);
+      return;
+    }
     final swa = viewport.swaPerEpoch;
     if (swa.isEmpty) return;
 
@@ -757,6 +773,150 @@ class HypnogramPainter extends CustomPainter {
         ..strokeWidth = 1.2
         ..style = PaintingStyle.stroke;
       canvas.drawPath(path, linePaint);
+    }
+  }
+
+  void _drawProbabilityOverlay(Canvas canvas, Size size) {
+    final probabilities = viewport.stageProbabilities;
+    if (probabilities.isEmpty ||
+        probabilities.every((entry) => entry.isEmpty)) {
+      _drawText(
+        canvas,
+        'No stage probabilities loaded',
+        Offset(size.width - 148, 12),
+        style: _axisTextStyle.copyWith(
+          color: Colors.black54,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+        align: TextAlign.left,
+      );
+      return;
+    }
+    final sEpoch = startEpoch ?? 0;
+    final eEpoch = endEpoch ?? viewport.stages.length;
+    final visibleCount = math.max(1, eEpoch - sEpoch);
+    final drawWidth = size.width - _leftPad;
+    final epochW = drawWidth / visibleCount;
+    final stage = _probabilityStageFromConfig(
+      viewport.hypnogramProbabilityStage,
+    );
+    final path = Path();
+    var first = true;
+    for (var i = sEpoch; i < eEpoch && i < probabilities.length; i++) {
+      final probability = probabilities[i][stage];
+      if (probability == null) continue;
+      final stageY = -4.0 + 5.0 * probability.clamp(0.0, 1.0);
+      final cy = _toCanvasY(stageY, size.height);
+      final x = _leftPad + (i - sEpoch + 0.5) * epochW;
+      if (first) {
+        path.moveTo(x, cy);
+        first = false;
+      } else {
+        path.lineTo(x, cy);
+      }
+    }
+    if (first) return;
+    final color = _stageColor(stage);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withOpacity(0.95)
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke,
+    );
+    _drawText(
+      canvas,
+      'P(${_stageLabel(stage)})',
+      Offset(size.width - 54, 12),
+      style: _axisTextStyle.copyWith(
+        color: color,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+      ),
+      align: TextAlign.left,
+    );
+  }
+
+  SleepStage _probabilityStageFromConfig(String value) {
+    switch (value.toUpperCase()) {
+      case 'WAKE':
+      case 'W':
+        return SleepStage.wake;
+      case 'REM':
+      case 'R':
+        return SleepStage.rem;
+      case 'N1':
+        return SleepStage.n1;
+      case 'N3':
+        return SleepStage.n3;
+      case 'N2':
+      default:
+        return SleepStage.n2;
+    }
+  }
+
+  String _stageLabel(SleepStage stage) {
+    switch (stage) {
+      case SleepStage.wake:
+        return 'W';
+      case SleepStage.rem:
+        return 'REM';
+      case SleepStage.n1:
+        return 'N1';
+      case SleepStage.n2:
+        return 'N2';
+      case SleepStage.n3:
+        return 'N3';
+      default:
+        return '?';
+    }
+  }
+
+  void _drawLightsMarkers(Canvas canvas, Size size) {
+    final total = viewport.totalDurationSeconds;
+    if (total <= 0) return;
+    final sEpoch = startEpoch ?? 0;
+    final eEpoch = endEpoch ?? viewport.stages.length;
+    final visibleCount = math.max(1, eEpoch - sEpoch);
+    final epochSeconds = viewport.epochSeconds.toDouble();
+    final startTime = sEpoch * epochSeconds;
+    final endTime = (sEpoch + visibleCount) * epochSeconds;
+    final visibleSeconds = math.max(1.0, endTime - startTime);
+    final drawWidth = size.width - _leftPad;
+    final plotH = size.height - _bottomPad;
+    final markers = <(String, double, Color)>[
+      (
+        'Lights off',
+        (viewport.lightsOffSeconds ?? 0).clamp(0.0, total),
+        Colors.deepPurple,
+      ),
+      (
+        'Lights on',
+        (viewport.lightsOnSeconds ?? total).clamp(0.0, total),
+        Colors.teal,
+      ),
+    ];
+    for (final (label, seconds, color) in markers) {
+      if (seconds < startTime || seconds > endTime) continue;
+      final x = _leftPad + ((seconds - startTime) / visibleSeconds) * drawWidth;
+      final paint = Paint()
+        ..color = color.withOpacity(1.0)
+        ..strokeWidth = 2.0;
+      for (double y = 0; y < plotH; y += 10) {
+        canvas.drawLine(Offset(x, y), Offset(x, math.min(y + 6, plotH)), paint);
+      }
+      canvas.drawCircle(Offset(x, plotH - 5), 4, Paint()..color = color);
+      _drawText(
+        canvas,
+        label,
+        Offset(x + 4, 10),
+        style: _axisTextStyle.copyWith(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      );
     }
   }
 
@@ -798,9 +958,15 @@ class HypnogramPainter extends CustomPainter {
     final sEpoch = startEpoch ?? 0;
     final eEpoch = endEpoch ?? viewport.epochCount;
     final visibleCount = math.max(1, eEpoch - sEpoch);
-    final startSeconds = sEpoch * 30.0;
-    final visibleSeconds = visibleCount * 30.0;
-    final ticks = _timeTicksZoomed(startSeconds, visibleSeconds);
+    final epochSeconds = viewport.epochSeconds.toDouble();
+    final startSeconds = sEpoch * epochSeconds;
+    final visibleSeconds = visibleCount * epochSeconds;
+    final ticks = _timeTicksZoomed(
+      startSeconds,
+      visibleSeconds,
+      viewport.eegPanelTimeUnit,
+      viewport.recordingStartTime,
+    );
     final tickPaint = Paint()
       ..color = Colors.black38
       ..strokeWidth = 0.5;
@@ -832,6 +998,9 @@ class HypnogramPainter extends CustomPainter {
       old.viewport.currentEpoch != viewport.currentEpoch ||
       old.swaKernelSize != swaKernelSize ||
       old.comparisonStages != comparisonStages ||
+      old.viewport.hypnogramOverlayMode != viewport.hypnogramOverlayMode ||
+      old.viewport.hypnogramProbabilityStage !=
+          viewport.hypnogramProbabilityStage ||
       !identical(old.viewport.stagesUncertain, viewport.stagesUncertain);
 }
 

@@ -69,6 +69,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
   String _appVersion = '';
   int _navigationSerial = 0;
   Timer? _tfRefreshTimer;
+  Timer? _lightsMarkerSaveTimer;
   late final TabController _tabController;
   bool _textInputFocused = false;
 
@@ -128,6 +129,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _tfRefreshTimer?.cancel();
+    _lightsMarkerSaveTimer?.cancel();
     _viewerFocusNode.dispose();
     _batchStagingEegController.dispose();
     _batchStagingRefController.dispose();
@@ -246,6 +248,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         activeConfig.robustZStandardize = _config.robustZStandardize;
         activeConfig.periodogramDisplayMode = _config.periodogramDisplayMode;
         activeConfig.eegPanelTimeUnit = _config.eegPanelTimeUnit;
+        activeConfig.hypnogramOverlayMode = _config.hypnogramOverlayMode;
+        activeConfig.hypnogramProbabilityStage =
+            _config.hypnogramProbabilityStage;
+        activeConfig.showSwaPlot = _config.showSwaPlot;
+        activeConfig.lightsOffSeconds = _config.lightsOffSeconds;
+        activeConfig.lightsOnSeconds = _config.lightsOnSeconds;
         activeConfig.distanceBetweenChannelsUv =
             _config.distanceBetweenChannelsUv;
         activeConfig.referenceAmplitudeLineUv =
@@ -281,6 +289,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         existingStages: existingStages,
         existingStagesUncertain: existingStagesUncertain,
         existingConfidence: loadResult?.stagesConfidence,
+        existingStageProbabilities: loadResult?.stageProbabilities,
         includeTimeFrequency: false,
       );
 
@@ -342,6 +351,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       events: viewport.scoredEvents,
       stagesUncertain: viewport.stagesUncertain,
       stagesConfidence: viewport.stagesConfidence,
+      stageProbabilities: viewport.stageProbabilities,
     );
 
     // Auto-advance to next epoch (matching Python score_stage.py)
@@ -367,6 +377,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       events: updated.scoredEvents,
       stagesUncertain: updated.stagesUncertain,
       stagesConfidence: updated.stagesConfidence,
+      stageProbabilities: updated.stageProbabilities,
     );
   }
 
@@ -396,6 +407,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         existingStages: v.stages,
         existingStagesUncertain: v.stagesUncertain,
         existingConfidence: v.stagesConfidence,
+        existingStageProbabilities: v.stageProbabilities,
         includeTimeFrequency: false,
       );
       setState(() {
@@ -1067,6 +1079,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             _viewport = v.copyWith(
               stages: scoringData.stages,
               stagesUncertain: scoringData.stagesUncertain,
+              stagesConfidence: scoringData.stagesConfidence,
+              stageProbabilities: scoringData.stageProbabilities,
             );
             _status = 'AutoscoreNidra completed with $algorithm';
           });
@@ -1142,6 +1156,348 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     });
   }
 
+  Future<void> _applySleepGptToCurrentHypnogram() async {
+    final v = _viewport;
+    final path = _activePath;
+    if (v == null || path == null) {
+      _setStatus('Load and score a recording first');
+      return;
+    }
+    if (!v.stages.any((stage) => stage.isScored)) {
+      _setStatus('No existing hypnogram is available for SleepGPT correction');
+      return;
+    }
+    final unsupportedEpoch = v.stages.indexWhere(
+      (stage) =>
+          stage == SleepStage.unknown || stage == SleepStage.inconclusive,
+    );
+    if (unsupportedEpoch >= 0) {
+      _setStatus(
+        'SleepGPT needs a fully scored W/N1/N2/N3/REM hypnogram; '
+        'epoch ${unsupportedEpoch + 1} is ${v.stages[unsupportedEpoch].label}',
+      );
+      return;
+    }
+
+    late final AutoscoreInvocation invocation;
+    try {
+      invocation = resolveAutoscoreInvocation();
+    } on StateError catch (error) {
+      _setStatus(error.message);
+      if (mounted) _showTextDialog('AutoscoreNidra unavailable', error.message);
+      return;
+    }
+
+    final tempDir = await Directory.systemTemp.createTemp(
+      'scoringnidra_sleepgpt_',
+    );
+    final inputPath =
+        '${tempDir.path}/${_basename(path)}_current_hypnogram.json';
+    final outputPath =
+        '${tempDir.path}/${_basename(path)}_sleepgpt_corrected.json';
+    await writeMappedScoringJson(
+      inputPath,
+      v.stages,
+      epochSeconds: v.epochSeconds,
+      events: v.scoredEvents,
+      stagesUncertain: v.stagesUncertain,
+      stagesConfidence: v.stagesConfidence,
+      stageProbabilities: v.stageProbabilities,
+    );
+
+    final logs = <String>[];
+    var progress = 0.0;
+    var progressLabel = 'Applying SleepGPT to current hypnogram...';
+    StateSetter? dialogSetState;
+    var dialogActive = true;
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    final dialogFuture = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          dialogSetState = setStateDialog;
+          return AlertDialog(
+            title: const Text('SleepGPT Sequence Correction'),
+            content: SizedBox(
+              width: 560,
+              height: 340,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    progressLabel,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.black87,
+                      child: SingleChildScrollView(
+                        child: Text(
+                          logs.join('\n'),
+                          style: const TextStyle(
+                            color: Colors.lightGreenAccent,
+                            fontFamily: 'Courier',
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    unawaited(
+      dialogFuture.whenComplete(() {
+        dialogActive = false;
+        dialogSetState = null;
+      }),
+    );
+
+    void onLine(String line) {
+      logs.add(line);
+      if (line.startsWith('SleepGPT progress:')) {
+        final match = RegExp(r'\((\d+)%\)').firstMatch(line);
+        if (match != null) {
+          progress = (int.tryParse(match.group(1) ?? '') ?? 0) / 100.0;
+        }
+        progressLabel = line;
+      } else if (line.contains('SleepGPT correction complete')) {
+        progress = 1.0;
+        progressLabel = line;
+      }
+      if (dialogActive) dialogSetState?.call(() {});
+    }
+
+    _setStatus('Applying SleepGPT sequence correction…');
+    try {
+      final args = <String>[
+        '--apply-sleepgpt',
+        inputPath,
+        '--output-json',
+        outputPath,
+      ];
+      final exitCode = await _backend.runCommandStreamAsync(
+        executable: invocation.executable,
+        arguments: invocation.argumentsFor(args),
+        onLine: onLine,
+      );
+      if (dialogActive) navigator.pop();
+      if (exitCode != 0) {
+        _showTextDialog(
+          'SleepGPT correction failed',
+          'Backend returned exit code $exitCode.\n\n${logs.join('\n')}',
+        );
+        _setStatus('SleepGPT correction failed');
+        return;
+      }
+      final corrected = await loadScoringFileDirectly(
+        outputPath,
+        'scoringhero',
+        v.epochCount,
+      );
+      setState(() {
+        _viewport = v.copyWith(
+          stages: corrected.stages,
+          stagesUncertain: corrected.stagesUncertain,
+          stagesConfidence: corrected.stagesConfidence,
+          stageProbabilities: corrected.stageProbabilities,
+        );
+        _status = 'SleepGPT correction applied to current hypnogram';
+      });
+      final updated = _viewport;
+      if (updated != null) {
+        await autoSaveScoring(
+          path,
+          updated.stages,
+          updated.epochSeconds,
+          events: updated.scoredEvents,
+          stagesUncertain: updated.stagesUncertain,
+          stagesConfidence: updated.stagesConfidence,
+          stageProbabilities: updated.stageProbabilities,
+        );
+      }
+    } catch (e) {
+      if (dialogActive) navigator.pop();
+      _setStatus('SleepGPT correction failed: $e');
+      if (mounted) {
+        _showTextDialog(
+          'SleepGPT correction failed',
+          '$e\n\n${logs.join('\n')}',
+        );
+      }
+    } finally {
+      unawaited(tempDir.delete(recursive: true).catchError((_) => tempDir));
+    }
+  }
+
+  Future<void> _showSimilarEpochDialog() async {
+    final v = _viewport;
+    final eeg = _loadedEeg;
+    if (v == null || eeg == null) {
+      _setStatus('Load a recording first');
+      return;
+    }
+    final visibleLabels = v.signalChannelLabels;
+    final visibleSourceIndices = v.signalChannelSourceIndices;
+    final channelOptions = <_SimilarChannelOption>[
+      for (var i = 0; i < visibleLabels.length; i++)
+        _SimilarChannelOption(
+          label: visibleLabels[i],
+          sourceIndex: visibleSourceIndices.length > i
+              ? visibleSourceIndices[i]
+              : i,
+        ),
+    ];
+    final settings = await showDialog<_SimilarEpochSettings>(
+      context: context,
+      builder: (_) => _SimilarEpochDialog(
+        channelOptions: channelOptions.isNotEmpty
+            ? channelOptions
+            : [
+                for (var i = 0; i < eeg.channelLabels.length; i++)
+                  _SimilarChannelOption(
+                    label: eeg.channelLabels[i],
+                    sourceIndex: i,
+                  ),
+              ],
+        initialStage: v.currentStage == SleepStage.unknown
+            ? SleepStage.inconclusive
+            : v.currentStage,
+      ),
+    );
+    if (settings == null) return;
+
+    _setStatus('Searching for epochs similar to epoch ${v.currentEpoch + 1}…');
+    await Future<void>.delayed(Duration.zero);
+    try {
+      final matches = _findSimilarEpochs(eeg, v, settings);
+      if (matches.isEmpty) {
+        _setStatus('No similar epochs matched the selected criteria');
+        return;
+      }
+      if (!mounted) return;
+      final selected = await showDialog<List<_SimilarEpochMatch>>(
+        context: context,
+        builder: (_) => _SimilarEpochResultsDialog(
+          matches: matches,
+          viewport: v,
+          actionLabel: settings.actionLabel,
+          onJumpToEpoch: (epoch) => _jumpToEpoch(epoch + 1),
+        ),
+      );
+      if (selected == null || selected.isEmpty) {
+        _setStatus('Similar epoch search cancelled');
+        return;
+      }
+      _applySimilarEpochMatches(v, selected, settings);
+    } catch (e) {
+      _setStatus('Similar epoch search failed: $e');
+      if (mounted) _showTextDialog('Similar epoch search failed', e.toString());
+    }
+  }
+
+  List<_SimilarEpochMatch> _findSimilarEpochs(
+    LoadedEeg eeg,
+    EegViewport viewport,
+    _SimilarEpochSettings settings,
+  ) {
+    final selectedChannels = [
+      for (var i = 0; i < eeg.channelLabels.length; i++)
+        if (settings.channelIndices.contains(i)) i,
+    ];
+    if (selectedChannels.isEmpty) {
+      throw StateError('Select at least one channel.');
+    }
+    final features = _computeEpochPatternFeatures(
+      eeg,
+      viewport.epochSeconds,
+      selectedChannels,
+    );
+    if (viewport.currentEpoch >= features.length) return const [];
+    final normalized = _zNormalizeFeatureMatrix(features);
+    final seed = normalized[viewport.currentEpoch];
+    final matches = <_SimilarEpochMatch>[];
+    for (var epoch = 0; epoch < normalized.length; epoch++) {
+      if (settings.skipCurrentEpoch && epoch == viewport.currentEpoch) {
+        continue;
+      }
+      final distance = _euclideanDistance(seed, normalized[epoch]);
+      final similarity = 1.0 / (1.0 + distance);
+      matches.add(_SimilarEpochMatch(epoch: epoch, similarity: similarity));
+    }
+    matches.sort((a, b) => b.similarity.compareTo(a.similarity));
+    return matches
+        .where((match) => match.similarity >= settings.minSimilarity)
+        .take(settings.maxMatches)
+        .toList();
+  }
+
+  void _applySimilarEpochMatches(
+    EegViewport viewport,
+    List<_SimilarEpochMatch> matches,
+    _SimilarEpochSettings settings,
+  ) {
+    final matchedEpochs = matches.map((match) => match.epoch).toSet();
+    var updatedEvents = viewport.scoredEvents;
+    var updatedStages = viewport.stages;
+    if (settings.action == _SimilarEpochAction.stage) {
+      updatedStages = [
+        for (var i = 0; i < viewport.epochCount; i++)
+          matchedEpochs.contains(i) ? settings.stage : viewport.stages[i],
+      ];
+    } else {
+      final newEvents = <ScoredEvent>[...viewport.scoredEvents];
+      for (final epoch in matchedEpochs) {
+        final start = epoch * viewport.epochSeconds.toDouble();
+        newEvents.add(
+          ScoredEvent(
+            digit: settings.eventDigit,
+            key: settings.eventDigit == 0 ? 'A' : 'F${settings.eventDigit}',
+            label: _eventLabel(settings.eventDigit),
+            startSec: start,
+            endSec: start + viewport.epochSeconds,
+          ),
+        );
+      }
+      updatedEvents = _mergeScoredEvents(newEvents);
+    }
+
+    setState(() {
+      _viewport = viewport.copyWith(
+        stages: updatedStages,
+        scoredEvents: updatedEvents,
+      );
+      _status =
+          'Applied ${settings.actionLabel} to ${matches.length} similar epochs '
+          '(best ${(matches.first.similarity * 100).toStringAsFixed(1)}%)';
+    });
+    final updated = _viewport;
+    if (updated != null) {
+      autoSaveScoring(
+        _activePath,
+        updated.stages,
+        updated.epochSeconds,
+        events: updated.scoredEvents,
+        stagesUncertain: updated.stagesUncertain,
+        stagesConfidence: updated.stagesConfidence,
+        stageProbabilities: updated.stageProbabilities,
+      );
+    }
+  }
+
   Future<void> _runBatchAutoScoring() async {
     _tabController.animateTo(1);
   }
@@ -1209,7 +1565,17 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             _CommandJob(
               label: _basename(job.edfPath),
               executable: executable,
-              arguments: _analyseNidraArguments(job, channels, references),
+              arguments: _analyseNidraArguments(
+                job,
+                channels,
+                references,
+                lightsOffSeconds: jobs.length == 1 && job.edfPath == _activePath
+                    ? _config.lightsOffSeconds
+                    : null,
+                lightsOnSeconds: jobs.length == 1 && job.edfPath == _activePath
+                    ? _config.lightsOnSeconds
+                    : null,
+              ),
             ),
         ],
         onFinished: (failed) {
@@ -2739,6 +3105,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             existingStages: v.stages,
             existingStagesUncertain: v.stagesUncertain,
             existingConfidence: v.stagesConfidence,
+            existingStageProbabilities: v.stageProbabilities,
             includeTimeFrequency: false,
           );
           if (mounted) {
@@ -2783,25 +3150,52 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
 
   void _openConfigDialog() {
     final v = _viewport;
-    if (v == null) {
+    final eeg = _loadedEeg;
+    if (v == null || eeg == null || eeg.channelLabels.isEmpty) {
       _setStatus('Load an EDF first to configure channels');
+      _showTextDialog(
+        'Configuration unavailable',
+        'Load a recording before opening configuration settings.',
+      );
       return;
     }
     showDialog(
       context: context,
       builder: (_) => ConfigDialog(
         config: _config,
-        channelLabels: v.channelLabels,
+        channelLabels: eeg.channelLabels,
         onPreview: _previewDisplayConfig,
         onApply: (newCfg) {
+          final oldCfg = _config;
           setState(() {
             _config = newCfg;
           });
           if (_activePath != null) {
-            saveAutoConfig(_activePath!, newCfg);
+            unawaited(saveAutoConfig(_activePath!, newCfg));
           }
           final eeg = _loadedEeg;
           if (eeg != null) {
+            if (!_configRequiresDisplayRecompute(oldCfg, newCfg)) {
+              setState(() {
+                _viewport = v.copyWith(
+                  amplitudeRangeUv: newCfg.amplitudeRangeUv,
+                  spectrogramFlex: newCfg.spectrogramFlex,
+                  hypnogramFlex: newCfg.hypnogramFlex,
+                  periodogramFlex: newCfg.periodogramFlex,
+                  showSwaPlot: newCfg.showSwaPlot,
+                  hypnogramOverlayMode: newCfg.hypnogramOverlayMode,
+                  hypnogramProbabilityStage: newCfg.hypnogramProbabilityStage,
+                  eegPanelTimeUnit: newCfg.eegPanelTimeUnit,
+                  lightsOffSeconds: newCfg.lightsOffSeconds,
+                  lightsOnSeconds: newCfg.lightsOnSeconds,
+                  referenceLineThickness: newCfg.referenceLineThickness,
+                  referenceLineColor: newCfg.referenceLineColor,
+                  hypnogramZoom: newCfg.hypnogramZoom,
+                );
+                _status = 'Config applied';
+              });
+              return;
+            }
             _backend.clearDisplayCache();
             // Recompute with new channel config
             _setStatus('Recomputing spectrogram for new channel…');
@@ -2814,6 +3208,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                 existingStages: v.stages,
                 existingStagesUncertain: v.stagesUncertain,
                 existingConfidence: v.stagesConfidence,
+                existingStageProbabilities: v.stageProbabilities,
                 includeTimeFrequency: false,
               );
               setState(() {
@@ -2831,17 +3226,80 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     );
   }
 
+  bool _configRequiresDisplayRecompute(AppConfig oldCfg, AppConfig newCfg) {
+    if (!_sameChannelConfig(oldCfg.channels, newCfg.channels)) return true;
+    return oldCfg.spectrogramChannelIndex != newCfg.spectrogramChannelIndex ||
+        oldCfg.swaChannelIndex != newCfg.swaChannelIndex ||
+        oldCfg.periodogramChannelIndex != newCfg.periodogramChannelIndex ||
+        oldCfg.tfChannelIndex != newCfg.tfChannelIndex ||
+        oldCfg.tfEnabled != newCfg.tfEnabled ||
+        oldCfg.tfDisplayMode != newCfg.tfDisplayMode ||
+        oldCfg.tfFrequencyScale != newCfg.tfFrequencyScale ||
+        oldCfg.tfShowRidge != newCfg.tfShowRidge ||
+        oldCfg.tfAutoScale != newCfg.tfAutoScale ||
+        oldCfg.tfFreqMin != newCfg.tfFreqMin ||
+        oldCfg.tfFreqMax != newCfg.tfFreqMax ||
+        oldCfg.tfPowerMin != newCfg.tfPowerMin ||
+        oldCfg.tfPowerMax != newCfg.tfPowerMax ||
+        oldCfg.spectrogramFreqMin != newCfg.spectrogramFreqMin ||
+        oldCfg.spectrogramFreqMax != newCfg.spectrogramFreqMax ||
+        oldCfg.spectrogramPowerMin != newCfg.spectrogramPowerMin ||
+        oldCfg.spectrogramPowerMax != newCfg.spectrogramPowerMax ||
+        oldCfg.periodogramFreqMin != newCfg.periodogramFreqMin ||
+        oldCfg.periodogramFreqMax != newCfg.periodogramFreqMax ||
+        oldCfg.periodogramDisplayMode != newCfg.periodogramDisplayMode ||
+        oldCfg.stackChannels != newCfg.stackChannels ||
+        oldCfg.robustZStandardize != newCfg.robustZStandardize ||
+        oldCfg.distanceBetweenChannelsUv != newCfg.distanceBetweenChannelsUv ||
+        oldCfg.referenceAmplitudeLineUv != newCfg.referenceAmplitudeLineUv;
+  }
+
+  bool _sameChannelConfig(List<ChannelConfig> a, List<ChannelConfig> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final left = a[i];
+      final right = b[i];
+      if (left.name != right.name ||
+          left.sourceIndex != right.sourceIndex ||
+          left.derived != right.derived ||
+          left.sourceChannel != right.sourceChannel ||
+          left.color != right.color ||
+          left.displayOnScreen != right.displayOnScreen ||
+          left.scalingFactor != right.scalingFactor ||
+          left.verticalShift != right.verticalShift ||
+          left.reReference != right.reReference ||
+          left.flipPolarity != right.flipPolarity ||
+          left.filterHpEnabled != right.filterHpEnabled ||
+          left.filterHpCutoff != right.filterHpCutoff ||
+          left.filterHpOrder != right.filterHpOrder ||
+          left.filterLpEnabled != right.filterLpEnabled ||
+          left.filterLpCutoff != right.filterLpCutoff ||
+          left.filterLpOrder != right.filterLpOrder ||
+          left.filterNotchEnabled != right.filterNotchEnabled ||
+          left.filterNotchCutoff != right.filterNotchCutoff ||
+          left.filterNotchOrder != right.filterNotchOrder) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   void _openFilterDialog() {
     final v = _viewport;
-    if (v == null) {
+    final eeg = _loadedEeg;
+    if (v == null || eeg == null || eeg.channelLabels.isEmpty) {
       _setStatus('Load an EDF first to configure filters');
+      _showTextDialog(
+        'Filter settings unavailable',
+        'Load a recording before opening filter settings.',
+      );
       return;
     }
     showDialog(
       context: context,
       builder: (_) => FilterDialog(
         config: _config,
-        channelLabels: v.channelLabels,
+        channelLabels: eeg.channelLabels,
         onApply: (newCfg) {
           setState(() {
             _config = newCfg;
@@ -2862,6 +3320,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                 existingStages: v.stages,
                 existingStagesUncertain: v.stagesUncertain,
                 existingConfidence: v.stagesConfidence,
+                existingStageProbabilities: v.stageProbabilities,
                 includeTimeFrequency: false,
               );
               setState(() {
@@ -2968,6 +3427,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
               label: 'Run AutoscoreNidra…',
               onSelected: _runAutoScoring,
             ),
+            PlatformMenuItem(
+              label: 'Apply SleepGPT correction to current hypnogram…',
+              onSelected: _applySleepGptToCurrentHypnogram,
+            ),
           ],
           PlatformMenuItem(label: 'Save to…', onSelected: _saveScoring),
         ],
@@ -3049,6 +3512,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
             onSelected: _runSpindleDetection,
           ),
           PlatformMenuItem(
+            label: 'Find similar epochs from current epoch…',
+            onSelected: _showSimilarEpochDialog,
+          ),
+          PlatformMenuItem(
             label: 'Zoom on selected EEG  [Z]',
             onSelected: _zoomOnSelectedEeg,
           ),
@@ -3119,6 +3586,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                     existingStages: v.stages,
                     existingStagesUncertain: v.stagesUncertain,
                     existingConfidence: v.stagesConfidence,
+                    existingStageProbabilities: v.stageProbabilities,
                     includeTimeFrequency: false,
                   );
                   if (mounted) {
@@ -3208,6 +3676,12 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                 MenuItemButton(
                   onPressed: _runAutoScoring,
                   child: const Text('Run AutoscoreNidra…'),
+                ),
+                MenuItemButton(
+                  onPressed: _applySleepGptToCurrentHypnogram,
+                  child: const Text(
+                    'Apply SleepGPT correction to current hypnogram…',
+                  ),
                 ),
               ],
               const Divider(height: 1),
@@ -3303,6 +3777,10 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                 ),
               ),
               MenuItemButton(
+                onPressed: _showSimilarEpochDialog,
+                child: const Text('Find similar epochs from current epoch…'),
+              ),
+              MenuItemButton(
                 onPressed: _zoomOnSelectedEeg,
                 child: const Text('Zoom on selected EEG [Z]'),
               ),
@@ -3372,6 +3850,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                         existingStages: v.stages,
                         existingStagesUncertain: v.stagesUncertain,
                         existingConfidence: v.stagesConfidence,
+                        existingStageProbabilities: v.stageProbabilities,
                         includeTimeFrequency: false,
                       );
                       if (mounted) {
@@ -4160,6 +4639,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                 comparisonStages: _comparisonStages,
                                 tfEnabled: _config.tfEnabled,
                                 onResizeFlex: _updateFlexValues,
+                                onLightsMarkersChanged: _updateLightsMarkers,
                               ),
                       ),
                       _StatusBar(
@@ -4178,6 +4658,28 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         ),
       ),
     );
+  }
+
+  void _updateLightsMarkers(double lightsOff, double lightsOn) {
+    final v = _viewport;
+    if (v == null) return;
+    final total = v.totalDurationSeconds;
+    final off = lightsOff.clamp(0.0, total);
+    final on = lightsOn.clamp(off, total);
+    setState(() {
+      _config.lightsOffSeconds = off;
+      _config.lightsOnSeconds = on;
+      _viewport = v.copyWith(lightsOffSeconds: off, lightsOnSeconds: on);
+      _status =
+          'Lights off ${_formatDurationCompact(off)}; lights on ${_formatDurationCompact(on)}';
+    });
+    final activePath = _activePath;
+    _lightsMarkerSaveTimer?.cancel();
+    if (activePath != null) {
+      _lightsMarkerSaveTimer = Timer(const Duration(milliseconds: 450), () {
+        unawaited(saveAutoConfig(activePath, _config));
+      });
+    }
   }
 }
 
@@ -4464,6 +4966,7 @@ class _ScoringHeroSurface extends StatefulWidget {
     required this.onSelectionEnd,
     required this.tfEnabled,
     required this.onResizeFlex,
+    required this.onLightsMarkersChanged,
     this.comparisonStages,
   });
 
@@ -4487,6 +4990,8 @@ class _ScoringHeroSurface extends StatefulWidget {
     int periodogramFlex,
   )
   onResizeFlex;
+  final void Function(double lightsOffSeconds, double lightsOnSeconds)
+  onLightsMarkersChanged;
 
   @override
   State<_ScoringHeroSurface> createState() => _ScoringHeroSurfaceState();
@@ -4620,12 +5125,13 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
       color: Colors.white,
       child: Column(
         children: [
-          // Top strip: spectrogram | hypnogram | SWA slider | power spectrum
+          // Top strip: spectrogram | hypnogram | optional SWA slider | power spectrum
           LayoutBuilder(
             builder: (context, constraints) {
               final totalWidth = constraints.maxWidth;
-              final showSwaPlot = widget.viewport.showSwaPlot;
-              final swaWidth = showSwaPlot ? 42.0 : 0.0;
+              final showSwaSlider =
+                  widget.viewport.hypnogramOverlayMode == 'SWA';
+              final swaWidth = showSwaSlider ? 42.0 : 0.0;
               final dividerWidth = 8.0;
               final netWidth = totalWidth - swaWidth - (dividerWidth * 2);
 
@@ -4685,14 +5191,13 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                     ),
                     Expanded(
                       flex: hypFlex,
-                      child: _ClickablePainterPanel(
-                        painter: HypnogramPainter(
-                          widget.viewport,
-                          swaKernelSize: 101 - widget.swaSlider,
-                          comparisonStages: widget.comparisonStages,
-                          startEpoch: startEpoch,
-                          endEpoch: endEpoch,
-                        ),
+                      child: _HypnogramPainterPanel(
+                        viewport: widget.viewport,
+                        swaKernelSize: 101 - widget.swaSlider,
+                        comparisonStages: widget.comparisonStages,
+                        startEpoch: startEpoch,
+                        endEpoch: endEpoch,
+                        onLightsMarkersChanged: widget.onLightsMarkersChanged,
                         onTapFraction: (fx) {
                           final visibleCount = endEpoch - startEpoch;
                           final epoch =
@@ -4701,7 +5206,7 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                         },
                       ),
                     ),
-                    if (showSwaPlot) ...[
+                    if (showSwaSlider) ...[
                       SizedBox(
                         width: 42,
                         child: _HypnogramSlider(
@@ -5008,6 +5513,194 @@ class _ClickablePainterPanel extends StatelessWidget {
               child: CustomPaint(
                 painter: painter,
                 child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HypnogramPainterPanel extends StatefulWidget {
+  const _HypnogramPainterPanel({
+    required this.viewport,
+    required this.swaKernelSize,
+    required this.comparisonStages,
+    required this.onTapFraction,
+    required this.startEpoch,
+    required this.endEpoch,
+    required this.onLightsMarkersChanged,
+  });
+
+  final EegViewport viewport;
+  final int swaKernelSize;
+  final List<SleepStage>? comparisonStages;
+  final void Function(double fx) onTapFraction;
+  final int startEpoch;
+  final int endEpoch;
+  final void Function(double lightsOffSeconds, double lightsOnSeconds)
+  onLightsMarkersChanged;
+
+  @override
+  State<_HypnogramPainterPanel> createState() => _HypnogramPainterPanelState();
+}
+
+class _HypnogramPainterPanelState extends State<_HypnogramPainterPanel> {
+  String? _draggingMarker;
+  double? _dragLightsOff;
+  double? _dragLightsOn;
+
+  double get _effectiveLightsOff =>
+      _dragLightsOff ?? widget.viewport.lightsOffSeconds ?? 0.0;
+
+  double get _effectiveLightsOn =>
+      _dragLightsOn ??
+      widget.viewport.lightsOnSeconds ??
+      widget.viewport.totalDurationSeconds;
+
+  EegViewport get _effectiveViewport => widget.viewport.copyWith(
+    lightsOffSeconds: _effectiveLightsOff,
+    lightsOnSeconds: _effectiveLightsOn,
+  );
+
+  double _fractionFromPosition(Offset position, Size size) {
+    final plotWidth = (size.width - _plotLeftPadding).clamp(
+      1.0,
+      double.infinity,
+    );
+    return ((position.dx - _plotLeftPadding) / plotWidth).clamp(0.0, 1.0);
+  }
+
+  double _secondsFromPosition(Offset position, Size size) {
+    final visibleEpochs = math.max(1, widget.endEpoch - widget.startEpoch);
+    final start = widget.startEpoch * widget.viewport.epochSeconds.toDouble();
+    final duration = visibleEpochs * widget.viewport.epochSeconds.toDouble();
+    return start + _fractionFromPosition(position, size) * duration;
+  }
+
+  String? _hitMarker(Offset position, Size size) {
+    final total = widget.viewport.totalDurationSeconds;
+    if (total <= 0) return null;
+    final plotWidth = (size.width - _plotLeftPadding).clamp(
+      1.0,
+      double.infinity,
+    );
+    final visibleEpochs = math.max(1, widget.endEpoch - widget.startEpoch);
+    final start = widget.startEpoch * widget.viewport.epochSeconds.toDouble();
+    final duration = visibleEpochs * widget.viewport.epochSeconds.toDouble();
+    double markerX(double seconds) =>
+        _plotLeftPadding + ((seconds - start) / duration) * plotWidth;
+    final lightsOff = _effectiveLightsOff.clamp(0.0, total);
+    final lightsOn = _effectiveLightsOn.clamp(0.0, total);
+    final offDistance = (position.dx - markerX(lightsOff)).abs();
+    final onDistance = (position.dx - markerX(lightsOn)).abs();
+    const hitWidth = 18.0;
+    if (offDistance <= hitWidth && offDistance <= onDistance) {
+      return 'off';
+    }
+    if (onDistance <= hitWidth) return 'on';
+    return null;
+  }
+
+  void _moveMarker(Offset position, Size size) {
+    final marker = _draggingMarker;
+    if (marker == null) return;
+    final total = widget.viewport.totalDurationSeconds;
+    final seconds = _secondsFromPosition(position, size).clamp(0.0, total);
+    final lightsOff = _effectiveLightsOff;
+    final lightsOn = _effectiveLightsOn;
+    setState(() {
+      if (marker == 'off') {
+        _dragLightsOff = seconds;
+        _dragLightsOn = math.max(seconds, lightsOn);
+      } else {
+        _dragLightsOff = math.min(lightsOff, seconds);
+        _dragLightsOn = seconds;
+      }
+    });
+  }
+
+  void _commitMarkerDrag() {
+    final off = _dragLightsOff;
+    final on = _dragLightsOn;
+    setState(() {
+      _draggingMarker = null;
+      _dragLightsOff = null;
+      _dragLightsOn = null;
+    });
+    if (off != null && on != null) {
+      widget.onLightsMarkersChanged(off, on);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(1),
+      child: RepaintBoundary(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFD0D0D0)),
+          ),
+          child: GestureDetector(
+            onTapDown: (details) {
+              final rb = context.findRenderObject()! as RenderBox;
+              final marker = _hitMarker(details.localPosition, rb.size);
+              if (marker != null) return;
+              widget.onTapFraction(
+                _fractionFromPosition(details.localPosition, rb.size),
+              );
+            },
+            onPanDown: (details) {
+              final rb = context.findRenderObject()! as RenderBox;
+              _draggingMarker = _hitMarker(details.localPosition, rb.size);
+              if (_draggingMarker != null) {
+                _dragLightsOff = widget.viewport.lightsOffSeconds ?? 0.0;
+                _dragLightsOn =
+                    widget.viewport.lightsOnSeconds ??
+                    widget.viewport.totalDurationSeconds;
+              }
+              if (_draggingMarker == null) {
+                widget.onTapFraction(
+                  _fractionFromPosition(details.localPosition, rb.size),
+                );
+              }
+            },
+            onPanUpdate: (details) {
+              final rb = context.findRenderObject()! as RenderBox;
+              if (_draggingMarker != null) {
+                _moveMarker(details.localPosition, rb.size);
+              } else {
+                widget.onTapFraction(
+                  _fractionFromPosition(details.localPosition, rb.size),
+                );
+              }
+            },
+            onPanEnd: (_) => _commitMarkerDrag(),
+            onPanCancel: () {
+              setState(() {
+                _draggingMarker = null;
+                _dragLightsOff = null;
+                _dragLightsOn = null;
+              });
+            },
+            child: MouseRegion(
+              cursor: _draggingMarker == null
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.resizeLeftRight,
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: HypnogramPainter(
+                    _effectiveViewport,
+                    swaKernelSize: widget.swaKernelSize,
+                    comparisonStages: widget.comparisonStages,
+                    startEpoch: widget.startEpoch,
+                    endEpoch: widget.endEpoch,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
               ),
             ),
           ),
@@ -5389,6 +6082,13 @@ String _csvMetric(Map<String, String> row, String key, {int decimals = 2}) {
   return value.toStringAsFixed(decimals);
 }
 
+String _formatDurationCompact(double seconds) {
+  if (seconds < 3600) return '${(seconds / 60).toStringAsFixed(1)} min';
+  final hours = (seconds / 3600).floor();
+  final minutes = ((seconds % 3600) / 60).round();
+  return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+}
+
 String? _detectMatchingEdf(String scoringPath) {
   final scoringFile = File(scoringPath);
   final directory = scoringFile.parent;
@@ -5429,10 +6129,12 @@ String? _detectMatchingEdf(String scoringPath) {
 List<String> _analyseNidraArguments(
   _AnalyseNidraJob job,
   List<String> channels,
-  List<String> references,
-) {
+  List<String> references, {
+  double? lightsOffSeconds,
+  double? lightsOnSeconds,
+}) {
   final base = _sidecarPath(job.edfPath, '');
-  return [
+  final args = [
     job.edfPath,
     job.mappedScoringPath,
     '${base}_analyse_core.json',
@@ -5445,6 +6147,13 @@ List<String> _analyseNidraArguments(
     '--references',
     references.join(','),
   ];
+  if (lightsOffSeconds != null) {
+    args.addAll(['--lights-off-sec', lightsOffSeconds.toStringAsFixed(3)]);
+  }
+  if (lightsOnSeconds != null) {
+    args.addAll(['--lights-on-sec', lightsOnSeconds.toStringAsFixed(3)]);
+  }
+  return args;
 }
 
 class _AnalyseNidraJob {
@@ -5658,6 +6367,569 @@ Future<List<(double, double)>> _runSpindleIsolate(
       q: q,
     );
   });
+}
+
+enum _SimilarEpochAction { stage, event }
+
+class _SimilarEpochSettings {
+  const _SimilarEpochSettings({
+    required this.channelIndices,
+    required this.minSimilarity,
+    required this.maxMatches,
+    required this.action,
+    required this.stage,
+    required this.eventDigit,
+    required this.skipCurrentEpoch,
+  });
+
+  final Set<int> channelIndices;
+  final double minSimilarity;
+  final int maxMatches;
+  final _SimilarEpochAction action;
+  final SleepStage stage;
+  final int eventDigit;
+  final bool skipCurrentEpoch;
+
+  String get actionLabel => action == _SimilarEpochAction.stage
+      ? stage.label
+      : (eventDigit == 0 ? 'Artifact' : 'Event $eventDigit');
+}
+
+class _SimilarEpochMatch {
+  const _SimilarEpochMatch({required this.epoch, required this.similarity});
+
+  final int epoch;
+  final double similarity;
+}
+
+class _SimilarChannelOption {
+  const _SimilarChannelOption({required this.label, required this.sourceIndex});
+
+  final String label;
+  final int sourceIndex;
+}
+
+class _SimilarEpochDialog extends StatefulWidget {
+  const _SimilarEpochDialog({
+    required this.channelOptions,
+    required this.initialStage,
+  });
+
+  final List<_SimilarChannelOption> channelOptions;
+  final SleepStage initialStage;
+
+  @override
+  State<_SimilarEpochDialog> createState() => _SimilarEpochDialogState();
+}
+
+class _SimilarEpochDialogState extends State<_SimilarEpochDialog> {
+  late final Set<int> _channels = {
+    for (final option in widget.channelOptions) option.sourceIndex,
+  };
+  double _minSimilarity = 0.82;
+  int _maxMatches = 50;
+  _SimilarEpochAction _action = _SimilarEpochAction.stage;
+  late SleepStage _stage = widget.initialStage;
+  int _eventDigit = 0;
+  bool _skipCurrentEpoch = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Find Similar Epochs'),
+      content: SizedBox(
+        width: 620,
+        height: 560,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Learns the current epoch as a lightweight pattern template and '
+              'searches the loaded recording using per-channel time-domain and '
+              'band-power features.',
+              style: TextStyle(fontSize: 12, color: Colors.black87),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Channels used for matching',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => setState(() {
+                    _channels
+                      ..clear()
+                      ..addAll(
+                        widget.channelOptions.map(
+                          (option) => option.sourceIndex,
+                        ),
+                      );
+                  }),
+                  child: const Text('Select all channels'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _channels.clear()),
+                  child: const Text('Deselect all'),
+                ),
+              ],
+            ),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFD0D0D0)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: ListView.builder(
+                  itemCount: widget.channelOptions.length,
+                  itemBuilder: (context, index) {
+                    final option = widget.channelOptions[index];
+                    return CheckboxListTile(
+                      dense: true,
+                      value: _channels.contains(option.sourceIndex),
+                      title: Text(option.label),
+                      onChanged: (value) {
+                        setState(() {
+                          if (value ?? false) {
+                            _channels.add(option.sourceIndex);
+                          } else {
+                            _channels.remove(option.sourceIndex);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: _minSimilarity,
+                    min: 0.5,
+                    max: 0.98,
+                    divisions: 48,
+                    label: '${(_minSimilarity * 100).round()}%',
+                    onChanged: (value) => setState(() {
+                      _minSimilarity = value;
+                    }),
+                  ),
+                ),
+                SizedBox(
+                  width: 170,
+                  child: Text(
+                    'Minimum similarity: ${(_minSimilarity * 100).round()}%',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                const Expanded(child: Text('Maximum epochs to apply')),
+                SizedBox(
+                  width: 90,
+                  child: TextFormField(
+                    initialValue: _maxMatches.toString(),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      final parsed = int.tryParse(value);
+                      if (parsed != null && parsed > 0) {
+                        setState(() => _maxMatches = parsed);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: _skipCurrentEpoch,
+              title: const Text('Do not relabel the current template epoch'),
+              onChanged: (value) => setState(() {
+                _skipCurrentEpoch = value ?? true;
+              }),
+            ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<_SimilarEpochAction>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: _SimilarEpochAction.stage,
+                    groupValue: _action,
+                    title: const Text('Apply sleep stage'),
+                    onChanged: (value) => setState(() => _action = value!),
+                  ),
+                ),
+                Expanded(
+                  child: DropdownButtonFormField<SleepStage>(
+                    value: _stage,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: SleepStage.wake,
+                        child: Text('Wake'),
+                      ),
+                      DropdownMenuItem(value: SleepStage.n1, child: Text('N1')),
+                      DropdownMenuItem(value: SleepStage.n2, child: Text('N2')),
+                      DropdownMenuItem(value: SleepStage.n3, child: Text('N3')),
+                      DropdownMenuItem(
+                        value: SleepStage.rem,
+                        child: Text('REM'),
+                      ),
+                      DropdownMenuItem(
+                        value: SleepStage.inconclusive,
+                        child: Text('Inconclusive'),
+                      ),
+                    ],
+                    onChanged: _action == _SimilarEpochAction.stage
+                        ? (value) => setState(() => _stage = value ?? _stage)
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<_SimilarEpochAction>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: _SimilarEpochAction.event,
+                    groupValue: _action,
+                    title: const Text('Apply artifact/event marker'),
+                    onChanged: (value) => setState(() => _action = value!),
+                  ),
+                ),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: _eventDigit,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: 0, child: Text('Artifact')),
+                      for (var i = 1; i <= 12; i++)
+                        DropdownMenuItem(value: i, child: Text('Event $i')),
+                    ],
+                    onChanged: _action == _SimilarEpochAction.event
+                        ? (value) =>
+                              setState(() => _eventDigit = value ?? _eventDigit)
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _channels.isEmpty
+              ? null
+              : () {
+                  Navigator.of(context).pop(
+                    _SimilarEpochSettings(
+                      channelIndices: Set<int>.from(_channels),
+                      minSimilarity: _minSimilarity,
+                      maxMatches: _maxMatches,
+                      action: _action,
+                      stage: _stage,
+                      eventDigit: _eventDigit,
+                      skipCurrentEpoch: _skipCurrentEpoch,
+                    ),
+                  );
+                },
+          child: const Text('Find and Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SimilarEpochResultsDialog extends StatefulWidget {
+  const _SimilarEpochResultsDialog({
+    required this.matches,
+    required this.viewport,
+    required this.actionLabel,
+    required this.onJumpToEpoch,
+  });
+
+  final List<_SimilarEpochMatch> matches;
+  final EegViewport viewport;
+  final String actionLabel;
+  final void Function(int epoch) onJumpToEpoch;
+
+  @override
+  State<_SimilarEpochResultsDialog> createState() =>
+      _SimilarEpochResultsDialogState();
+}
+
+class _SimilarEpochResultsDialogState
+    extends State<_SimilarEpochResultsDialog> {
+  late final Set<int> _selectedEpochs = {
+    for (final match in widget.matches) match.epoch,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Similar Epoch Matches'),
+      content: SizedBox(
+        width: 680,
+        height: 520,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.matches.length} candidate epochs found. Review, jump, '
+              'and select epochs before applying ${widget.actionLabel}.',
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFD0D0D0)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: ListView.separated(
+                  itemCount: widget.matches.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final match = widget.matches[index];
+                    final stage = match.epoch < widget.viewport.stages.length
+                        ? widget.viewport.stages[match.epoch]
+                        : SleepStage.unknown;
+                    final start =
+                        match.epoch * widget.viewport.epochSeconds.toDouble();
+                    return CheckboxListTile(
+                      dense: true,
+                      value: _selectedEpochs.contains(match.epoch),
+                      onChanged: (value) => setState(() {
+                        if (value ?? false) {
+                          _selectedEpochs.add(match.epoch);
+                        } else {
+                          _selectedEpochs.remove(match.epoch);
+                        }
+                      }),
+                      title: Text(
+                        'Epoch ${match.epoch + 1}  |  '
+                        '${_formatSecondsForSimilarDialog(start)}  |  '
+                        'Current: ${stage.label}',
+                      ),
+                      subtitle: Text(
+                        'Similarity ${(match.similarity * 100).toStringAsFixed(1)}%',
+                      ),
+                      secondary: TextButton(
+                        onPressed: () => widget.onJumpToEpoch(match.epoch),
+                        child: const Text('Go'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => setState(() => _selectedEpochs.clear()),
+          child: const Text('Clear'),
+        ),
+        TextButton(
+          onPressed: () => setState(() {
+            _selectedEpochs
+              ..clear()
+              ..addAll(widget.matches.map((match) => match.epoch));
+          }),
+          child: const Text('Select All'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selectedEpochs.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(
+                  widget.matches
+                      .where((match) => _selectedEpochs.contains(match.epoch))
+                      .toList(),
+                ),
+          child: const Text('Apply Selected'),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatSecondsForSimilarDialog(double seconds) {
+  final total = seconds.round();
+  final h = total ~/ 3600;
+  final m = (total % 3600) ~/ 60;
+  final s = total % 60;
+  if (h > 0) {
+    return '${h}h ${m.toString().padLeft(2, '0')}m';
+  }
+  return '${m}m ${s.toString().padLeft(2, '0')}s';
+}
+
+List<List<double>> _computeEpochPatternFeatures(
+  LoadedEeg eeg,
+  int epochSeconds,
+  List<int> channelIndices,
+) {
+  final epochSamples = (epochSeconds * eeg.sampleRateHz).round();
+  if (epochSamples <= 0 || eeg.channelSamples.isEmpty) return const [];
+  final epochCount = (eeg.durationSeconds / epochSeconds).ceil();
+  final rows = List.generate(epochCount, (_) => <double>[]);
+  for (final channelIndex in channelIndices) {
+    if (channelIndex < 0 || channelIndex >= eeg.channelSamples.length) {
+      continue;
+    }
+    final signal = eeg.channelSamples[channelIndex];
+    for (var epoch = 0; epoch < epochCount; epoch++) {
+      final start = epoch * epochSamples;
+      if (start >= signal.length) break;
+      final end = math.min(signal.length, start + epochSamples);
+      final slice = signal.sublist(start, end);
+      rows[epoch].addAll(_epochPatternFeatures(slice, eeg.sampleRateHz));
+    }
+  }
+  return rows;
+}
+
+List<double> _epochPatternFeatures(List<double> signal, double sampleRate) {
+  if (signal.isEmpty) return List.filled(11, 0.0);
+  var sum = 0.0;
+  var sumSq = 0.0;
+  var minValue = signal.first;
+  var maxValue = signal.first;
+  var lineLength = 0.0;
+  var zeroCrossings = 0;
+  for (var i = 0; i < signal.length; i++) {
+    final value = signal[i];
+    sum += value;
+    sumSq += value * value;
+    minValue = math.min(minValue, value);
+    maxValue = math.max(maxValue, value);
+    if (i > 0) {
+      lineLength += (value - signal[i - 1]).abs();
+      if ((value >= 0 && signal[i - 1] < 0) ||
+          (value < 0 && signal[i - 1] >= 0)) {
+        zeroCrossings++;
+      }
+    }
+  }
+  final n = signal.length.toDouble();
+  final mean = sum / n;
+  final variance = math.max(0.0, sumSq / n - mean * mean);
+  final std = math.sqrt(variance);
+  final centered = [for (final value in signal) value - mean];
+  final (psd, freqs) = sp.welchPsd(centered, sampleRate);
+  final totalPower = _bandPower(psd, freqs, 0.5, 35.0);
+  double relBand(double low, double high) {
+    if (totalPower <= 1e-12) return 0.0;
+    return _bandPower(psd, freqs, low, high) / totalPower;
+  }
+
+  return [
+    mean,
+    std,
+    maxValue - minValue,
+    math.sqrt(sumSq / n),
+    lineLength / n,
+    zeroCrossings / n,
+    relBand(0.5, 4.0),
+    relBand(4.0, 8.0),
+    relBand(8.0, 12.0),
+    relBand(12.0, 16.0),
+    relBand(16.0, 30.0),
+  ];
+}
+
+double _bandPower(
+  List<double> psd,
+  List<double> freqs,
+  double low,
+  double high,
+) {
+  var total = 0.0;
+  for (var i = 0; i < psd.length && i < freqs.length; i++) {
+    if (freqs[i] >= low && freqs[i] < high) total += psd[i];
+  }
+  return total;
+}
+
+List<List<double>> _zNormalizeFeatureMatrix(List<List<double>> matrix) {
+  if (matrix.isEmpty) return const [];
+  final width = matrix.map((row) => row.length).fold<int>(0, math.max);
+  if (width == 0) return matrix;
+  final means = List<double>.filled(width, 0.0);
+  final counts = List<int>.filled(width, 0);
+  for (final row in matrix) {
+    for (var i = 0; i < row.length; i++) {
+      if (row[i].isFinite) {
+        means[i] += row[i];
+        counts[i]++;
+      }
+    }
+  }
+  for (var i = 0; i < width; i++) {
+    if (counts[i] > 0) means[i] /= counts[i];
+  }
+  final variances = List<double>.filled(width, 0.0);
+  for (final row in matrix) {
+    for (var i = 0; i < row.length; i++) {
+      if (row[i].isFinite) {
+        final delta = row[i] - means[i];
+        variances[i] += delta * delta;
+      }
+    }
+  }
+  final scales = [
+    for (var i = 0; i < width; i++)
+      counts[i] > 1 ? math.sqrt(variances[i] / (counts[i] - 1)) : 1.0,
+  ];
+  return [
+    for (final row in matrix)
+      [
+        for (var i = 0; i < width; i++)
+          i < row.length && row[i].isFinite
+              ? (row[i] - means[i]) / math.max(scales[i], 1e-9)
+              : 0.0,
+      ],
+  ];
+}
+
+double _euclideanDistance(List<double> a, List<double> b) {
+  final n = math.min(a.length, b.length);
+  var sum = 0.0;
+  for (var i = 0; i < n; i++) {
+    final delta = a[i] - b[i];
+    sum += delta * delta;
+  }
+  return math.sqrt(sum / math.max(1, n));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

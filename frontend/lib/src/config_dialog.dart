@@ -90,6 +90,10 @@ class _ConfigDialogState extends State<ConfigDialog> {
       hypnogramFlex: widget.config.hypnogramFlex,
       periodogramFlex: widget.config.periodogramFlex,
       showSwaPlot: widget.config.showSwaPlot,
+      hypnogramOverlayMode: widget.config.hypnogramOverlayMode,
+      hypnogramProbabilityStage: widget.config.hypnogramProbabilityStage,
+      lightsOffSeconds: widget.config.lightsOffSeconds,
+      lightsOnSeconds: widget.config.lightsOnSeconds,
       referenceLineThickness: widget.config.referenceLineThickness,
       referenceLineColor: widget.config.referenceLineColor,
       hypnogramZoom: widget.config.hypnogramZoom,
@@ -253,7 +257,12 @@ class _ConfigDialogState extends State<ConfigDialog> {
                           _StringDropdown(
                             label: 'EEG time unit in',
                             value: _working.eegPanelTimeUnit,
-                            options: const ['Seconds', 'Minutes', 'Hours'],
+                            options: const [
+                              'Seconds',
+                              'Minutes',
+                              'Hours',
+                              'Clock time',
+                            ],
                             onChanged: (v) =>
                                 setState(() => _working.eegPanelTimeUnit = v),
                           ),
@@ -296,6 +305,29 @@ class _ConfigDialogState extends State<ConfigDialog> {
                                 setState(() => _working.referenceLineColor = v),
                           ),
                           _StringDropdown(
+                            label: 'Hypnogram overlay',
+                            value: _working.hypnogramOverlayMode,
+                            options: const [
+                              'Off',
+                              'SWA',
+                              'Sleep-stage probability',
+                            ],
+                            onChanged: (v) => setState(() {
+                              _working.hypnogramOverlayMode = v;
+                              _working.showSwaPlot = v != 'Off';
+                            }),
+                          ),
+                          if (_working.hypnogramOverlayMode ==
+                              'Sleep-stage probability')
+                            _StringDropdown(
+                              label: 'Probability stage',
+                              value: _working.hypnogramProbabilityStage,
+                              options: const ['Wake', 'N1', 'N2', 'N3', 'REM'],
+                              onChanged: (v) => setState(
+                                () => _working.hypnogramProbabilityStage = v,
+                              ),
+                            ),
+                          _StringDropdown(
                             label: 'Hypnogram zoom',
                             value: _working.hypnogramZoom,
                             options: const [
@@ -306,28 +338,6 @@ class _ConfigDialogState extends State<ConfigDialog> {
                             ],
                             onChanged: (v) =>
                                 setState(() => _working.hypnogramZoom = v),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3),
-                            child: Row(
-                              children: [
-                                const SizedBox(
-                                  width: 160,
-                                  child: Text(
-                                    'Show SWA Plot',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                                Checkbox(
-                                  value: _working.showSwaPlot,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _working.showSwaPlot = v ?? true;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
                           ),
                         ],
                       ),
@@ -972,6 +982,17 @@ class _ConfigDialogState extends State<ConfigDialog> {
       eegPanelTimeUnit: cfg.eegPanelTimeUnit,
       distanceBetweenChannelsUv: cfg.distanceBetweenChannelsUv,
       referenceAmplitudeLineUv: cfg.referenceAmplitudeLineUv,
+      spectrogramFlex: cfg.spectrogramFlex,
+      hypnogramFlex: cfg.hypnogramFlex,
+      periodogramFlex: cfg.periodogramFlex,
+      showSwaPlot: cfg.showSwaPlot,
+      hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+      hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+      lightsOffSeconds: cfg.lightsOffSeconds,
+      lightsOnSeconds: cfg.lightsOnSeconds,
+      referenceLineThickness: cfg.referenceLineThickness,
+      referenceLineColor: cfg.referenceLineColor,
+      hypnogramZoom: cfg.hypnogramZoom,
       reportTitle: cfg.reportTitle,
       studySite: cfg.studySite,
       investigatorName: cfg.investigatorName,
@@ -1949,6 +1970,17 @@ class _FilterDialogState extends State<FilterDialog> {
       eegPanelTimeUnit: widget.config.eegPanelTimeUnit,
       distanceBetweenChannelsUv: widget.config.distanceBetweenChannelsUv,
       referenceAmplitudeLineUv: widget.config.referenceAmplitudeLineUv,
+      spectrogramFlex: widget.config.spectrogramFlex,
+      hypnogramFlex: widget.config.hypnogramFlex,
+      periodogramFlex: widget.config.periodogramFlex,
+      showSwaPlot: widget.config.showSwaPlot,
+      hypnogramOverlayMode: widget.config.hypnogramOverlayMode,
+      hypnogramProbabilityStage: widget.config.hypnogramProbabilityStage,
+      lightsOffSeconds: widget.config.lightsOffSeconds,
+      lightsOnSeconds: widget.config.lightsOnSeconds,
+      referenceLineThickness: widget.config.referenceLineThickness,
+      referenceLineColor: widget.config.referenceLineColor,
+      hypnogramZoom: widget.config.hypnogramZoom,
       reportTitle: widget.config.reportTitle,
       studySite: widget.config.studySite,
       investigatorName: widget.config.investigatorName,

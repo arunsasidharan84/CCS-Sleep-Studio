@@ -13,6 +13,10 @@ class EdfLoader {
     }
 
     final base = _AsciiHeader(bytes);
+    final recordingStartTime = _parseEdfStartTime(
+      base.textAt(168, 8),
+      base.textAt(176, 8),
+    );
     final headerBytes = base.intAt(184, 8);
     final dataRecordCount = base.optionalIntAt(236, 8) ?? -1;
     final dataRecordSeconds = base.doubleAt(244, 8);
@@ -121,9 +125,26 @@ class EdfLoader {
       sampleRateHz: sampleRate,
       channelLabels: displayLabels,
       channelSamples: channelSamples,
+      recordingStartTime: recordingStartTime,
       sourceDescription:
           '${displayLabels.length} channels, ${sampleRate.toStringAsFixed(1)} Hz, ${(records * dataRecordSeconds / 60).toStringAsFixed(1)} min',
     );
+  }
+
+  static DateTime? readStartDateTime(String path) {
+    try {
+      final file = File(path).openSync();
+      try {
+        final fixed = Uint8List(256);
+        file.readIntoSync(fixed);
+        final header = _AsciiHeader(fixed);
+        return _parseEdfStartTime(header.textAt(168, 8), header.textAt(176, 8));
+      } finally {
+        file.closeSync();
+      }
+    } catch (_) {
+      return null;
+    }
   }
 
   static List<String> _readSignalStrings(
@@ -189,6 +210,33 @@ class EdfLoader {
   }
 }
 
+DateTime? _parseEdfStartTime(String dateText, String timeText) {
+  final dateParts = dateText.split(RegExp(r'[./:-]'));
+  final timeParts = timeText.split(RegExp(r'[./:-]'));
+  if (dateParts.length < 3 || timeParts.length < 2) return null;
+  final day = int.tryParse(dateParts[0]);
+  final month = int.tryParse(dateParts[1]);
+  final yearRaw = int.tryParse(dateParts[2]);
+  final hour = int.tryParse(timeParts[0]);
+  final minute = int.tryParse(timeParts[1]);
+  final second = timeParts.length >= 3 ? int.tryParse(timeParts[2]) ?? 0 : 0;
+  if (day == null ||
+      month == null ||
+      yearRaw == null ||
+      hour == null ||
+      minute == null) {
+    return null;
+  }
+  final year = yearRaw < 100
+      ? (yearRaw >= 85 ? 1900 + yearRaw : 2000 + yearRaw)
+      : yearRaw;
+  try {
+    return DateTime(year, month, day, hour, minute, second);
+  } catch (_) {
+    return null;
+  }
+}
+
 bool _isDisplaySignal(String label) {
   final normalized = label.toLowerCase();
   return !normalized.contains('annotation') &&
@@ -209,6 +257,8 @@ class _AsciiHeader {
 
   double doubleAt(int offset, int width) =>
       double.parse(_textAt(offset, width).replaceAll(',', '.'));
+
+  String textAt(int offset, int width) => _textAt(offset, width);
 
   String _textAt(int offset, int width) {
     return ascii.decode(bytes.sublist(offset, offset + width)).trim();

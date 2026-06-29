@@ -151,6 +151,7 @@ class LoadedEeg {
     this.tfNormIqr = const [],
     this.spectrogramChannelIndex = 0,
     this.spectrogramImage,
+    this.recordingStartTime,
   });
 
   final double sampleRateHz;
@@ -167,6 +168,7 @@ class LoadedEeg {
   epochPeriodograms; // per-epoch Welch PSD (power spectrum panel)
   final int spectrogramChannelIndex; // which channel drives the spectrogram
   final ui.Image? spectrogramImage;
+  final DateTime? recordingStartTime;
 
   // ─── Pre-computed Morlet TF (all epochs at load time) ───────────────────
   /// Shape: epochCount × nFreqs × nSamples (z-scored log10 power).
@@ -252,7 +254,14 @@ class EegViewport {
     this.referenceLineThickness = 0.5,
     this.referenceLineColor = 'Light Grey',
     this.hypnogramZoom = 'Full Night',
+    this.hypnogramOverlayMode = 'SWA',
+    this.hypnogramProbabilityStage = 'N2',
+    this.eegPanelTimeUnit = 'Seconds',
+    this.lightsOffSeconds,
+    this.lightsOnSeconds,
     this.stagesConfidence = const [],
+    this.stageProbabilities = const [],
+    this.recordingStartTime,
   });
 
   final double sampleRateHz;
@@ -312,7 +321,14 @@ class EegViewport {
   final double referenceLineThickness;
   final String referenceLineColor;
   final String hypnogramZoom;
+  final String hypnogramOverlayMode;
+  final String hypnogramProbabilityStage;
+  final String eegPanelTimeUnit;
+  final double? lightsOffSeconds;
+  final double? lightsOnSeconds;
   final List<double?> stagesConfidence;
+  final List<Map<SleepStage, double>> stageProbabilities;
+  final DateTime? recordingStartTime;
 
   // Selection
   final double? selectionStartSec;
@@ -397,7 +413,14 @@ class EegViewport {
     double? referenceLineThickness,
     String? referenceLineColor,
     String? hypnogramZoom,
+    String? hypnogramOverlayMode,
+    String? hypnogramProbabilityStage,
+    String? eegPanelTimeUnit,
     List<double?>? stagesConfidence,
+    List<Map<SleepStage, double>>? stageProbabilities,
+    DateTime? recordingStartTime,
+    double? lightsOffSeconds,
+    double? lightsOnSeconds,
   }) {
     return EegViewport(
       sampleRateHz: sampleRateHz,
@@ -487,7 +510,15 @@ class EegViewport {
           referenceLineThickness ?? this.referenceLineThickness,
       referenceLineColor: referenceLineColor ?? this.referenceLineColor,
       hypnogramZoom: hypnogramZoom ?? this.hypnogramZoom,
+      hypnogramOverlayMode: hypnogramOverlayMode ?? this.hypnogramOverlayMode,
+      hypnogramProbabilityStage:
+          hypnogramProbabilityStage ?? this.hypnogramProbabilityStage,
+      eegPanelTimeUnit: eegPanelTimeUnit ?? this.eegPanelTimeUnit,
+      lightsOffSeconds: lightsOffSeconds ?? this.lightsOffSeconds,
+      lightsOnSeconds: lightsOnSeconds ?? this.lightsOnSeconds,
       stagesConfidence: stagesConfidence ?? this.stagesConfidence,
+      stageProbabilities: stageProbabilities ?? this.stageProbabilities,
+      recordingStartTime: recordingStartTime ?? this.recordingStartTime,
     );
   }
 }

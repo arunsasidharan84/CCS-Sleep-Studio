@@ -190,6 +190,10 @@ class AppConfig {
     this.hypnogramFlex = 27,
     this.periodogramFlex = 12,
     this.showSwaPlot = true,
+    String? hypnogramOverlayMode,
+    this.hypnogramProbabilityStage = 'N2',
+    this.lightsOffSeconds,
+    this.lightsOnSeconds,
     this.referenceLineThickness = 0.5,
     this.referenceLineColor = 'Light Grey',
     this.hypnogramZoom = 'Full Night',
@@ -199,7 +203,8 @@ class AppConfig {
     this.subjectId = '',
     this.subjectDetails = '',
     this.channels = const [],
-  });
+  }) : hypnogramOverlayMode =
+           hypnogramOverlayMode ?? (showSwaPlot ? 'SWA' : 'Off');
 
   int spectrogramChannelIndex;
   int swaChannelIndex;
@@ -236,6 +241,10 @@ class AppConfig {
   int hypnogramFlex;
   int periodogramFlex;
   bool showSwaPlot;
+  String hypnogramOverlayMode;
+  String hypnogramProbabilityStage;
+  double? lightsOffSeconds;
+  double? lightsOnSeconds;
   double referenceLineThickness;
   String referenceLineColor;
   String hypnogramZoom;
@@ -278,6 +287,10 @@ class AppConfig {
       'hypnogramFlex': hypnogramFlex,
       'periodogramFlex': periodogramFlex,
       'showSwaPlot': showSwaPlot,
+      'hypnogramOverlayMode': hypnogramOverlayMode,
+      'hypnogramProbabilityStage': hypnogramProbabilityStage,
+      'lightsOffSeconds': lightsOffSeconds,
+      'lightsOnSeconds': lightsOnSeconds,
       'referenceLineThickness': referenceLineThickness,
       'referenceLineColor': referenceLineColor,
       'hypnogramZoom': hypnogramZoom,
@@ -308,6 +321,13 @@ class AppConfig {
         return l == 'true' || l == '1' || l == 'yes';
       }
       return def;
+    }
+
+    double? safeNullableDouble(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
     }
 
     return AppConfig(
@@ -353,6 +373,13 @@ class AppConfig {
       hypnogramFlex: safeInt(json['hypnogramFlex'], 27),
       periodogramFlex: safeInt(json['periodogramFlex'], 12),
       showSwaPlot: safeBool(json['showSwaPlot'], true),
+      hypnogramOverlayMode:
+          json['hypnogramOverlayMode'] as String? ??
+          (safeBool(json['showSwaPlot'], true) ? 'SWA' : 'Off'),
+      hypnogramProbabilityStage:
+          json['hypnogramProbabilityStage'] as String? ?? 'N2',
+      lightsOffSeconds: safeNullableDouble(json['lightsOffSeconds']),
+      lightsOnSeconds: safeNullableDouble(json['lightsOnSeconds']),
       referenceLineThickness:
           (json['referenceLineThickness'] as num?)?.toDouble() ?? 0.5,
       referenceLineColor: json['referenceLineColor'] as String? ?? 'Light Grey',
@@ -416,6 +443,10 @@ class AppConfig {
       'Hypnogram_flex': hypnogramFlex,
       'Periodogram_flex': periodogramFlex,
       'Show_swa_plot': showSwaPlot,
+      'Hypnogram_overlay_mode': hypnogramOverlayMode,
+      'Hypnogram_probability_stage': hypnogramProbabilityStage,
+      'Lights_off_seconds': lightsOffSeconds,
+      'Lights_on_seconds': lightsOnSeconds,
       'Reference_line_thickness': referenceLineThickness,
       'Reference_line_color': referenceLineColor,
       'Hypnogram_zoom': hypnogramZoom,
@@ -533,6 +564,14 @@ class AppConfig {
       final hypnogramFlex = safeInt(global['Hypnogram_flex'], 27);
       final periodogramFlex = safeInt(global['Periodogram_flex'], 12);
       final showSwaPlot = safeBool(global['Show_swa_plot'], true);
+      final hypnogramOverlayMode =
+          global['Hypnogram_overlay_mode'] as String? ??
+          (showSwaPlot ? 'SWA' : 'Off');
+      final hypnogramProbabilityStage =
+          global['Hypnogram_probability_stage'] as String? ?? 'N2';
+      final lightsOffSeconds = (global['Lights_off_seconds'] as num?)
+          ?.toDouble();
+      final lightsOnSeconds = (global['Lights_on_seconds'] as num?)?.toDouble();
       final referenceLineThickness =
           (global['Reference_line_thickness'] as num?)?.toDouble() ?? 0.5;
       final referenceLineColor =
@@ -591,6 +630,10 @@ class AppConfig {
         hypnogramFlex: hypnogramFlex,
         periodogramFlex: periodogramFlex,
         showSwaPlot: showSwaPlot,
+        hypnogramOverlayMode: hypnogramOverlayMode,
+        hypnogramProbabilityStage: hypnogramProbabilityStage,
+        lightsOffSeconds: lightsOffSeconds,
+        lightsOnSeconds: lightsOnSeconds,
         referenceLineThickness: referenceLineThickness,
         referenceLineColor: referenceLineColor,
         hypnogramZoom: hypnogramZoom,
@@ -946,6 +989,9 @@ class EegBackend {
 
           final sampleRate = edf.sampleRateHz;
           final durationSec = edf.durationSeconds;
+          final recordingStartTime = path.toLowerCase().endsWith('.edf')
+              ? EdfLoader.readStartDateTime(path)
+              : null;
 
           _freeEdf!(edfPtr);
 
@@ -953,6 +999,7 @@ class EegBackend {
             sampleRateHz: sampleRate,
             channelLabels: channelLabels,
             channelSamples: channelSamples,
+            recordingStartTime: recordingStartTime,
             sourceDescription:
                 '${channelLabels.length} channels, ${sampleRate.toStringAsFixed(1)} Hz, ${(durationSec / 60).toStringAsFixed(1)} min (native)',
           );
@@ -1206,6 +1253,7 @@ class EegBackend {
       tfNormIqr: iqr,
       spectrogramChannelIndex: spectSource >= 0 ? spectSource : 0,
       spectrogramImage: spectrogramImage,
+      recordingStartTime: raw.recordingStartTime,
     );
   }
   // ─── Viewport construction ─────────────────────────────────────────────────
@@ -1217,6 +1265,7 @@ class EegBackend {
     List<SleepStage>? existingStages,
     List<bool>? existingStagesUncertain,
     List<double?>? existingConfidence,
+    List<Map<SleepStage, double>>? existingStageProbabilities,
     bool includeTimeFrequency = true,
   }) async {
     final cfg = config ?? AppConfig();
@@ -1357,11 +1406,19 @@ class EegBackend {
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
       showSwaPlot: cfg.showSwaPlot,
+      hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+      hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+      eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+      lightsOffSeconds: cfg.lightsOffSeconds,
+      lightsOnSeconds: cfg.lightsOnSeconds,
       referenceLineThickness: cfg.referenceLineThickness,
       referenceLineColor: cfg.referenceLineColor,
       hypnogramZoom: cfg.hypnogramZoom,
       stagesConfidence:
           existingConfidence ?? [for (var i = 0; i < epochCount; i++) null],
+      stageProbabilities:
+          existingStageProbabilities ?? const <Map<SleepStage, double>>[],
+      recordingStartTime: eeg.recordingStartTime,
     );
   }
 
@@ -1492,6 +1549,11 @@ class EegBackend {
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
       showSwaPlot: cfg.showSwaPlot,
+      hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+      hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+      eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+      lightsOffSeconds: cfg.lightsOffSeconds,
+      lightsOnSeconds: cfg.lightsOnSeconds,
       referenceLineThickness: cfg.referenceLineThickness,
       referenceLineColor: cfg.referenceLineColor,
       hypnogramZoom: cfg.hypnogramZoom,
@@ -1635,6 +1697,11 @@ class EegBackend {
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
       showSwaPlot: cfg.showSwaPlot,
+      hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+      hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+      eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+      lightsOffSeconds: cfg.lightsOffSeconds,
+      lightsOnSeconds: cfg.lightsOnSeconds,
       referenceLineThickness: cfg.referenceLineThickness,
       referenceLineColor: cfg.referenceLineColor,
       hypnogramZoom: cfg.hypnogramZoom,
@@ -1666,6 +1733,11 @@ class EegBackend {
         hypnogramFlex: cfg.hypnogramFlex,
         periodogramFlex: cfg.periodogramFlex,
         showSwaPlot: cfg.showSwaPlot,
+        hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+        hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+        eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+        lightsOffSeconds: cfg.lightsOffSeconds,
+        lightsOnSeconds: cfg.lightsOnSeconds,
         referenceLineThickness: cfg.referenceLineThickness,
         referenceLineColor: cfg.referenceLineColor,
         hypnogramZoom: cfg.hypnogramZoom,
@@ -1741,6 +1813,11 @@ class EegBackend {
       hypnogramFlex: cfg.hypnogramFlex,
       periodogramFlex: cfg.periodogramFlex,
       showSwaPlot: cfg.showSwaPlot,
+      hypnogramOverlayMode: cfg.hypnogramOverlayMode,
+      hypnogramProbabilityStage: cfg.hypnogramProbabilityStage,
+      eegPanelTimeUnit: cfg.eegPanelTimeUnit,
+      lightsOffSeconds: cfg.lightsOffSeconds,
+      lightsOnSeconds: cfg.lightsOnSeconds,
       referenceLineThickness: cfg.referenceLineThickness,
       referenceLineColor: cfg.referenceLineColor,
       hypnogramZoom: cfg.hypnogramZoom,
