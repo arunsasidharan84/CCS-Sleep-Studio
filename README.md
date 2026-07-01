@@ -10,7 +10,7 @@
   <b>National Institute of Mental Health and Neurosciences (NIMHANS)</b>, Bangalore, India.
 </p>
 
-**Version:** 1.1.12
+**Version:** 1.1.13
 
 Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, automated sleep staging, advanced sleep EEG analysis and batch processing.
 
