@@ -72,8 +72,18 @@ Future<ScoringLoadResult?> tryLoadAutoScoring(
   String activePath,
   int epochCount,
 ) async {
-  final jsonPath = _jsonPathForEdf(activePath);
-  final file = File(jsonPath);
+  final dotIdx = activePath.lastIndexOf('.');
+  final base = dotIdx >= 0 ? activePath.substring(0, dotIdx) : activePath;
+
+  // Try postfixed path first
+  var jsonPath = '${base}_scoring.json';
+  var file = File(jsonPath);
+  if (!file.existsSync()) {
+    // Fallback to default json path
+    jsonPath = '$base.json';
+    file = File(jsonPath);
+  }
+
   if (!file.existsSync()) return null;
   try {
     return await _loadJsonScoring(jsonPath, epochCount);
@@ -83,8 +93,18 @@ Future<ScoringLoadResult?> tryLoadAutoScoring(
 }
 
 Future<List<ScoredEvent>> tryLoadAutoEvents(String activePath) async {
-  final jsonPath = _jsonPathForEdf(activePath);
-  final file = File(jsonPath);
+  final dotIdx = activePath.lastIndexOf('.');
+  final base = dotIdx >= 0 ? activePath.substring(0, dotIdx) : activePath;
+
+  // Try postfixed path first
+  var jsonPath = '${base}_scoring.json';
+  var file = File(jsonPath);
+  if (!file.existsSync()) {
+    // Fallback to default json path
+    jsonPath = '$base.json';
+    file = File(jsonPath);
+  }
+
   if (!file.existsSync()) return const [];
   try {
     final content = await file.readAsString();
@@ -167,7 +187,7 @@ Future<void> saveAutoConfig(String activePath, AppConfig config) async {
 String _jsonPathForEdf(String edfPath) {
   final dotIdx = edfPath.lastIndexOf('.');
   final base = dotIdx >= 0 ? edfPath.substring(0, dotIdx) : edfPath;
-  return '$base.json';
+  return '${base}_scoring.json';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -961,13 +981,31 @@ Future<void> exportScoringDialog(
 }) async {
   final ext = ['json', 'txt', 'csv', 'vis'];
 
+  String? defaultName;
+  if (activePath != null) {
+    final base = activePath.split(Platform.pathSeparator).last;
+    final dot = base.lastIndexOf('.');
+    final name = dot >= 0 ? base.substring(0, dot) : base;
+    defaultName = '${name}_scoring.json';
+  } else {
+    defaultName = 'scoring.json';
+  }
+
   String? savePath = await FilePicker.saveFile(
     dialogTitle: 'Save scoring as',
+    fileName: defaultName,
     type: FileType.any,
   );
   if (savePath == null) {
     onStatus('Save cancelled');
     return;
+  }
+
+  if (!savePath.contains('.')) {
+    savePath = '${savePath}_scoring.json';
+  } else if (savePath.toLowerCase().endsWith('.json') &&
+      !savePath.toLowerCase().endsWith('_scoring.json')) {
+    savePath = '${savePath.substring(0, savePath.length - 5)}_scoring.json';
   }
 
   // Determine format from extension
@@ -978,8 +1016,6 @@ Future<void> exportScoringDialog(
       break;
     }
   }
-  // Default to json if no recognised extension
-  if (!savePath.contains('.')) savePath = '$savePath.json';
 
   try {
     await _writeScoringFile(

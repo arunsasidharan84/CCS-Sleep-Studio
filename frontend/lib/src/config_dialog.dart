@@ -54,6 +54,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
   late final TextEditingController _investigatorCtrl;
   late final TextEditingController _subjectIdCtrl;
   late final TextEditingController _subjectDetailsCtrl;
+  late final TextEditingController _recordingDateCtrl;
 
   @override
   void initState() {
@@ -102,6 +103,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
       investigatorName: widget.config.investigatorName,
       subjectId: widget.config.subjectId,
       subjectDetails: widget.config.subjectDetails,
+      recordingDate: widget.config.recordingDate,
       channels: widget.config.channels.isNotEmpty
           ? widget.config.channels.map((c) => c.copy()).toList()
           : widget.channelLabels
@@ -169,6 +171,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
     _investigatorCtrl = TextEditingController(text: _working.investigatorName);
     _subjectIdCtrl = TextEditingController(text: _working.subjectId);
     _subjectDetailsCtrl = TextEditingController(text: _working.subjectDetails);
+    _recordingDateCtrl = TextEditingController(text: _working.recordingDate);
   }
 
   @override
@@ -195,6 +198,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
     _investigatorCtrl.dispose();
     _subjectIdCtrl.dispose();
     _subjectDetailsCtrl.dispose();
+    _recordingDateCtrl.dispose();
     super.dispose();
   }
 
@@ -391,6 +395,12 @@ class _ConfigDialogState extends State<ConfigDialog> {
                             maxLines: 3,
                             onChanged: (value) =>
                                 _working.subjectDetails = value.trim(),
+                          ),
+                          _ReportTextField(
+                            label: 'Recording date',
+                            controller: _recordingDateCtrl,
+                            onChanged: (value) =>
+                                _working.recordingDate = value.trim(),
                           ),
                         ],
                       ),
@@ -998,6 +1008,7 @@ class _ConfigDialogState extends State<ConfigDialog> {
       investigatorName: cfg.investigatorName,
       subjectId: cfg.subjectId,
       subjectDetails: cfg.subjectDetails,
+      recordingDate: cfg.recordingDate,
       channels: cfg.channels.map((c) => c.copy()).toList(),
     );
   }
@@ -1986,6 +1997,7 @@ class _FilterDialogState extends State<FilterDialog> {
       investigatorName: widget.config.investigatorName,
       subjectId: widget.config.subjectId,
       subjectDetails: widget.config.subjectDetails,
+      recordingDate: widget.config.recordingDate,
       channels: widget.config.channels.map((c) => c.copy()).toList(),
     );
   }

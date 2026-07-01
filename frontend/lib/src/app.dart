@@ -95,6 +95,8 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       TextEditingController(text: 'AF7,AF8');
   final TextEditingController _batchAnalyseRefController =
       TextEditingController(text: 'PPG');
+  final TextEditingController _batchScoringPostfixController =
+      TextEditingController(text: '_scoring');
   List<String> _lastAnalyseRegionalFiles = const [];
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
@@ -137,6 +139,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     _batchStagingEmgController.dispose();
     _batchAnalyseEegController.dispose();
     _batchAnalyseRefController.dispose();
+    _batchScoringPostfixController.dispose();
     super.dispose();
   }
 
@@ -263,6 +266,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
         activeConfig.investigatorName = _config.investigatorName;
         activeConfig.subjectId = _config.subjectId;
         activeConfig.subjectDetails = _config.subjectDetails;
+        activeConfig.recordingDate = _config.recordingDate;
       }
       activeConfig.bindLoadedChannels(
         rawEeg.channelLabels,
@@ -849,9 +853,31 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     showDialog(
       context: context,
       builder: (_) => AutoScoringDialog(
-        channelLabels: eeg.channelLabels,
+        channelLabels: _config.channels.isNotEmpty
+            ? _config.channels.map((c) => c.name).toList()
+            : eeg.channelLabels,
         onRun: (settings) async {
-          _executeAutoScoring(settings);
+          List<String> mapBack(List<String> list) {
+            return list.map((selName) {
+              final matchingConfig = _config.channels.firstWhere(
+                (c) => c.name == selName,
+                orElse: () => ChannelConfig(name: selName),
+              );
+              return (matchingConfig.sourceIndex != null &&
+                      matchingConfig.sourceIndex! < eeg.channelLabels.length)
+                  ? eeg.channelLabels[matchingConfig.sourceIndex!]
+                  : selName;
+            }).toList();
+          }
+
+          final mappedSettings = {
+            ...settings,
+            'eeg': mapBack(List<String>.from(settings['eeg'] as List? ?? const [])),
+            'ref': mapBack(List<String>.from(settings['ref'] as List? ?? const [])),
+            'eog': mapBack(List<String>.from(settings['eog'] as List? ?? const [])),
+            'emg': mapBack(List<String>.from(settings['emg'] as List? ?? const [])),
+          };
+          _executeAutoScoring(mappedSettings);
         },
       ),
     );
@@ -1526,7 +1552,9 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     showDialog(
       context: context,
       builder: (_) => AnalyseNidraDialog(
-        channelLabels: eeg.channelLabels,
+        channelLabels: _config.channels.isNotEmpty
+            ? _config.channels.map((c) => c.name).toList()
+            : eeg.channelLabels,
         batchCount: 1,
         onRun: (channels, references) {
           _runAnalyseNidraJobs(
@@ -1651,6 +1679,94 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     } catch (error) {
       _showTextDialog('Master sheet compilation failed', error.toString());
     }
+  }
+
+  Future<void> _generateBatchPdfReports() async {
+    final result = await FilePicker.pickFiles(
+      dialogTitle: 'Select AnalyseNidra Master Chart CSV',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    final masterCsvPath = result?.files.single.path;
+    if (masterCsvPath == null) return;
+
+    final csvContent = await File(masterCsvPath).readAsString();
+    final rows = parseCsvTable(csvContent);
+    if (rows.isEmpty) {
+      _showTextDialog('Error', 'The selected CSV file is empty or invalid.');
+      return;
+    }
+
+    // Validate headers
+    final firstRow = rows.first;
+    if (!firstRow.containsKey('source_path') ||
+        !firstRow.containsKey('source_file')) {
+      _showTextDialog(
+        'Error',
+        'CSV must contain "source_path" and "source_file" columns.',
+      );
+      return;
+    }
+
+    final includePages = await _showPageSelectionDialog();
+    if (includePages == null) return;
+
+    // Group rows by unique source_path
+    final Map<String, List<Map<String, String>>> groupedRows = {};
+    for (final row in rows) {
+      final path = row['source_path'] ?? '';
+      if (path.isEmpty) continue;
+      groupedRows.putIfAbsent(path, () => []).add(row);
+    }
+
+    final masterDir = Directory(masterCsvPath).parent.path;
+    final List<_PdfBatchJob> jobs = [];
+
+    for (final entry in groupedRows.entries) {
+      final origPath = entry.key;
+      final group = entry.value;
+      final first = group.first;
+
+      var edfPath = origPath;
+      if (!File(edfPath).existsSync()) {
+        final filename = first['source_file'] ?? _basename(origPath);
+        final fallbackPath = '$masterDir/$filename';
+        if (File(fallbackPath).existsSync()) {
+          edfPath = fallbackPath;
+        }
+      }
+
+      jobs.add(_PdfBatchJob(
+        sourcePath: edfPath,
+        sourceFile: first['source_file'] ?? _basename(edfPath),
+        subjectId: first['Subject Identifier'] ?? '',
+        subjectDetails: first['Subject Details'] ?? '',
+        recordingDate: first['Recording Date'] ?? '',
+        regionalRows: group,
+      ));
+    }
+
+    if (jobs.isEmpty) {
+      _showTextDialog('Error', 'No valid jobs found in the master chart.');
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return _BatchPdfProgressDialog(
+          jobs: jobs,
+          includePages: includePages,
+          onFinished: (completed, failed) {
+            _setStatus(
+              'Batch PDF generation complete: $completed success, $failed fail',
+            );
+          },
+        );
+      },
+    );
   }
 
   void _executeBatchAutoScoring(
@@ -2147,12 +2263,71 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
     }
   }
 
+  Future<List<bool>?> _showPageSelectionDialog() async {
+    final List<String> pageNames = [
+      'Page 1: Macrostructure & Sleep Architecture',
+      'Page 2: Thalamocortical Microstructure',
+      'Page 3: Aperiodic & Fractal Activity',
+      'Page 4: Spectral & Complexity Profile',
+      'Page 5: Clinical Summary & Interpretation',
+    ];
+    final List<bool> selected = [true, true, true, true, true];
+
+    return showDialog<List<bool>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Select Report Pages to Generate'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < pageNames.length; i++)
+                    CheckboxListTile(
+                      dense: true,
+                      title: Text(pageNames[i]),
+                      value: selected[i],
+                      onChanged: (v) {
+                        setState(() {
+                          selected[i] = v ?? false;
+                        });
+                      },
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selected.any((b) => b)
+                      ? () => Navigator.of(context).pop(selected)
+                      : null,
+                  child: const Text('Export'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _exportSleepReport() async {
     final viewport = _viewport;
     if (viewport == null) {
       _setStatus('Load an EDF first');
       return;
     }
+
+    final selectedPages = await _showPageSelectionDialog();
+    if (selectedPages == null) {
+      _setStatus('Report export cancelled');
+      return;
+    }
+
     final output = await FilePicker.saveFile(
       dialogTitle: 'Export Publication-Grade Sleep Report (PDF)',
       fileName: '${_basename(_activePath ?? 'sleep_report')}.report.pdf',
@@ -2181,19 +2356,21 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       viewport: viewport,
       recordingName: _basename(_activePath ?? viewport.sourceDescription),
       regionalRows: regionalRows,
+      includePages: selectedPages,
       metadata: ReportMetadata(
         title: _config.reportTitle,
         studySite: _config.studySite,
         investigatorName: _config.investigatorName,
         subjectId: _config.subjectId,
         subjectDetails: _config.subjectDetails,
+        recordingDate: _config.recordingDate,
       ),
     );
     await File(outputPath).writeAsBytes(bytes);
     _setStatus(
       regionalRows.isEmpty
           ? 'Exported report without AnalyseNidra regional metrics'
-          : 'Exported five-page AnalyseNidra report to ${_basename(outputPath)}',
+          : 'Exported selected pages of AnalyseNidra report to ${_basename(outputPath)}',
     );
     await _openFile(outputPath);
   }
@@ -3976,30 +4153,73 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                     ),
                             ),
                             const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Add Recording Files…'),
-                              onPressed: () async {
-                                final result = await FilePicker.pickFiles(
-                                  dialogTitle:
-                                      'Select EEG files for batch AutoscoreNidra',
-                                  type: FileType.custom,
-                                  allowedExtensions: ['edf', 'orb', 'signal'],
-                                  allowMultiple: true,
-                                );
-                                if (result != null) {
-                                  setState(() {
-                                    for (final file in result.files) {
-                                      if (file.path != null &&
-                                          !_batchStagingFiles.contains(
-                                            file.path!,
-                                          )) {
-                                        _batchStagingFiles.add(file.path!);
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add Recording Files…'),
+                                  onPressed: () async {
+                                    final result = await FilePicker.pickFiles(
+                                      dialogTitle:
+                                          'Select EEG files for batch AutoscoreNidra',
+                                      type: FileType.custom,
+                                      allowedExtensions: ['edf', 'orb', 'signal'],
+                                      allowMultiple: true,
+                                    );
+                                    if (result != null) {
+                                      setState(() {
+                                        for (final file in result.files) {
+                                          if (file.path != null &&
+                                              !_batchStagingFiles.contains(
+                                                file.path!,
+                                              )) {
+                                            _batchStagingFiles.add(file.path!);
+                                          }
+                                        }
+                                      });
+                                    }
+                                  },
+                                ),
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.folder, size: 16),
+                                  label: const Text('Add Directory (Recursive)…'),
+                                  onPressed: () async {
+                                    final dir = await FilePicker.getDirectoryPath(
+                                      dialogTitle: 'Select directory to search recursively',
+                                    );
+                                    if (dir != null) {
+                                      final directory = Directory(dir);
+                                      if (directory.existsSync()) {
+                                        final files = directory.listSync(recursive: true);
+                                        setState(() {
+                                          for (final file in files) {
+                                            if (file is File) {
+                                              final ext = file.path.split('.').last.toLowerCase();
+                                              if ((ext == 'edf' || ext == 'orb' || ext == 'signal') &&
+                                                  !_batchStagingFiles.contains(file.path)) {
+                                                _batchStagingFiles.add(file.path);
+                                              }
+                                            }
+                                          }
+                                        });
                                       }
                                     }
-                                  });
-                                }
-                              },
+                                  },
+                                ),
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.clear_all, size: 16),
+                                  label: const Text('Clear All Files'),
+                                  onPressed: _batchStagingFiles.isEmpty
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _batchStagingFiles.clear();
+                                          });
+                                        },
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
@@ -4335,7 +4555,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                   if (dir != null) {
                                     final directory = Directory(dir);
                                     if (directory.existsSync()) {
-                                      final files = directory.listSync();
+                                      final files = directory.listSync(recursive: true);
                                       final List<String> eegs = [];
                                       final List<String> scorings = [];
                                       for (final file in files) {
@@ -4348,28 +4568,40 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                               ext == 'orb' ||
                                               ext == 'signal') {
                                             eegs.add(file.path);
-                                          } else if (ext == 'json') {
+                                          } else if (ext == 'json' && !file.path.toLowerCase().endsWith('.config.json')) {
                                             scorings.add(file.path);
                                           }
                                         }
                                       }
 
+                                      final postfix = _batchScoringPostfixController.text.trim();
+
                                       setState(() {
                                         for (final eeg in eegs) {
-                                          final eegName = _basename(
-                                            eeg,
-                                          ).split('.').first;
+                                          final eegName = _basename(eeg).substring(0, _basename(eeg).lastIndexOf('.'));
                                           String matchedScoring = '';
+                                          
+                                          final cand1 = postfix.isNotEmpty ? '$eegName$postfix.json' : '';
+                                          final cand2 = '$eegName.json';
+
                                           for (final scoring in scorings) {
-                                            final scName = _basename(
-                                              scoring,
-                                            ).split('.').first;
-                                            if (scName.contains(eegName) ||
-                                                eegName.contains(scName)) {
+                                            final scBase = _basename(scoring);
+                                            if ((cand1.isNotEmpty && scBase == cand1) || scBase == cand2) {
                                               matchedScoring = scoring;
                                               break;
                                             }
                                           }
+
+                                          if (matchedScoring.isEmpty) {
+                                            for (final scoring in scorings) {
+                                              final scName = _basename(scoring).split('.').first;
+                                              if (scName.contains(eegName) || eegName.contains(scName)) {
+                                                matchedScoring = scoring;
+                                                break;
+                                              }
+                                            }
+                                          }
+
                                           _batchAnalysePairs.add({
                                             'eegPath': eeg,
                                             'scoringPath': matchedScoring,
@@ -4380,7 +4612,28 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                   }
                                 },
                               ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.clear_all, size: 16),
+                                label: const Text('Clear All Mappings'),
+                                onPressed: _batchAnalysePairs.isEmpty
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _batchAnalysePairs.clear();
+                                        });
+                                      },
+                              ),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _batchScoringPostfixController,
+                            decoration: const InputDecoration(
+                              labelText: 'Scoring file postfix (optional)',
+                              hintText: 'e.g. _scoring',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
@@ -4486,6 +4739,11 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
                                 onPressed: _compileAnalyseNidraMasterSheet,
                                 icon: const Icon(Icons.library_add, size: 16),
                                 label: const Text('Combine Existing CSVs…'),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: _generateBatchPdfReports,
+                                icon: const Icon(Icons.picture_as_pdf, size: 16),
+                                label: const Text('Batch PDFs from Master Chart…'),
                               ),
                             ],
                           ),
@@ -5152,7 +5410,8 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                         painter: SpectrogramPainter(widget.viewport),
                         onTapFraction: (fx) {
                           final epoch = (fx * widget.viewport.epochCount)
-                              .floor();
+                              .floor()
+                              .clamp(0, widget.viewport.epochCount - 1);
                           widget.onJump(epoch + 1);
                         },
                       ),
@@ -5200,8 +5459,8 @@ class _ScoringHeroSurfaceState extends State<_ScoringHeroSurface> {
                         onLightsMarkersChanged: widget.onLightsMarkersChanged,
                         onTapFraction: (fx) {
                           final visibleCount = endEpoch - startEpoch;
-                          final epoch =
-                              startEpoch + (fx * visibleCount).floor();
+                          final epoch = (startEpoch + (fx * visibleCount).floor())
+                              .clamp(startEpoch, endEpoch - 1);
                           widget.onJump(epoch + 1);
                         },
                       ),
@@ -5582,6 +5841,10 @@ class _HypnogramPainterPanelState extends State<_HypnogramPainterPanel> {
   String? _hitMarker(Offset position, Size size) {
     final total = widget.viewport.totalDurationSeconds;
     if (total <= 0) return null;
+    final plotH = size.height - 18.0;
+    if (position.dy >= 25.0 && position.dy <= plotH - 20.0) {
+      return null;
+    }
     final plotWidth = (size.width - _plotLeftPadding).clamp(
       1.0,
       double.infinity,
@@ -6308,6 +6571,215 @@ class _CommandBatchProgressDialogState
                 }
               : null,
           child: Text(_finished ? 'Close' : 'Processing…'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PdfBatchJob {
+  const _PdfBatchJob({
+    required this.sourcePath,
+    required this.sourceFile,
+    required this.subjectId,
+    required this.subjectDetails,
+    required this.recordingDate,
+    required this.regionalRows,
+  });
+
+  final String sourcePath;
+  final String sourceFile;
+  final String subjectId;
+  final String subjectDetails;
+  final String recordingDate;
+  final List<Map<String, String>> regionalRows;
+}
+
+class _BatchPdfProgressDialog extends StatefulWidget {
+  const _BatchPdfProgressDialog({
+    super.key,
+    required this.jobs,
+    required this.includePages,
+    required this.onFinished,
+  });
+
+  final List<_PdfBatchJob> jobs;
+  final List<bool> includePages;
+  final void Function(int completed, int failed) onFinished;
+
+  @override
+  State<_BatchPdfProgressDialog> createState() => _BatchPdfProgressDialogState();
+}
+
+class _BatchPdfProgressDialogState extends State<_BatchPdfProgressDialog> {
+  final List<String> _logs = [];
+  final ScrollController _scrollController = ScrollController();
+  int _completed = 0;
+  int _failed = 0;
+  bool _finished = false;
+  String _current = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_run());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _addLog(String line) {
+    if (!mounted) return;
+    setState(() {
+      _logs.add(line);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  Future<void> _run() async {
+    final backend = EegBackend();
+    for (final job in widget.jobs) {
+      if (!mounted) return;
+      setState(() {
+        _current = job.sourceFile;
+      });
+      _addLog('Processing ${job.sourceFile}...');
+
+      try {
+        final edfPath = job.sourcePath;
+        if (!File(edfPath).existsSync()) {
+          throw FileSystemException('EDF file not found', edfPath);
+        }
+
+        final rawEeg = backend.loadEdf(edfPath);
+        final autoCfg = await tryLoadAutoConfig(edfPath);
+        final activeConfig = autoCfg ?? AppConfig.defaultsForChannels(
+          rawEeg.channelLabels,
+          sampleRateHz: rawEeg.sampleRateHz,
+        );
+        activeConfig.bindLoadedChannels(
+          rawEeg.channelLabels,
+          sampleRateHz: rawEeg.sampleRateHz,
+        );
+
+        final eeg = await backend.computeNightProducts(rawEeg, activeConfig);
+        final epochCount = (eeg.durationSeconds / 30).ceil();
+        final loadResult = await tryLoadAutoScoring(edfPath, epochCount);
+        final existingStages = loadResult?.stages;
+        final existingStagesUncertain = loadResult?.stagesUncertain;
+        final existingEvents = await tryLoadAutoEvents(edfPath);
+
+        final viewport = await backend.viewportFromEeg(
+          eeg,
+          currentEpoch: 0,
+          config: activeConfig,
+          existingStages: existingStages,
+          existingStagesUncertain: existingStagesUncertain,
+          existingConfidence: loadResult?.stagesConfidence,
+          existingStageProbabilities: loadResult?.stageProbabilities,
+          includeTimeFrequency: false,
+        );
+        final fullViewport = viewport.copyWith(scoredEvents: existingEvents);
+
+        final bytes = buildPublicationSleepReport(
+          viewport: fullViewport,
+          recordingName: _basename(edfPath),
+          regionalRows: job.regionalRows,
+          includePages: widget.includePages,
+          metadata: ReportMetadata(
+            title: activeConfig.reportTitle,
+            studySite: activeConfig.studySite,
+            investigatorName: activeConfig.investigatorName,
+            subjectId: job.subjectId,
+            subjectDetails: job.subjectDetails,
+            recordingDate: job.recordingDate,
+          ),
+        );
+
+        final dotIdx = edfPath.lastIndexOf('.');
+        final reportPath = '${dotIdx >= 0 ? edfPath.substring(0, dotIdx) : edfPath}.report.pdf';
+        await File(reportPath).writeAsBytes(bytes);
+
+        setState(() {
+          _completed++;
+        });
+        _addLog('Successfully generated report: ${_basename(reportPath)}');
+      } catch (e) {
+        setState(() {
+          _failed++;
+        });
+        _addLog('ERROR processing ${job.sourceFile}: $e');
+      }
+    }
+
+    setState(() {
+      _finished = true;
+    });
+    _addLog('--- Completed: $_completed succeeded, $_failed failed ---');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = widget.jobs.isEmpty
+        ? 1.0
+        : (_completed + _failed) / widget.jobs.length;
+
+    return AlertDialog(
+      title: const Text('Batch PDF Report Generation'),
+      content: SizedBox(
+        width: 500,
+        height: 350,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _finished
+                  ? 'Batch PDF generation complete!'
+                  : 'Generating report for: $_current',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: progress),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  border: Border.all(color: const Color(0xFFD0D0D0)),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: ListView.builder(
+                  controller: _scrollController,
+                  itemCount: _logs.length,
+                  itemBuilder: (context, index) {
+                    return Text(
+                      _logs[index],
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: _finished ? () {
+            Navigator.of(context).pop();
+            widget.onFinished(_completed, _failed);
+          } : null,
+          child: const Text('Close'),
         ),
       ],
     );

@@ -202,6 +202,7 @@ class AppConfig {
     this.investigatorName = '',
     this.subjectId = '',
     this.subjectDetails = '',
+    this.recordingDate = '',
     this.channels = const [],
   }) : hypnogramOverlayMode =
            hypnogramOverlayMode ?? (showSwaPlot ? 'SWA' : 'Off');
@@ -253,6 +254,7 @@ class AppConfig {
   String investigatorName;
   String subjectId;
   String subjectDetails;
+  String recordingDate;
   List<ChannelConfig> channels;
 
   Map<String, dynamic> toJson() {
@@ -299,6 +301,7 @@ class AppConfig {
       'investigatorName': investigatorName,
       'subjectId': subjectId,
       'subjectDetails': subjectDetails,
+      'recordingDate': recordingDate,
       'channels': channels.map((c) => c.toJson()).toList(),
     };
   }
@@ -390,6 +393,7 @@ class AppConfig {
       investigatorName: json['investigatorName'] as String? ?? '',
       subjectId: json['subjectId'] as String? ?? '',
       subjectDetails: json['subjectDetails'] as String? ?? '',
+      recordingDate: json['recordingDate'] as String? ?? '',
       channels:
           (json['channels'] as List<dynamic>?)
               ?.map(
@@ -455,6 +459,7 @@ class AppConfig {
       'Investigator_name': investigatorName,
       'Subject_id': subjectId,
       'Subject_details': subjectDetails,
+      'Recording_date': recordingDate,
     };
     final channelsList = channels.map((c) => c.toJson()).toList();
     return [global, channelsList];
@@ -583,6 +588,7 @@ class AppConfig {
       final investigatorName = global['Investigator_name'] as String? ?? '';
       final subjectId = global['Subject_id'] as String? ?? '';
       final subjectDetails = global['Subject_details'] as String? ?? '';
+      final recordingDate = global['Recording_date'] as String? ?? '';
 
       return AppConfig(
         spectrogramChannelIndex: indexOfChannel(specCh),
@@ -642,6 +648,7 @@ class AppConfig {
         investigatorName: investigatorName,
         subjectId: subjectId,
         subjectDetails: subjectDetails,
+        recordingDate: recordingDate,
         channels: channels,
       );
     }

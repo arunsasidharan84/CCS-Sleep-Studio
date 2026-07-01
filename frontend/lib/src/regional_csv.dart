@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'edf_loader.dart';
 
 List<String> parseCsvLine(String line) {
   final fields = <String>[];
@@ -47,12 +48,36 @@ Future<String> compileRegionalCsvFiles(List<String> paths) async {
   if (paths.isEmpty) {
     throw ArgumentError('Select at least one AnalyseNidra regional CSV file.');
   }
-  final headers = <String>['source_file', 'source_path'];
+  final headers = <String>[
+    'source_file',
+    'source_path',
+    'Subject Identifier',
+    'Subject Details',
+    'Recording Date',
+  ];
   final rows = <Map<String, String>>[];
 
   for (final path in paths) {
     final file = File(path);
     final parsed = parseCsvTable(await file.readAsString());
+
+    String recordingDate = '';
+    String? edfPath;
+    if (path.toLowerCase().endsWith('_analyse_regional.csv')) {
+      edfPath = '${path.substring(0, path.length - '_analyse_regional.csv'.length)}.edf';
+    } else {
+      final lastDot = path.lastIndexOf('.');
+      if (lastDot >= 0) {
+        edfPath = '${path.substring(0, lastDot)}.edf';
+      }
+    }
+    if (edfPath != null && File(edfPath).existsSync()) {
+      final dt = EdfLoader.readStartDateTime(edfPath);
+      if (dt != null) {
+        recordingDate = '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+      }
+    }
+
     for (final row in parsed) {
       for (final key in row.keys) {
         if (!headers.contains(key)) headers.add(key);
@@ -60,6 +85,9 @@ Future<String> compileRegionalCsvFiles(List<String> paths) async {
       rows.add({
         'source_file': file.uri.pathSegments.last,
         'source_path': file.absolute.path,
+        'Subject Identifier': '',
+        'Subject Details': '',
+        'Recording Date': recordingDate,
         ...row,
       });
     }

@@ -9,6 +9,7 @@ class ReportMetadata {
     this.investigatorName = '',
     this.subjectId = '',
     this.subjectDetails = '',
+    this.recordingDate = '',
   });
 
   final String title;
@@ -16,12 +17,14 @@ class ReportMetadata {
   final String investigatorName;
   final String subjectId;
   final String subjectDetails;
+  final String recordingDate;
 }
 
 List<int> buildPublicationSleepReport({
   required EegViewport viewport,
   required String recordingName,
   required List<Map<String, String>> regionalRows,
+  List<bool> includePages = const [true, true, true, true, true],
   ReportMetadata metadata = const ReportMetadata(),
 }) {
   final report = _PdfDocument();
@@ -30,15 +33,42 @@ List<int> buildPublicationSleepReport({
       : regionalRows.first;
   final regions = regionalRows.isEmpty ? <Map<String, String>>[] : regionalRows;
 
-  report.addPage(
-    _buildMacrostructurePage(viewport, recordingName, architecture, metadata),
-  );
-  report.addPage(_buildMicrostructurePage(regions));
-  report.addPage(_buildAperiodicPage(regions));
-  report.addPage(_buildComplexityPage(regions));
-  report.addPage(
-    _buildInterpretationPage(viewport, architecture, regions, metadata),
-  );
+  final totalPages = includePages.where((b) => b).length;
+  var pageNum = 1;
+
+  if (includePages[0]) {
+    report.addPage(
+      _buildMacrostructurePage(
+        viewport,
+        recordingName,
+        architecture,
+        metadata,
+        pageNum++,
+        totalPages,
+      ),
+    );
+  }
+  if (includePages[1]) {
+    report.addPage(_buildMicrostructurePage(regions, pageNum++, totalPages));
+  }
+  if (includePages[2]) {
+    report.addPage(_buildAperiodicPage(regions, pageNum++, totalPages));
+  }
+  if (includePages[3]) {
+    report.addPage(_buildComplexityPage(regions, pageNum++, totalPages));
+  }
+  if (includePages[4]) {
+    report.addPage(
+      _buildInterpretationPage(
+        viewport,
+        architecture,
+        regions,
+        metadata,
+        pageNum++,
+        totalPages,
+      ),
+    );
+  }
   return report.build();
 }
 
@@ -47,47 +77,59 @@ String _buildMacrostructurePage(
   String recordingName,
   Map<String, String> row,
   ReportMetadata metadata,
+  int pageNum,
+  int totalPages,
 ) {
   final p = _PdfPage();
   final reportTitle = metadata.title.trim().isEmpty
       ? 'ScoringNidra Sleep EEG Report'
       : metadata.title.trim();
-  _header(p, reportTitle.toUpperCase(), 'Page 1 of 5');
-  p.text(recordingName, 50, 704, bold: true, size: 10);
+  _header(p, reportTitle.toUpperCase(), 'Page $pageNum of $totalPages');
+
+  // Very small filename
+  p.text('File: $recordingName', 50, 712, size: 6.5, color: _slate);
+
+  // Subject ID and Recording Date
+  final subjectIdText = metadata.subjectId.trim().isNotEmpty
+      ? 'Subject Identifier: ${metadata.subjectId.trim()}'
+      : 'Subject Identifier: N/A';
+  p.text(subjectIdText, 50, 698, bold: true, size: 9, color: _navy);
+
+  final recDateText = metadata.recordingDate.trim().isNotEmpty
+      ? 'Recording Date: ${metadata.recordingDate.trim()}'
+      : (viewport.recordingStartTime != null
+          ? 'Recording Date: ${viewport.recordingStartTime!.toIso8601String().split("T").first}'
+          : 'Recording Date: N/A');
+  p.text(recDateText, 350, 698, bold: true, size: 9, color: _navy);
+
+  // Subject details
+  final detailsText = metadata.subjectDetails.trim().isNotEmpty
+      ? 'Subject Details: ${metadata.subjectDetails.trim()}'
+      : 'Subject Details: N/A';
+  p.text(detailsText, 50, 684, bold: true, size: 9, color: _navy);
+
+  // Study line
   final studyLine = [
     if (metadata.studySite.trim().isNotEmpty)
       'Study site: ${metadata.studySite.trim()}',
     if (metadata.investigatorName.trim().isNotEmpty)
       'Investigator: ${metadata.investigatorName.trim()}',
+    '${viewport.epochCount} epochs | ${viewport.epochSeconds}s epoch length',
   ].join('  |  ');
-  final subjectLine = [
-    if (metadata.subjectId.trim().isNotEmpty)
-      'Subject: ${metadata.subjectId.trim()}',
-    if (metadata.subjectDetails.trim().isNotEmpty)
-      metadata.subjectDetails.trim(),
-  ].join('  |  ');
-  p.text(
-    studyLine.isEmpty
-        ? '${viewport.epochCount} epochs | ${viewport.epochSeconds}s epoch length'
-        : studyLine,
-    50,
-    690,
-    size: 7.5,
-    color: _slate,
-  );
-  if (subjectLine.isNotEmpty) {
-    p.text(subjectLine, 50, 678, size: 7.5, color: _slate);
-  }
+  p.text(studyLine, 50, 672, size: 7.5, color: _slate);
 
   final cards = <(String, String)>[
-    ('TRT', _metric(row, 'TRT', fallback: viewport.totalDurationSeconds / 60)),
+    ('TRT', _metric(row, 'TRT', fallback: _trtMinutes(viewport))),
     ('TST', _metric(row, 'TST', fallback: _sleepMinutes(viewport))),
-    ('WASO', _metric(row, 'WASO')),
-    ('SOL', _metric(row, 'SOL')),
-    ('Sleep efficiency', '${_metric(row, 'Sleep_efficiency')}%'),
+    ('WASO', _metric(row, 'WASO', fallback: _wasoMinutes(viewport))),
+    ('SOL', _metric(row, 'SOL', fallback: _sleepOnsetLatencyMinutes(viewport))),
+    (
+      'Sleep efficiency',
+      '${_metric(row, 'Sleep_efficiency', fallback: _sleepEfficiency(viewport))}%',
+    ),
     (
       'Maintenance efficiency',
-      '${_metric(row, 'Sleep_Maintenance_Efficiency')}%',
+      '${_metric(row, 'Sleep_Maintenance_Efficiency', fallback: _maintenanceEfficiency(viewport))}%',
     ),
   ];
   for (var i = 0; i < cards.length; i++) {
@@ -144,18 +186,25 @@ String _buildMacrostructurePage(
   _hypnogram(p, viewport, 80, 286, 480, 102);
 
   p.section('Stage latency dashboard (minutes from recording start)', 50, 254);
-  final latencyKeys = <(String, String)>[
-    ('Wake onset', 'W_onset'),
-    ('N1 latency', 'N1_onset'),
-    ('N2 latency', 'N2_onset'),
-    ('Deep sleep latency', 'N3_onset'),
-    ('REM latency', 'R_onset'),
+  final latencyKeys = <(String, String, SleepStage)>[
+    ('Wake onset', 'W_onset', SleepStage.wake),
+    ('N1 latency', 'N1_onset', SleepStage.n1),
+    ('N2 latency', 'N2_onset', SleepStage.n2),
+    ('Deep sleep latency', 'N3_onset', SleepStage.n3),
+    ('REM latency', 'R_onset', SleepStage.rem),
   ];
   for (var i = 0; i < latencyKeys.length; i++) {
     final x = 50.0 + i * 102;
     p.rect(x, 207, 94, 32, fill: i.isEven ? _paleBlue : _paleGreen);
     p.text(latencyKeys[i].$1, x + 5, 226, size: 6.5, color: _slate);
-    p.text(_metric(row, latencyKeys[i].$2), x + 5, 211, bold: true, size: 10);
+    final fallbackVal = _stageLatencyMinutes(viewport, latencyKeys[i].$3);
+    p.text(
+      _metric(row, latencyKeys[i].$2, fallback: fallbackVal),
+      x + 5,
+      211,
+      bold: true,
+      size: 10,
+    );
   }
 
   p.section('Stage resilience and fragmentation', 50, 178);
@@ -166,9 +215,23 @@ String _buildMacrostructurePage(
   p.text('Continuity profile', 392, 157, bold: true, size: 7);
   var tableY = 139.0;
   for (final stage in ['W', 'N1', 'N2', 'N3', 'R']) {
-    final longest = _number(row, '${stage}_longest_streak');
-    final mean = _number(row, '${stage}_mean_length_of_streak');
-    final median = _number(row, '${stage}_median_length_of_streak');
+    final sleepStage = switch (stage) {
+      'W' => SleepStage.wake,
+      'N1' => SleepStage.n1,
+      'N2' => SleepStage.n2,
+      'N3' => SleepStage.n3,
+      'R' => SleepStage.rem,
+      _ => SleepStage.unknown,
+    };
+    final streaks = _stageStreaks(viewport, sleepStage);
+    final fallbackLongest = streaks.isEmpty ? null : streaks.reduce(math.max);
+    final fallbackMean = streaks.isEmpty ? null : streaks.reduce((a, b) => a + b) / streaks.length;
+    final fallbackMedian = _median(streaks);
+
+    final longest = _number(row, '${stage}_longest_streak') ?? fallbackLongest;
+    final mean = _number(row, '${stage}_mean_length_of_streak') ?? fallbackMean;
+    final median = _number(row, '${stage}_median_length_of_streak') ?? fallbackMedian;
+
     p.text(stage == 'R' ? 'REM' : stage, 52, tableY, bold: true, size: 7.5);
     p.text(_format(longest), 126, tableY, size: 7.5);
     p.text(_format(mean), 205, tableY, size: 7.5);
@@ -185,9 +248,13 @@ String _buildMacrostructurePage(
   return p.build();
 }
 
-String _buildMicrostructurePage(List<Map<String, String>> rows) {
+String _buildMicrostructurePage(
+  List<Map<String, String>> rows,
+  int pageNum,
+  int totalPages,
+) {
   final p = _PdfPage();
-  _header(p, 'THALAMOCORTICAL MICROSTRUCTURE', 'Page 2 of 5');
+  _header(p, 'THALAMOCORTICAL MICROSTRUCTURE', 'Page $pageNum of $totalPages');
   p.text(
     'Spindle and slow-wave morphometry with phase-amplitude coupling',
     50,
@@ -290,9 +357,13 @@ String _buildMicrostructurePage(List<Map<String, String>> rows) {
   return p.build();
 }
 
-String _buildAperiodicPage(List<Map<String, String>> rows) {
+String _buildAperiodicPage(
+  List<Map<String, String>> rows,
+  int pageNum,
+  int totalPages,
+) {
   final p = _PdfPage();
-  _header(p, 'NEURAL EXCITABILITY & APERIODIC TRENDS', 'Page 3 of 5');
+  _header(p, 'NEURAL EXCITABILITY & APERIODIC TRENDS', 'Page $pageNum of $totalPages');
   p.text(
     'FOOOF and IRASA parameterization separates periodic peaks from the 1/f background',
     50,
@@ -447,9 +518,13 @@ String _buildAperiodicPage(List<Map<String, String>> rows) {
   return p.build();
 }
 
-String _buildComplexityPage(List<Map<String, String>> rows) {
+String _buildComplexityPage(
+  List<Map<String, String>> rows,
+  int pageNum,
+  int totalPages,
+) {
   final p = _PdfPage();
-  _header(p, 'CORTICAL COMPLEXITY LANDSCAPE', 'Page 4 of 5');
+  _header(p, 'CORTICAL COMPLEXITY LANDSCAPE', 'Page $pageNum of $totalPages');
   p.text(
     'Information theory, fractal dynamics, long-range correlations, compression, and temporal memory',
     50,
@@ -563,9 +638,11 @@ String _buildInterpretationPage(
   Map<String, String> architecture,
   List<Map<String, String>> rows,
   ReportMetadata metadata,
+  int pageNum,
+  int totalPages,
 ) {
   final p = _PdfPage();
-  _header(p, 'UNDERSTANDING YOUR RESULTS', 'Page 5 of 5');
+  _header(p, 'UNDERSTANDING YOUR RESULTS', 'Page $pageNum of $totalPages');
   p.text(
     'A plain-language guide to the measurements in this report',
     50,
@@ -946,7 +1023,11 @@ void _hypnogram(
       );
     }
 
-    final ticks = _hypnogramTimeTicks(fullNightSeconds);
+    final ticks = _hypnogramTimeTicks(
+      fullNightSeconds,
+      viewport.eegPanelTimeUnit,
+      viewport.recordingStartTime,
+    );
     for (final (label, fraction) in ticks) {
       final tx = x + width * fraction;
       p.line(tx, y, tx, y - 3, color: _slate, width: 0.35);
@@ -965,7 +1046,11 @@ double? _stagePlotValue(SleepStage stage) => switch (stage) {
   SleepStage.unknown => null,
 };
 
-List<(String, double)> _hypnogramTimeTicks(double totalSeconds) {
+List<(String, double)> _hypnogramTimeTicks(
+  double totalSeconds,
+  String eegPanelTimeUnit,
+  DateTime? recordingStartTime,
+) {
   const steps = [3600.0, 1800.0, 900.0, 600.0, 300.0, 180.0, 120.0, 60.0];
   var step = 3600.0;
   for (final candidate in steps) {
@@ -974,15 +1059,25 @@ List<(String, double)> _hypnogramTimeTicks(double totalSeconds) {
       break;
     }
   }
+
+  final isClockTime = eegPanelTimeUnit == 'Clock time' && recordingStartTime != null;
+
   return [
     for (var seconds = step; seconds < totalSeconds; seconds += step)
       (
         () {
-          final hours = (seconds / 3600).floor();
-          final minutes = ((seconds % 3600) / 60).round();
-          return minutes == 0
-              ? '${hours}h'
-              : '${hours}h${minutes.toString().padLeft(2, '0')}';
+          if (isClockTime) {
+            final tickTime = recordingStartTime.add(Duration(seconds: seconds.round()));
+            final h = tickTime.hour.toString().padLeft(2, '0');
+            final m = tickTime.minute.toString().padLeft(2, '0');
+            return '$h:$m';
+          } else {
+            final hours = (seconds / 3600).floor();
+            final minutes = ((seconds % 3600) / 60).round();
+            return minutes == 0
+                ? '${hours}h'
+                : '${hours}h${minutes.toString().padLeft(2, '0')}';
+          }
         }(),
         seconds / totalSeconds,
       ),
@@ -1161,6 +1256,108 @@ double _sleepMinutes(EegViewport viewport) {
           .length *
       viewport.epochSeconds /
       60;
+}
+
+double _trtMinutes(EegViewport viewport) {
+  final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
+  final lightsOnSec = viewport.lightsOnSeconds ?? viewport.totalDurationSeconds;
+  return (lightsOnSec - lightsOffSec) / 60;
+}
+
+double _sleepOnsetLatencyMinutes(EegViewport viewport) {
+  final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
+  final startEpoch = (lightsOffSec / viewport.epochSeconds).floor();
+  final stages = viewport.stages;
+  for (var i = startEpoch; i < stages.length; i++) {
+    final stage = stages[i];
+    if (stage == SleepStage.n1 ||
+        stage == SleepStage.n2 ||
+        stage == SleepStage.n3 ||
+        stage == SleepStage.rem) {
+      return (i * viewport.epochSeconds - lightsOffSec) / 60;
+    }
+  }
+  return 0.0;
+}
+
+double _wasoMinutes(EegViewport viewport) {
+  final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
+  final lightsOnSec = viewport.lightsOnSeconds ?? (viewport.totalDurationSeconds);
+  final startEpoch = (lightsOffSec / viewport.epochSeconds).floor();
+  final endEpoch = (lightsOnSec / viewport.epochSeconds).floor().clamp(0, viewport.stages.length);
+
+  // Find sleep onset
+  var sleepOnsetIdx = -1;
+  for (var i = startEpoch; i < endEpoch; i++) {
+    final stage = viewport.stages[i];
+    if (stage == SleepStage.n1 ||
+        stage == SleepStage.n2 ||
+        stage == SleepStage.n3 ||
+        stage == SleepStage.rem) {
+      sleepOnsetIdx = i;
+      break;
+    }
+  }
+  if (sleepOnsetIdx < 0) return 0.0;
+
+  var wakeEpochs = 0;
+  for (var i = sleepOnsetIdx; i < endEpoch; i++) {
+    if (viewport.stages[i] == SleepStage.wake) {
+      wakeEpochs++;
+    }
+  }
+  return wakeEpochs * viewport.epochSeconds / 60;
+}
+
+double _sleepEfficiency(EegViewport viewport) {
+  final trt = _trtMinutes(viewport);
+  if (trt <= 0) return 0.0;
+  return (_sleepMinutes(viewport) / trt) * 100;
+}
+
+double _maintenanceEfficiency(EegViewport viewport) {
+  final tst = _sleepMinutes(viewport);
+  final waso = _wasoMinutes(viewport);
+  if (tst + waso <= 0) return 0.0;
+  return (tst / (tst + waso)) * 100;
+}
+
+double? _stageLatencyMinutes(EegViewport viewport, SleepStage target) {
+  final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
+  final startEpoch = (lightsOffSec / viewport.epochSeconds).floor();
+  final idx = viewport.stages.indexWhere((stage) => stage == target, startEpoch);
+  if (idx < 0) return null;
+  return (idx * viewport.epochSeconds - lightsOffSec) / 60;
+}
+
+List<double> _stageStreaks(EegViewport viewport, SleepStage target) {
+  final streaks = <double>[];
+  var currentStreak = 0;
+  for (final stage in viewport.stages) {
+    if (stage == target) {
+      currentStreak++;
+    } else {
+      if (currentStreak > 0) {
+        streaks.add(currentStreak * viewport.epochSeconds / 60);
+        currentStreak = 0;
+      }
+    }
+  }
+  if (currentStreak > 0) {
+    streaks.add(currentStreak * viewport.epochSeconds / 60);
+  }
+  return streaks;
+}
+
+double? _median(List<double> list) {
+  if (list.isEmpty) return null;
+  final sorted = List<double>.from(list)..sort();
+  final mid = sorted.length ~/ 2;
+  if (sorted.length % 2 != 0) {
+    return sorted[mid];
+  } else {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
 }
 
 double? _regionalMean(List<Map<String, String>> rows, String key) {
