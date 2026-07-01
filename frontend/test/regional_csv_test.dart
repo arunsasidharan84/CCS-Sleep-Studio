@@ -21,8 +21,16 @@ void main() {
 
     final compiled = await compileRegionalCsvFiles([first.path, second.path]);
 
-    expect(compiled, contains('source_file,source_path,Chan,N2_ACW'));
+    expect(
+      compiled,
+      contains(
+        'source_file,source_path,Subject Identifier,Subject Details,Recording Date,Chan,N2_ACW',
+      ),
+    );
     expect(compiled, contains('first.csv'));
-    expect(compiled, contains('Frontal,0.18'));
+    expect(
+      compiled,
+      contains('second.csv,${second.absolute.path},,,,Frontal,0.18'),
+    );
   });
 }
