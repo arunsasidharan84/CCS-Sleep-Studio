@@ -79,6 +79,12 @@ void main() {
           'pac_all_max_MI': '0.012',
           'N2_exponent_FOOOF': '1.4',
           'N2_slope_Irasa': '-1.2',
+          'N2_Delta_PSD': '0.31',
+          'N2_Theta_PSD': '0.22',
+          'N2_Sigma_PSD': '0.17',
+          'N2_Alpha_PSD': '0.12',
+          'N2_Beta1_PSD': '0.09',
+          'N2_Beta2_PSD': '0.05',
           'N2_perm_entropy_nonlinear': '0.8',
           'N2_ACW': '0.12',
         },
@@ -111,10 +117,42 @@ void main() {
     expect(pdf, contains('(IRASA AUC)'));
     expect(pdf, contains('(Low)'));
     expect(pdf, contains('(High)'));
+    expect(pdf, contains('(410.0 min)'));
+    expect(pdf, contains('(18.0 min)'));
+    expect(pdf, contains('(Frequency-band relative PSD \\(regional mean\\))'));
+    expect(pdf, contains('(0.310)'));
     expect(pdf, contains('latency 18.0 min'));
     expect(pdf, contains('PAC MI 0.0120'));
     expect(pdf, contains('FOOOF exponent was lowest'));
     expect(pdf, contains('permutation entropy was lowest'));
+  });
+
+  test('interpretation page only summarizes selected analysis pages', () {
+    final viewport = EegBackend().loadDemoViewport();
+    final bytes = buildPublicationSleepReport(
+      viewport: viewport,
+      recordingName: 'subject.edf',
+      includePages: const [true, false, false, false, true],
+      regionalRows: [
+        {
+          'Chan': 'Central',
+          'TRT': '480',
+          'TST': '410',
+          'Sleep_efficiency': '85',
+          'sp_all_density': '2.1',
+          'pac_all_max_MI': '0.012',
+          'N2_exponent_FOOOF': '1.4',
+          'N2_perm_entropy_nonlinear': '0.8',
+        },
+      ],
+    );
+
+    final pdf = latin1.decode(bytes);
+    expect(pdf, contains('/Count 2'));
+    expect(pdf, contains('(Sleep amount and continuity)'));
+    expect(pdf, isNot(contains('(Spindles, slow waves, and their timing)')));
+    expect(pdf, isNot(contains('(Background spectrum and oscillatory peaks)')));
+    expect(pdf, isNot(contains('(Complexity and temporal memory)')));
   });
 
   test('optionally renders a supplied AnalyseNidra CSV', () {

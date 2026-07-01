@@ -111,4 +111,4 @@ mkdir -p "$(dirname "$output_rpm")"
 cp "$built_rpm" "$output_rpm"
 rpm -qip "$output_rpm"
 rpm -qlp "$output_rpm" | grep -E \
-  '/usr/bin/scoringnidra|/usr/lib/scoringnidra/ScoringNidra|scoringnidra.desktop'
+  '/usr/bin/scoringnidra|/usr/lib/scoringnidra/ScoringNidra|/usr/lib/scoringnidra/analyse-nidra|scoringnidra.desktop'

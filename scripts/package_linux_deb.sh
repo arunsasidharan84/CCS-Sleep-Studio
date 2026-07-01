@@ -83,4 +83,4 @@ mkdir -p "$(dirname "$output_deb")"
 dpkg-deb --build --root-owner-group "$package_root" "$output_deb"
 dpkg-deb --info "$output_deb"
 dpkg-deb --contents "$output_deb" | grep -E \
-  'usr/bin/scoringnidra|usr/lib/scoringnidra/ScoringNidra|scoringnidra.desktop'
+  'usr/bin/scoringnidra|usr/lib/scoringnidra/ScoringNidra|usr/lib/scoringnidra/analyse-nidra|scoringnidra.desktop'

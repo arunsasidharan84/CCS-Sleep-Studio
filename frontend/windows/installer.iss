@@ -2,7 +2,7 @@
 [Setup]
 AppId={{C6D29A10-D24E-464A-A91B-6B8F01184F65}
 AppName=ScoringNidra
-AppVersion=1.0.0
+AppVersion=1.2.0
 DefaultDirName={userappdata}\ScoringNidra
 DefaultGroupName=ScoringNidra
 OutputDir=..\dist

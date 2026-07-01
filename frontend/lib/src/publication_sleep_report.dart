@@ -64,6 +64,7 @@ List<int> buildPublicationSleepReport({
         architecture,
         regions,
         metadata,
+        includePages,
         pageNum++,
         totalPages,
       ),
@@ -98,8 +99,8 @@ String _buildMacrostructurePage(
   final recDateText = metadata.recordingDate.trim().isNotEmpty
       ? 'Recording Date: ${metadata.recordingDate.trim()}'
       : (viewport.recordingStartTime != null
-          ? 'Recording Date: ${viewport.recordingStartTime!.toIso8601String().split("T").first}'
-          : 'Recording Date: N/A');
+            ? 'Recording Date: ${viewport.recordingStartTime!.toIso8601String().split("T").first}'
+            : 'Recording Date: N/A');
   p.text(recDateText, 350, 698, bold: true, size: 9, color: _navy);
 
   // Subject details
@@ -119,10 +120,27 @@ String _buildMacrostructurePage(
   p.text(studyLine, 50, 672, size: 7.5, color: _slate);
 
   final cards = <(String, String)>[
-    ('TRT', _metric(row, 'TRT', fallback: _trtMinutes(viewport))),
-    ('TST', _metric(row, 'TST', fallback: _sleepMinutes(viewport))),
-    ('WASO', _metric(row, 'WASO', fallback: _wasoMinutes(viewport))),
-    ('SOL', _metric(row, 'SOL', fallback: _sleepOnsetLatencyMinutes(viewport))),
+    (
+      'TRT',
+      _metricWithUnit(row, 'TRT', 'min', fallback: _trtMinutes(viewport)),
+    ),
+    (
+      'TST',
+      _metricWithUnit(row, 'TST', 'min', fallback: _sleepMinutes(viewport)),
+    ),
+    (
+      'WASO',
+      _metricWithUnit(row, 'WASO', 'min', fallback: _wasoMinutes(viewport)),
+    ),
+    (
+      'SOL',
+      _metricWithUnit(
+        row,
+        'SOL',
+        'min',
+        fallback: _sleepOnsetLatencyMinutes(viewport),
+      ),
+    ),
     (
       'Sleep efficiency',
       '${_metric(row, 'Sleep_efficiency', fallback: _sleepEfficiency(viewport))}%',
@@ -199,7 +217,7 @@ String _buildMacrostructurePage(
     p.text(latencyKeys[i].$1, x + 5, 226, size: 6.5, color: _slate);
     final fallbackVal = _stageLatencyMinutes(viewport, latencyKeys[i].$3);
     p.text(
-      _metric(row, latencyKeys[i].$2, fallback: fallbackVal),
+      _metricWithUnit(row, latencyKeys[i].$2, 'min', fallback: fallbackVal),
       x + 5,
       211,
       bold: true,
@@ -225,12 +243,15 @@ String _buildMacrostructurePage(
     };
     final streaks = _stageStreaks(viewport, sleepStage);
     final fallbackLongest = streaks.isEmpty ? null : streaks.reduce(math.max);
-    final fallbackMean = streaks.isEmpty ? null : streaks.reduce((a, b) => a + b) / streaks.length;
+    final fallbackMean = streaks.isEmpty
+        ? null
+        : streaks.reduce((a, b) => a + b) / streaks.length;
     final fallbackMedian = _median(streaks);
 
     final longest = _number(row, '${stage}_longest_streak') ?? fallbackLongest;
     final mean = _number(row, '${stage}_mean_length_of_streak') ?? fallbackMean;
-    final median = _number(row, '${stage}_median_length_of_streak') ?? fallbackMedian;
+    final median =
+        _number(row, '${stage}_median_length_of_streak') ?? fallbackMedian;
 
     p.text(stage == 'R' ? 'REM' : stage, 52, tableY, bold: true, size: 7.5);
     p.text(_format(longest), 126, tableY, size: 7.5);
@@ -363,7 +384,11 @@ String _buildAperiodicPage(
   int totalPages,
 ) {
   final p = _PdfPage();
-  _header(p, 'NEURAL EXCITABILITY & APERIODIC TRENDS', 'Page $pageNum of $totalPages');
+  _header(
+    p,
+    'NEURAL EXCITABILITY & APERIODIC TRENDS',
+    'Page $pageNum of $totalPages',
+  );
   p.text(
     'FOOOF and IRASA parameterization separates periodic peaks from the 1/f background',
     50,
@@ -489,31 +514,34 @@ String _buildAperiodicPage(
     y -= 20;
   }
 
-  p.section('Interpretive quality flags', 50, 185);
-  for (var i = 0; i < stages.length; i++) {
-    final stage = stages[i];
-    final error = _regionalMean(rows, '${stage}_error_FOOOF');
-    final r2 = _regionalMean(rows, '${stage}_rsquared_Irasa');
-    final quality = error == null || r2 == null
-        ? 'Insufficient data'
-        : error < 0.15 && r2 > 0.8
-        ? 'High confidence'
-        : error < 0.3 && r2 > 0.6
-        ? 'Moderate confidence'
-        : 'Review fit';
-    final color = quality == 'High confidence'
-        ? _green
-        : quality == 'Moderate confidence'
-        ? _orange
-        : _red;
-    final x = 50.0 + i * 102;
-    p.rect(x, 125, 94, 38, fill: color.withAlpha(32));
-    p.text(stage, x + 7, 148, bold: true, size: 8, color: color);
-    p.text(quality, x + 7, 133, size: 7.5);
+  p.section('Frequency-band relative PSD (regional mean)', 50, 185);
+  const bands = [
+    ('Delta', ['Delta']),
+    ('Theta', ['Theta']),
+    ('Sigma', ['Sigma', 'ThetaAlpha']),
+    ('Alpha', ['Alpha']),
+    ('Beta1', ['Beta1']),
+    ('Beta2', ['Beta2']),
+    ('Gamma1', ['Gamma1']),
+  ];
+  p.text('Stage', 52, 162, bold: true, size: 6.5);
+  for (var i = 0; i < bands.length; i++) {
+    p.text(bands[i].$1, 98 + i * 64, 162, bold: true, size: 6.5);
+  }
+  y = 143;
+  for (final stage in stages.where((stage) => stage != 'W')) {
+    p.text(stage, 52, y, bold: true, size: 7.2);
+    for (var i = 0; i < bands.length; i++) {
+      final value = _regionalMeanAny(rows, [
+        for (final band in bands[i].$2) '${stage}_${band}_PSD',
+      ]);
+      p.text(_format(value), 98 + i * 64, y, size: 7.2);
+    }
+    y -= 18;
   }
   _footer(
     p,
-    'Aperiodic parameters should be interpreted alongside fit error and IRASA goodness-of-fit.',
+    'PSD values are relative band powers; aperiodic parameters should be interpreted alongside fit quality.',
   );
   return p.build();
 }
@@ -638,6 +666,7 @@ String _buildInterpretationPage(
   Map<String, String> architecture,
   List<Map<String, String>> rows,
   ReportMetadata metadata,
+  List<bool> includePages,
   int pageNum,
   int totalPages,
 ) {
@@ -652,36 +681,52 @@ String _buildInterpretationPage(
   );
 
   var y = 670.0;
-  y = _interpretationBlock(
-    p,
-    'Sleep amount and continuity',
-    _architectureInterpretation(viewport, architecture),
-    y,
-  );
-  y = _interpretationBlock(
-    p,
-    'Sleep stages',
-    _stageInterpretation(viewport, architecture),
-    y,
-  );
-  y = _interpretationBlock(
-    p,
-    'Spindles, slow waves, and their timing',
-    _microstructureInterpretation(rows, architecture),
-    y,
-  );
-  y = _interpretationBlock(
-    p,
-    'Background spectrum and oscillatory peaks',
-    _aperiodicInterpretation(rows),
-    y,
-  );
-  y = _interpretationBlock(
-    p,
-    'Complexity and temporal memory',
-    _complexityInterpretation(rows),
-    y,
-  );
+  if (includePages[0]) {
+    y = _interpretationBlock(
+      p,
+      'Sleep amount and continuity',
+      _architectureInterpretation(viewport, architecture),
+      y,
+    );
+    y = _interpretationBlock(
+      p,
+      'Sleep stages',
+      _stageInterpretation(viewport, architecture),
+      y,
+    );
+  }
+  if (includePages[1] && _hasMicrostructure(rows)) {
+    y = _interpretationBlock(
+      p,
+      'Spindles, slow waves, and their timing',
+      _microstructureInterpretation(rows, architecture),
+      y,
+    );
+  }
+  if (includePages[2] && _hasAperiodic(rows)) {
+    y = _interpretationBlock(
+      p,
+      'Background spectrum and oscillatory peaks',
+      _aperiodicInterpretation(rows),
+      y,
+    );
+  }
+  if (includePages[3] && _hasComplexity(rows)) {
+    y = _interpretationBlock(
+      p,
+      'Complexity and temporal memory',
+      _complexityInterpretation(rows),
+      y,
+    );
+  }
+  if (y == 670.0) {
+    y = _interpretationBlock(
+      p,
+      'Selected report content',
+      'The selected PDF pages do not include quantitative sections with enough available analysis data for a detailed clinical summary.',
+      y,
+    );
+  }
 
   final availableRegions = rows
       .map((row) => row['Chan']?.trim())
@@ -856,6 +901,34 @@ String _complexityInterpretation(List<Map<String, String>> rows) {
   ];
   return '${parts.join(' ')} Higher entropy indicates less predictable signal structure, while ACW '
       'reflects longer or shorter temporal persistence; neither direction is inherently better.';
+}
+
+bool _hasMicrostructure(List<Map<String, String>> rows) {
+  return _rowMean(rows, 'sp_all_density') != null ||
+      _rowMean(rows, 'sw_all_density_calc') != null ||
+      _rowMean(rows, 'sw_all_Count') != null ||
+      _rowMean(rows, 'pac_all_max_MI') != null ||
+      _rowMean(rows, 'sw_all_ndPAC') != null;
+}
+
+bool _hasAperiodic(List<Map<String, String>> rows) {
+  return _stageMeans(rows, 'exponent_FOOOF').isNotEmpty ||
+      _stageMeans(rows, 'slope_Irasa').isNotEmpty ||
+      _stageMeans(rows, 'rsquared_Irasa').isNotEmpty ||
+      _regionalMeanAny(rows, const [
+            'N1_Delta_PSD',
+            'N2_Delta_PSD',
+            'N3_Delta_PSD',
+            'REM_Delta_PSD',
+          ]) !=
+          null;
+}
+
+bool _hasComplexity(List<Map<String, String>> rows) {
+  return _stageMeans(rows, 'perm_entropy_nonlinear').isNotEmpty ||
+      _stageMeans(rows, 'dfa_nonlinear').isNotEmpty ||
+      _stageMeans(rows, 'ACW').isNotEmpty ||
+      _rowMean(rows, 'LZc') != null;
 }
 
 double? _rowMean(List<Map<String, String>> rows, String key) {
@@ -1060,14 +1133,17 @@ List<(String, double)> _hypnogramTimeTicks(
     }
   }
 
-  final isClockTime = eegPanelTimeUnit == 'Clock time' && recordingStartTime != null;
+  final isClockTime =
+      eegPanelTimeUnit == 'Clock time' && recordingStartTime != null;
 
   return [
     for (var seconds = step; seconds < totalSeconds; seconds += step)
       (
         () {
           if (isClockTime) {
-            final tickTime = recordingStartTime.add(Duration(seconds: seconds.round()));
+            final tickTime = recordingStartTime.add(
+              Duration(seconds: seconds.round()),
+            );
             final h = tickTime.hour.toString().padLeft(2, '0');
             final m = tickTime.minute.toString().padLeft(2, '0');
             return '$h:$m';
@@ -1282,9 +1358,13 @@ double _sleepOnsetLatencyMinutes(EegViewport viewport) {
 
 double _wasoMinutes(EegViewport viewport) {
   final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
-  final lightsOnSec = viewport.lightsOnSeconds ?? (viewport.totalDurationSeconds);
+  final lightsOnSec =
+      viewport.lightsOnSeconds ?? (viewport.totalDurationSeconds);
   final startEpoch = (lightsOffSec / viewport.epochSeconds).floor();
-  final endEpoch = (lightsOnSec / viewport.epochSeconds).floor().clamp(0, viewport.stages.length);
+  final endEpoch = (lightsOnSec / viewport.epochSeconds).floor().clamp(
+    0,
+    viewport.stages.length,
+  );
 
   // Find sleep onset
   var sleepOnsetIdx = -1;
@@ -1325,7 +1405,10 @@ double _maintenanceEfficiency(EegViewport viewport) {
 double? _stageLatencyMinutes(EegViewport viewport, SleepStage target) {
   final lightsOffSec = viewport.lightsOffSeconds ?? 0.0;
   final startEpoch = (lightsOffSec / viewport.epochSeconds).floor();
-  final idx = viewport.stages.indexWhere((stage) => stage == target, startEpoch);
+  final idx = viewport.stages.indexWhere(
+    (stage) => stage == target,
+    startEpoch,
+  );
   if (idx < 0) return null;
   return (idx * viewport.epochSeconds - lightsOffSec) / 60;
 }
@@ -1369,6 +1452,14 @@ double? _regionalMean(List<Map<String, String>> rows, String key) {
   return values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length;
 }
 
+double? _regionalMeanAny(List<Map<String, String>> rows, List<String> keys) {
+  for (final key in keys) {
+    final value = _regionalMean(rows, key);
+    if (value != null) return value;
+  }
+  return null;
+}
+
 double? _number(Map<String, String> row, String key) {
   final raw = row[key]?.trim();
   if (raw == null || raw.isEmpty || raw.toLowerCase() == 'nan') return null;
@@ -1384,6 +1475,17 @@ String _metric(
 }) {
   final value = _number(row, key) ?? fallback;
   return value == null ? '-' : value.toStringAsFixed(decimals);
+}
+
+String _metricWithUnit(
+  Map<String, String> row,
+  String key,
+  String unit, {
+  int decimals = 1,
+  double? fallback,
+}) {
+  final value = _metric(row, key, decimals: decimals, fallback: fallback);
+  return value == '-' ? value : '$value $unit';
 }
 
 String _format(double? value, {int decimals = 3}) =>

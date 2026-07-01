@@ -1001,6 +1001,10 @@ class HypnogramPainter extends CustomPainter {
       old.viewport.hypnogramOverlayMode != viewport.hypnogramOverlayMode ||
       old.viewport.hypnogramProbabilityStage !=
           viewport.hypnogramProbabilityStage ||
+      !identical(
+        old.viewport.stageProbabilities,
+        viewport.stageProbabilities,
+      ) ||
       !identical(old.viewport.stagesUncertain, viewport.stagesUncertain);
 }
 

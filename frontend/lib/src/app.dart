@@ -1547,7 +1547,7 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       stagesUncertain: viewport.stagesUncertain,
       stagesConfidence: viewport.stagesConfidence,
     );
-    final scoringPath = _sidecarPath(path, '.json');
+    final scoringPath = _analyseNidraScoringPath(path);
     if (!mounted) return;
     showDialog(
       context: context,
@@ -6273,8 +6273,11 @@ String detectAnalyseNidraExecutable() {
   final executableDir = File(Platform.resolvedExecutable).parent.path;
   final candidates = [
     if (Platform.isWindows) '$executableDir\\analyse-nidra.exe',
+    if (Platform.isWindows)
+      '$executableDir\\data\\flutter_assets\\analyse-nidra.exe',
     if (!Platform.isWindows) '$executableDir/analyse-nidra',
     if (Platform.isMacOS) '$executableDir/../Resources/analyse-nidra',
+    if (Platform.isLinux) '$executableDir/lib/analyse-nidra',
     '${Directory.current.path}/../analyseNidra/target/release/analyse-nidra',
     '${Directory.current.path}/analyseNidra/target/release/analyse-nidra',
     '/Users/arunsasidharan/Code/ActiveProjects/analyseNidra/target/release/analyse-nidra',
@@ -6289,6 +6292,13 @@ String _sidecarPath(String path, String suffix) {
   final dot = path.lastIndexOf('.');
   final base = dot >= 0 ? path.substring(0, dot) : path;
   return '$base$suffix';
+}
+
+String _analyseNidraScoringPath(String edfPath) {
+  final scoringPath = '${_sidecarPath(edfPath, '')}_scoring.json';
+  if (File(scoringPath).existsSync()) return scoringPath;
+  final legacyPath = _sidecarPath(edfPath, '.json');
+  return File(legacyPath).existsSync() ? legacyPath : scoringPath;
 }
 
 (double, double, double) _pdfStageColor(SleepStage stage) {

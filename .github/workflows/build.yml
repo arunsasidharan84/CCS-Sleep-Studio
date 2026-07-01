@@ -84,11 +84,17 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: bridge
+          workspaces: |
+            bridge
+            analyseNidra
 
       - name: Build Rust backend (macOS dylib)
         run: cargo build --release
         working-directory: bridge
+
+      - name: Build AnalyseNidra CLI (macOS)
+        run: cargo build --release
+        working-directory: analyseNidra
 
       - name: Copy dylib into macOS runner bundle
         run: |
@@ -119,6 +125,11 @@ jobs:
         run: flutter build macos --release --dart-define=LITE_BUILD=true
         working-directory: frontend
 
+      - name: Copy AnalyseNidra into macOS App bundle (Lite)
+        run: |
+          cp analyseNidra/target/release/analyse-nidra frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
+          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/analyse-nidra
+
       - name: Ad-hoc sign macOS app (Lite)
         run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
 
@@ -138,6 +149,11 @@ jobs:
         run: |
           cp -R dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
           test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/autoscore-backend/autoscore-backend
+
+      - name: Copy AnalyseNidra into macOS App bundle (Full)
+        run: |
+          cp analyseNidra/target/release/analyse-nidra frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
+          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/analyse-nidra
 
       - name: Ad-hoc sign macOS app (Full)
         run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
@@ -224,11 +240,17 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: bridge
+          workspaces: |
+            bridge
+            analyseNidra
 
       - name: Build Rust backend (Windows DLL)
         run: cargo build --release
         working-directory: bridge
+
+      - name: Build AnalyseNidra CLI (Windows)
+        run: cargo build --release
+        working-directory: analyseNidra
 
       - name: Copy DLL into Windows runner
         shell: pwsh
@@ -260,6 +282,12 @@ jobs:
         run: flutter build windows --release --dart-define=LITE_BUILD=true
         working-directory: frontend
 
+      - name: Copy AnalyseNidra into Windows runner build output (Lite)
+        shell: pwsh
+        run: |
+          Copy-Item analyseNidra\target\release\analyse-nidra.exe frontend\build\windows\x64\runner\Release\
+          if (-not (Test-Path frontend\build\windows\x64\runner\Release\analyse-nidra.exe)) { exit 1 }
+
       - name: Package Windows app (Lite Installer)
         run: iscc /F"ScoringNidra-lite-Installer" frontend/windows/installer.iss
 
@@ -273,6 +301,12 @@ jobs:
         run: |
           Copy-Item -Recurse dist\autoscore-backend frontend\build\windows\x64\runner\Release\
           if (-not (Test-Path frontend\build\windows\x64\runner\Release\autoscore-backend\autoscore-backend.exe)) { exit 1 }
+
+      - name: Copy AnalyseNidra into Windows runner build output (Full)
+        shell: pwsh
+        run: |
+          Copy-Item analyseNidra\target\release\analyse-nidra.exe frontend\build\windows\x64\runner\Release\
+          if (-not (Test-Path frontend\build\windows\x64\runner\Release\analyse-nidra.exe)) { exit 1 }
 
       - name: Package Windows app (Full Installer)
         run: iscc /F"ScoringNidra-Installer" frontend/windows/installer.iss
@@ -358,11 +392,17 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: bridge
+          workspaces: |
+            bridge
+            analyseNidra
 
       - name: Build Rust backend (Linux so)
         run: cargo build --release
         working-directory: bridge
+
+      - name: Build AnalyseNidra CLI (Linux)
+        run: cargo build --release
+        working-directory: analyseNidra
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -394,6 +434,8 @@ jobs:
       - name: Copy Rust backend into Linux bundle (Lite)
         run: |
           cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
+          cp analyseNidra/target/release/analyse-nidra frontend/build/linux/x64/release/bundle/
+          test -x frontend/build/linux/x64/release/bundle/analyse-nidra
 
       - name: Build Linux installer (Lite)
         run: |
@@ -415,6 +457,8 @@ jobs:
         run: |
           cp -a dist/autoscore-backend frontend/build/linux/x64/release/bundle/
           cp bridge/target/release/librust_sleep_eeg.so frontend/build/linux/x64/release/bundle/
+          cp analyseNidra/target/release/analyse-nidra frontend/build/linux/x64/release/bundle/
+          test -x frontend/build/linux/x64/release/bundle/analyse-nidra
 
       - name: Build Linux installer (Full)
         run: |
@@ -444,6 +488,7 @@ jobs:
               dnf install -y /packages/ScoringNidra-linux-x86_64.rpm &&
               test -x /usr/bin/scoringnidra &&
               test -x /usr/lib/scoringnidra/autoscore-backend/autoscore-backend &&
+              test -x /usr/lib/scoringnidra/analyse-nidra &&
               ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/app-ldd.txt &&
               ldd /usr/lib/scoringnidra/autoscore-backend/autoscore-backend > /tmp/backend-ldd.txt &&
               ! grep -E "not found|version .* not found" /tmp/app-ldd.txt /tmp/backend-ldd.txt

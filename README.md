@@ -10,7 +10,7 @@
   <b>National Institute of Mental Health and Neurosciences (NIMHANS)</b>, Bangalore, India.
 </p>
 
-**Version:** 1.1.16
+**Version:** 1.2.0
 
 Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, automated sleep staging, advanced sleep EEG analysis and batch processing.
 
@@ -22,7 +22,9 @@ Built from the ground up using **Flutter** for a lightweight, fluid UI, and **Ru
 
 ## About
 
-**ScoringNidra** is designed to overcome the performance lag and dependency hurdles of traditional sleep scoring applications and incorporating advanced analysis done in sleep research. By combining the reactive rendering of Flutter with the computational muscle of Rust (via background Isolates and FFI), the application effortlessly handles full-night EEG recordings, real-time filtering, dynamic Welch periodograms, and Morlet wavelet decompositions.
+**ScoringNidra** is a standalone desktop platform for sleep EEG review, manual staging, automated sleep scoring, and quantitative sleep neurophysiology. It combines a Flutter interface with native Rust signal-processing backends so full-night polysomnography files can be loaded, filtered, scored, compared, and analyzed without maintaining a separate Python or MATLAB environment.
+
+The application is built for research and clinical neurophysiology workflows that need repeatable staging, transparent manual review, batch processing, AnalyseNidra quantitative reports, and exportable outputs across macOS, Windows, and Linux.
 
 ---
 
@@ -71,6 +73,18 @@ Because the application is signed ad-hoc, you must clear the macOS Gatekeeper qu
     ```
 4.  Now you are ready to run the **ScoringNidra.app**.
 5.  Drag and drop the **ScoringNidra.app** into **Applications** folder so that you can open like any other App in future.
+
+---
+
+## Sample PSG Data
+
+The repository includes a small demonstration dataset in [`SamplePSGData`](SamplePSGData/) for testing the viewer, manual scoring import, batch workflows, and AnalyseNidra report generation.
+
+* `SamplePSGData/Data/` contains four EDF PSG recordings.
+* `SamplePSGData/ManualScorings/` contains matching manual scoring EDF files with the same base filenames.
+* `SamplePSGData/Template_config.json` provides a reusable configuration template for the sample recordings.
+
+Load a recording from `SamplePSGData/Data/`, then import the corresponding file from `SamplePSGData/ManualScorings/` as the scoring/comparison file.
 
 ---
 

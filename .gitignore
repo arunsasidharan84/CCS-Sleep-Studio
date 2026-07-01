@@ -21,12 +21,15 @@ __pycache__/
 /build/
 /dist/
 /bridge/target/
+/analyseNidra/target/
 /autoscore-backend.spec
 
 # Temporary outputs/JSONs
 *.json
 !**/Contents.json
 !backend/models/**/*.json
+!analyseNidra/assets/**/*.json
+!analyseNidra/tests/**/*.json
 *.txt
 !requirements.txt
 !*spectral.txt
@@ -35,6 +38,11 @@ __pycache__/
 *.lst
 scratch_out/
 .luna_*
+
+# Bundled demo recordings and manual scorings for repository examples
+!SamplePSGData/
+!SamplePSGData/**
+SamplePSGData/**/.DS_Store
 
 # Large precompiled packages in vendor (installed via pip instead)
 backend/vendor/torch/
