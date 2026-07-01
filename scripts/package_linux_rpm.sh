@@ -66,6 +66,7 @@ URL:            https://github.com/arunsasidharan84/ScoringNidra
 BuildArch:      x86_64
 Requires:       gtk3, glibc, libstdc++, xz-libs
 Conflicts:      $conflicts
+AutoReqProv:    no
 
 %description
 ScoringNidra is a desktop application for polysomnography review,
