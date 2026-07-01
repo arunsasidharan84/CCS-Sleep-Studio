@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scoring_nidra/src/models.dart';
@@ -103,6 +104,69 @@ ${includeHeader ? 'Date, Time, Recording onset, Duration, Annotation, Linked cha
     );
     expect((await detectScoringFormat(gssc.path)).displayName, 'GSSC CSV');
   });
+
+  test(
+    'auto-load backfills probabilities from model scoring sidecar',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'scoring_nidra_autoload_',
+      );
+      final edf = File('${directory.path}/night.edf');
+      await edf.writeAsString('placeholder');
+      await File('${directory.path}/night_scoring.json').writeAsString(
+        const JsonEncoder.withIndent('  ').convert([
+          [
+            {
+              'epoch': 1,
+              'start': 0,
+              'end': 30,
+              'stage': 'N2',
+              'digit': -2,
+              'confidence': null,
+              'channels': [],
+              'clean': 1,
+              'source': 'human',
+            },
+          ],
+          [],
+        ]),
+      );
+      await File(
+        '${directory.path}/night_yasa_sleepgpt_scoring.json',
+      ).writeAsString(
+        const JsonEncoder.withIndent('  ').convert([
+          [
+            {
+              'epoch': 1,
+              'start': 0,
+              'end': 30,
+              'stage': 'N2',
+              'digit': -2,
+              'confidence': 0.8,
+              'probabilities': {
+                'W': 0.05,
+                'N1': 0.10,
+                'N2': 0.80,
+                'N3': 0.03,
+                'R': 0.02,
+              },
+              'channels': [],
+              'clean': 1,
+              'source': 'yasa_sleepgpt',
+            },
+          ],
+          [],
+        ]),
+      );
+
+      final result = await tryLoadAutoScoring(edf.path, 1);
+
+      expect(result, isNotNull);
+      expect(result!.stages, [SleepStage.n2]);
+      expect(result.stagesConfidence, [0.8]);
+      expect(result.stageProbabilities.single[SleepStage.n2], 0.8);
+    },
+  );
 }
 
 Future<File> _tempScoringFile(

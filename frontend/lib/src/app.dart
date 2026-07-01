@@ -1727,23 +1727,29 @@ class _ScoringNidraHomeState extends State<ScoringNidraHome>
       final group = entry.value;
       final first = group.first;
 
-      var edfPath = origPath;
+      final filename = first['source_file'] ?? _basename(origPath);
+      var edfPath = resolveRegionalCsvEdfPath(
+        origPath,
+        masterDirectory: masterDir,
+        sourceFile: filename,
+      );
       if (!File(edfPath).existsSync()) {
-        final filename = first['source_file'] ?? _basename(origPath);
-        final fallbackPath = '$masterDir/$filename';
+        final fallbackPath = '$masterDir${Platform.pathSeparator}$filename';
         if (File(fallbackPath).existsSync()) {
           edfPath = fallbackPath;
         }
       }
 
-      jobs.add(_PdfBatchJob(
-        sourcePath: edfPath,
-        sourceFile: first['source_file'] ?? _basename(edfPath),
-        subjectId: first['Subject Identifier'] ?? '',
-        subjectDetails: first['Subject Details'] ?? '',
-        recordingDate: first['Recording Date'] ?? '',
-        regionalRows: group,
-      ));
+      jobs.add(
+        _PdfBatchJob(
+          sourcePath: edfPath,
+          sourceFile: filename,
+          subjectId: first['Subject Identifier'] ?? '',
+          subjectDetails: first['Subject Details'] ?? '',
+          recordingDate: first['Recording Date'] ?? '',
+          regionalRows: group,
+        ),
+      );
     }
 
     if (jobs.isEmpty) {

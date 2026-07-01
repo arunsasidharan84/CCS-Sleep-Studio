@@ -72,24 +72,86 @@ Future<ScoringLoadResult?> tryLoadAutoScoring(
   String activePath,
   int epochCount,
 ) async {
-  final dotIdx = activePath.lastIndexOf('.');
-  final base = dotIdx >= 0 ? activePath.substring(0, dotIdx) : activePath;
+  final paths = _autoScoringCandidatePaths(activePath);
+  ScoringLoadResult? primary;
+  for (final path in paths) {
+    try {
+      primary = await _loadJsonScoring(path, epochCount);
+      break;
+    } catch (_) {
+      // Keep looking for another sidecar.
+    }
+  }
+  if (primary == null) return null;
 
-  // Try postfixed path first
-  var jsonPath = '${base}_scoring.json';
-  var file = File(jsonPath);
-  if (!file.existsSync()) {
-    // Fallback to default json path
-    jsonPath = '$base.json';
-    file = File(jsonPath);
+  if (_hasStageProbabilities(primary) && _hasConfidence(primary)) {
+    return primary;
   }
 
-  if (!file.existsSync()) return null;
-  try {
-    return await _loadJsonScoring(jsonPath, epochCount);
-  } catch (_) {
-    return null;
+  for (final path in paths.skip(1)) {
+    try {
+      final supplemental = await _loadJsonScoring(path, epochCount);
+      if (_hasStageProbabilities(supplemental) ||
+          _hasConfidence(supplemental)) {
+        return _mergeScoringMetadata(primary, supplemental);
+      }
+    } catch (_) {
+      // Probability sidecars are optional.
+    }
   }
+
+  return primary;
+}
+
+List<String> _autoScoringCandidatePaths(String activePath) {
+  final file = File(activePath);
+  final directory = file.parent;
+  final filename = file.uri.pathSegments.isNotEmpty
+      ? file.uri.pathSegments.last
+      : activePath.split(Platform.pathSeparator).last;
+  final dotIdx = filename.lastIndexOf('.');
+  final stem = dotIdx >= 0 ? filename.substring(0, dotIdx) : filename;
+  final basePath = '${directory.path}${Platform.pathSeparator}$stem';
+  final candidates = <String>[];
+
+  void add(String path) {
+    if (File(path).existsSync() && !candidates.contains(path)) {
+      candidates.add(path);
+    }
+  }
+
+  add('${basePath}_scoring.json');
+  add('$basePath.json');
+
+  if (directory.existsSync()) {
+    final modelSidecars =
+        directory
+            .listSync(followLinks: false)
+            .whereType<File>()
+            .where((entry) => _isAutoscoreSidecarForStem(entry.path, stem))
+            .toList()
+          ..sort((a, b) {
+            final bModified = b.statSync().modified;
+            final aModified = a.statSync().modified;
+            return bModified.compareTo(aModified);
+          });
+    for (final sidecar in modelSidecars) {
+      add(sidecar.path);
+    }
+  }
+
+  return candidates;
+}
+
+bool _isAutoscoreSidecarForStem(String path, String stem) {
+  final name = path.split(Platform.pathSeparator).last;
+  if (!name.startsWith('${stem}_') || !name.toLowerCase().endsWith('.json')) {
+    return false;
+  }
+  final suffix = name.substring(stem.length).toLowerCase();
+  return RegExp(
+    r'^_(yasa|gssc|tinysleepnet|seqsleepnet|sleeptransformer|usleep|luna|dreamento|sleepeegpy)(?:_sleepgpt)?(?:_scoring)?\.json$',
+  ).hasMatch(suffix);
 }
 
 Future<List<ScoredEvent>> tryLoadAutoEvents(String activePath) async {
@@ -305,6 +367,34 @@ Future<ScoringLoadResult> _loadJsonScoring(String path, int epochCount) async {
     stagesUncertain,
     stagesConfidence: stagesConfidence,
     stageProbabilities: stageProbabilities,
+  );
+}
+
+bool _hasConfidence(ScoringLoadResult result) {
+  return result.stagesConfidence.any((value) => value != null);
+}
+
+bool _hasStageProbabilities(ScoringLoadResult result) {
+  return result.stageProbabilities.any((entry) => entry.isNotEmpty);
+}
+
+ScoringLoadResult _mergeScoringMetadata(
+  ScoringLoadResult primary,
+  ScoringLoadResult supplemental,
+) {
+  final confidence = _hasConfidence(primary)
+      ? primary.stagesConfidence
+      : supplemental.stagesConfidence;
+  final probabilities = _hasStageProbabilities(primary)
+      ? primary.stageProbabilities
+      : supplemental.stageProbabilities;
+
+  return ScoringLoadResult(
+    primary.stages,
+    primary.stagesUncertain,
+    stagesConfidence: confidence,
+    stageProbabilities: probabilities,
+    sourceFormat: primary.sourceFormat,
   );
 }
 

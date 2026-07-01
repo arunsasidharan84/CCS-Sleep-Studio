@@ -64,7 +64,8 @@ Future<String> compileRegionalCsvFiles(List<String> paths) async {
     String recordingDate = '';
     String? edfPath;
     if (path.toLowerCase().endsWith('_analyse_regional.csv')) {
-      edfPath = '${path.substring(0, path.length - '_analyse_regional.csv'.length)}.edf';
+      edfPath =
+          '${path.substring(0, path.length - '_analyse_regional.csv'.length)}.edf';
     } else {
       final lastDot = path.lastIndexOf('.');
       if (lastDot >= 0) {
@@ -74,7 +75,8 @@ Future<String> compileRegionalCsvFiles(List<String> paths) async {
     if (edfPath != null && File(edfPath).existsSync()) {
       final dt = EdfLoader.readStartDateTime(edfPath);
       if (dt != null) {
-        recordingDate = '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+        recordingDate =
+            '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
       }
     }
 
@@ -100,6 +102,46 @@ Future<String> compileRegionalCsvFiles(List<String> paths) async {
     );
   }
   return buffer.toString();
+}
+
+String resolveRegionalCsvEdfPath(
+  String sourcePath, {
+  String? masterDirectory,
+  String? sourceFile,
+}) {
+  final candidates = <String>[];
+  void addCandidate(String path) {
+    if (path.isNotEmpty && !candidates.contains(path)) {
+      candidates.add(path);
+    }
+  }
+
+  addCandidate(_regionalCsvPathToEdfPath(sourcePath));
+
+  if (masterDirectory != null && sourceFile != null && sourceFile.isNotEmpty) {
+    addCandidate(
+      _regionalCsvPathToEdfPath(
+        '$masterDirectory${Platform.pathSeparator}$sourceFile',
+      ),
+    );
+  }
+
+  for (final candidate in candidates) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return candidates.isNotEmpty ? candidates.first : sourcePath;
+}
+
+String _regionalCsvPathToEdfPath(String path) {
+  final lower = path.toLowerCase();
+  const suffix = '_analyse_regional.csv';
+  if (lower.endsWith(suffix)) {
+    return '${path.substring(0, path.length - suffix.length)}.edf';
+  }
+  if (lower.endsWith('.csv')) {
+    return '${path.substring(0, path.length - '.csv'.length)}.edf';
+  }
+  return path;
 }
 
 String _escapeCsv(String value) {

@@ -33,4 +33,16 @@ void main() {
       contains('second.csv,${second.absolute.path},,,,Frontal,0.18'),
     );
   });
+
+  test('resolves regional CSV source path to matching EDF path', () async {
+    final directory = await Directory.systemTemp.createTemp('analyse_edf_');
+    final edf = await File(
+      '${directory.path}/AS_CNT_10_Night1.edf',
+    ).writeAsString('edf placeholder');
+    final regional = await File(
+      '${directory.path}/AS_CNT_10_Night1_analyse_regional.csv',
+    ).writeAsString('Chan,N2_ACW\nCentral,0.12\n');
+
+    expect(resolveRegionalCsvEdfPath(regional.path), edf.path);
+  });
 }
