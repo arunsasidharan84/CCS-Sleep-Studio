@@ -44,7 +44,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r backend/requirements.txt
           pip check
           # usleep-api 0.1.3 pins requests==2.25.1, while PhysioEx/psg-utils
@@ -55,7 +55,6 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onedir --name autoscore-backend \
-            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
@@ -202,7 +201,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r backend/requirements.txt
           pip check
           # usleep-api 0.1.3 has an obsolete requests==2.25.1 dependency pin.
@@ -213,7 +212,6 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onedir --name autoscore-backend `
-            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py `
             --collect-all gssc `
             --collect-all mne `
             --collect-all yasa `
@@ -354,7 +352,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r backend/requirements.txt
           pip check
           # usleep-api 0.1.3 pins requests==2.25.1, while PhysioEx/psg-utils
@@ -365,7 +363,6 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onedir --name autoscore-backend \
-            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
