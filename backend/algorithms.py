@@ -892,7 +892,5 @@ def algorithm_availability() -> dict[str, dict[str, str | bool]]:
             algorithm.check_available()
             results[key] = {"available": True, "message": "Ready"}
         except Exception as exc:
-            import traceback
-            traceback.print_exc()
             results[key] = {"available": False, "message": str(exc)}
     return results

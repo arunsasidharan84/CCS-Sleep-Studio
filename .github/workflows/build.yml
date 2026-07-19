@@ -55,6 +55,7 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onedir --name autoscore-backend \
+            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
@@ -212,6 +213,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onedir --name autoscore-backend `
+            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py `
             --collect-all gssc `
             --collect-all mne `
             --collect-all yasa `
@@ -363,6 +365,7 @@ jobs:
       - name: Build Python standalone backend
         run: |
           pyinstaller --onedir --name autoscore-backend \
+            --runtime-hook backend/pyinstaller_hooks/pyi_rth_torchvision_stub.py \
             --collect-all gssc \
             --collect-all mne \
             --collect-all yasa \
