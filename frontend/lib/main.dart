@@ -31,7 +31,7 @@ void main() {
                   const Icon(Icons.error_outline, size: 42, color: Colors.red),
                   const SizedBox(height: 16),
                   const Text(
-                    'ScoringNidra could not render this view',
+                    'CCS Sleep Studio could not render this view',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),

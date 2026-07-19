@@ -1,12 +1,12 @@
-; Inno Setup Script for ScoringNidra-lite
+; Inno Setup Script for CCS Sleep Studio Lite
 [Setup]
 AppId={{D1A39B10-E24F-465B-B91C-7B9F01194F66}
-AppName=ScoringNidra-lite
+AppName=CCS Sleep Studio Lite
 AppVersion=1.2.0
-DefaultDirName={userappdata}\ScoringNidra-lite
-DefaultGroupName=ScoringNidra-lite
+DefaultDirName={userappdata}\CCSSleepStudio-lite
+DefaultGroupName=CCS Sleep Studio Lite
 OutputDir=..\dist
-OutputBaseFilename=ScoringNidra-lite-Installer
+OutputBaseFilename=CCSSleepStudio-lite-Installer
 SetupIconFile=runner\resources\app_icon.ico
 Compression=lzma
 SolidCompression=yes
@@ -24,8 +24,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\ScoringNidra-lite"; Filename: "{app}\ScoringNidra.exe"
-Name: "{autodesktop}\ScoringNidra-lite"; Filename: "{app}\ScoringNidra.exe"; Tasks: desktopicon
+Name: "{group}\CCS Sleep Studio Lite"; Filename: "{app}\CCSSleepStudio.exe"
+Name: "{autodesktop}\CCS Sleep Studio Lite"; Filename: "{app}\CCSSleepStudio.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ScoringNidra.exe"; Description: "{cm:LaunchProgram,ScoringNidra-lite}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\CCSSleepStudio.exe"; Description: "{cm:LaunchProgram,CCS Sleep Studio Lite}"; Flags: nowait postinstall skipifsilent

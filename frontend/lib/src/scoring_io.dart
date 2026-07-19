@@ -210,24 +210,24 @@ Future<AppConfig?> tryLoadAutoConfig(String activePath) async {
     final content = await file.readAsString();
     if (content.trim().isEmpty) {
       // ignore: avoid_print
-      print('[ScoringNidra] Config file exists but is empty: ${file.path}');
+      print('[CCS Sleep Studio] Config file exists but is empty: ${file.path}');
       return null;
     }
     final json = jsonDecode(content);
     if (json is Map<String, dynamic>) {
       // ignore: avoid_print
-      print('[ScoringNidra] Loaded config (Map format) from: ${file.path}');
+      print('[CCS Sleep Studio] Loaded config (Map format) from: ${file.path}');
       return AppConfig.fromJson(json);
     }
     // ignore: avoid_print
-    print('[ScoringNidra] Loaded config (Python format) from: ${file.path}');
+    print('[CCS Sleep Studio] Loaded config (Python format) from: ${file.path}');
     return AppConfig.fromPythonJson(json, const []);
   } catch (e, stack) {
     // Config load error is non-fatal — log in debug so issues are visible
     // ignore: avoid_print
-    print('[ScoringNidra] Config load error (${file.path}): $e');
+    print('[CCS Sleep Studio] Config load error (${file.path}): $e');
     // ignore: avoid_print
-    print('[ScoringNidra] Stack: $stack');
+    print('[CCS Sleep Studio] Stack: $stack');
   }
   return null;
 }

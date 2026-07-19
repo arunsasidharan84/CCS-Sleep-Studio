@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:scoring_nidra/src/app.dart';
-import 'package:scoring_nidra/src/detection_dialogs.dart';
+import 'package:ccs_sleep_studio/src/app.dart';
+import 'package:ccs_sleep_studio/src/detection_dialogs.dart';
 
 void main() {
   testWidgets('renders the sleep EEG viewer shell', (tester) async {
     PackageInfo.setMockInitialValues(
-      appName: 'ScoringNidra',
-      packageName: 'scoring_nidra',
+      appName: 'CCS Sleep Studio',
+      packageName: 'ccs_sleep_studio',
       version: '1.1.3',
       buildNumber: '9',
       buildSignature: '',
@@ -18,15 +18,15 @@ void main() {
 
     expect(find.text('Jump to epoch:'), findsOneWidget);
     expect(find.textContaining('Ready'), findsOneWidget);
-    expect(find.text('ScoringNidra v1.1.3 (build 9)'), findsOneWidget);
+    expect(find.text('CCS Sleep Studio v1.1.3 (build 9)'), findsOneWidget);
   });
 
   testWidgets('batch channel fields allow complete deletion and replacement', (
     tester,
   ) async {
     PackageInfo.setMockInitialValues(
-      appName: 'ScoringNidra',
-      packageName: 'scoring_nidra',
+      appName: 'CCS Sleep Studio',
+      packageName: 'ccs_sleep_studio',
       version: '1.1.8',
       buildNumber: '14',
       buildSignature: '',

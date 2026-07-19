@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/models.dart';
-import 'package:scoring_nidra/src/scoring_io.dart';
+import 'package:ccs_sleep_studio/src/models.dart';
+import 'package:ccs_sleep_studio/src/scoring_io.dart';
 
 void main() {
   test('loads YASA one-stage-per-line text', () async {
@@ -109,7 +109,7 @@ ${includeHeader ? 'Date, Time, Recording onset, Duration, Annotation, Linked cha
     'auto-load backfills probabilities from model scoring sidecar',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'scoring_nidra_autoload_',
+        'ccs_sleep_studio_autoload_',
       );
       final edf = File('${directory.path}/night.edf');
       await edf.writeAsString('placeholder');
@@ -175,7 +175,7 @@ Future<File> _tempScoringFile(
   String extension = 'txt',
 }) async {
   final file = File(
-    '${Directory.systemTemp.path}/scoring_nidra_${name}_'
+    '${Directory.systemTemp.path}/ccs_sleep_studio_${name}_'
     '${DateTime.now().microsecondsSinceEpoch}.$extension',
   );
   return file.writeAsString(content);

@@ -1,5 +1,5 @@
-name: scoring_nidra
-description: "ScoringNidra — Sleep Scoring Application."
+name: ccs_sleep_studio
+description: "CCS Sleep Studio — High-performance sleep EEG visualization, scoring, and analysis."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

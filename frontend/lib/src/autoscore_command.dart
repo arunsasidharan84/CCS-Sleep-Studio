@@ -49,7 +49,7 @@ AutoscoreInvocation resolveAutoscoreInvocation({
         executableDir,
         '..',
         'lib',
-        'scoringnidra',
+        'ccs-sleep-studio',
         'autoscore-backend',
         'autoscore-backend',
       ]),
@@ -61,7 +61,7 @@ AutoscoreInvocation resolveAutoscoreInvocation({
     if (!windows) join([executableDir, 'autoscore-backend']),
     if (macOS) join([executableDir, '..', 'Resources', 'autoscore-backend']),
     if (!windows && !macOS)
-      join([executableDir, '..', 'lib', 'scoringnidra', 'autoscore-backend']),
+      join([executableDir, '..', 'lib', 'ccs-sleep-studio', 'autoscore-backend']),
     if (!windows) join([currentDir, 'dist', 'autoscore-backend']),
     if (windows) join([currentDir, 'dist', 'autoscore-backend.exe']),
   ];

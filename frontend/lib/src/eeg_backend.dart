@@ -197,7 +197,7 @@ class AppConfig {
     this.referenceLineThickness = 0.5,
     this.referenceLineColor = 'Light Grey',
     this.hypnogramZoom = 'Full Night',
-    this.reportTitle = 'ScoringNidra Sleep EEG Report',
+    this.reportTitle = 'CCS Sleep Studio Sleep EEG Report',
     this.studySite = '',
     this.investigatorName = '',
     this.subjectId = '',
@@ -388,7 +388,7 @@ class AppConfig {
       referenceLineColor: json['referenceLineColor'] as String? ?? 'Light Grey',
       hypnogramZoom: json['hypnogramZoom'] as String? ?? 'Full Night',
       reportTitle:
-          json['reportTitle'] as String? ?? 'ScoringNidra Sleep EEG Report',
+          json['reportTitle'] as String? ?? 'CCS Sleep Studio Sleep EEG Report',
       studySite: json['studySite'] as String? ?? '',
       investigatorName: json['investigatorName'] as String? ?? '',
       subjectId: json['subjectId'] as String? ?? '',
@@ -583,7 +583,7 @@ class AppConfig {
           global['Reference_line_color'] as String? ?? 'Light Grey';
       final hypnogramZoom = global['Hypnogram_zoom'] as String? ?? 'Full Night';
       final reportTitle =
-          global['Report_title'] as String? ?? 'ScoringNidra Sleep EEG Report';
+          global['Report_title'] as String? ?? 'CCS Sleep Studio Sleep EEG Report';
       final studySite = global['Study_site'] as String? ?? '';
       final investigatorName = global['Investigator_name'] as String? ?? '';
       final subjectId = global['Subject_id'] as String? ?? '';

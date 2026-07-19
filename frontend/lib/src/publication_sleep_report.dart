@@ -4,7 +4,7 @@ import 'models.dart';
 
 class ReportMetadata {
   const ReportMetadata({
-    this.title = 'ScoringNidra Sleep EEG Report',
+    this.title = 'CCS Sleep Studio Sleep EEG Report',
     this.studySite = '',
     this.investigatorName = '',
     this.subjectId = '',
@@ -83,7 +83,7 @@ String _buildMacrostructurePage(
 ) {
   final p = _PdfPage();
   final reportTitle = metadata.title.trim().isEmpty
-      ? 'ScoringNidra Sleep EEG Report'
+      ? 'CCS Sleep Studio Sleep EEG Report'
       : metadata.title.trim();
   _header(p, reportTitle.toUpperCase(), 'Page $pageNum of $totalPages');
 
@@ -1012,7 +1012,7 @@ void _header(_PdfPage p, String title, String page) {
   p.rect(36, 724, 540, 48, fill: _navy);
   p.text(title, 52, 749, bold: true, size: 14, color: _white);
   p.text(
-    'ScoringNidra | AnalyseNidra quantitative report',
+    'CCS Sleep Studio | AnalyseNidra quantitative report',
     52,
     733,
     size: 8,

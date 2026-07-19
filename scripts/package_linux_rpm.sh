@@ -11,8 +11,8 @@ output_rpm=$2
 variant=$3
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-if [[ ! -x "$bundle_dir/ScoringNidra" ]]; then
-  echo "Linux bundle executable not found: $bundle_dir/ScoringNidra" >&2
+if [[ ! -x "$bundle_dir/CCSSleepStudio" ]]; then
+  echo "Linux bundle executable not found: $bundle_dir/CCSSleepStudio" >&2
   exit 1
 fi
 if [[ "$variant" != "full" && "$variant" != "lite" ]]; then
@@ -22,14 +22,14 @@ fi
 
 version=$(awk '/^version:/ {print $2; exit}' "$repo_root/frontend/pubspec.yaml")
 version=${version%%+*}
-package_name=scoringnidra
-display_name=ScoringNidra
-conflicts=scoringnidra-lite
+package_name=ccs-sleep-studio
+display_name="CCS Sleep Studio"
+conflicts=ccs-sleep-studio-lite
 description="Sleep EEG visualization, scoring, and quantitative analysis"
 if [[ "$variant" == "lite" ]]; then
-  package_name=scoringnidra-lite
-  display_name="ScoringNidra Lite"
-  conflicts=scoringnidra
+  package_name=ccs-sleep-studio-lite
+  display_name="CCS Sleep Studio Lite"
+  conflicts=ccs-sleep-studio
   description="Sleep EEG visualization, manual scoring, and quantitative analysis"
 fi
 
@@ -40,22 +40,22 @@ source_dir="$top_dir/SOURCES"
 mkdir -p "$source_dir/bundle" "$top_dir/SPECS"
 cp -a "$bundle_dir/." "$source_dir/bundle/"
 install -m 0644 "$repo_root/frontend/assets/logo.png" \
-  "$source_dir/scoringnidra.png"
+  "$source_dir/ccs-sleep-studio.png"
 
-cat > "$source_dir/scoringnidra.desktop" <<EOF
+cat > "$source_dir/ccs-sleep-studio.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$display_name
 Comment=$description
-Exec=/usr/bin/scoringnidra
-Icon=scoringnidra
+Exec=/usr/bin/ccs-sleep-studio
+Icon=ccs-sleep-studio
 Terminal=false
 Categories=Science;Education;MedicalSoftware;
 StartupNotify=true
-StartupWMClass=ScoringNidra
+StartupWMClass=CCSSleepStudio
 EOF
 
-cat > "$top_dir/SPECS/scoringnidra.spec" <<EOF
+cat > "$top_dir/SPECS/ccs-sleep-studio.spec" <<EOF
 %global debug_package %{nil}
 Name:           $package_name
 Version:        $version
@@ -69,7 +69,7 @@ Conflicts:      $conflicts
 AutoReqProv:    no
 
 %description
-ScoringNidra is a desktop application for polysomnography review,
+CCS Sleep Studio is a desktop application for polysomnography review,
 sleep staging, and advanced quantitative EEG analysis.
 
 %prep
@@ -78,30 +78,30 @@ sleep staging, and advanced quantitative EEG analysis.
 
 %install
 mkdir -p \
-  %{buildroot}/usr/lib/scoringnidra \
+  %{buildroot}/usr/lib/ccs-sleep-studio \
   %{buildroot}/usr/bin \
   %{buildroot}/usr/share/applications \
   %{buildroot}/usr/share/icons/hicolor/256x256/apps
-cp -a %{_sourcedir}/bundle/. %{buildroot}/usr/lib/scoringnidra/
-ln -s ../lib/scoringnidra/ScoringNidra %{buildroot}/usr/bin/scoringnidra
-install -m 0644 %{_sourcedir}/scoringnidra.desktop \
-  %{buildroot}/usr/share/applications/scoringnidra.desktop
-install -m 0644 %{_sourcedir}/scoringnidra.png \
-  %{buildroot}/usr/share/icons/hicolor/256x256/apps/scoringnidra.png
+cp -a %{_sourcedir}/bundle/. %{buildroot}/usr/lib/ccs-sleep-studio/
+ln -s ../lib/ccs-sleep-studio/CCSSleepStudio %{buildroot}/usr/bin/ccs-sleep-studio
+install -m 0644 %{_sourcedir}/ccs-sleep-studio.desktop \
+  %{buildroot}/usr/share/applications/ccs-sleep-studio.desktop
+install -m 0644 %{_sourcedir}/ccs-sleep-studio.png \
+  %{buildroot}/usr/share/icons/hicolor/256x256/apps/ccs-sleep-studio.png
 
 %files
-/usr/bin/scoringnidra
-/usr/lib/scoringnidra
-/usr/share/applications/scoringnidra.desktop
-/usr/share/icons/hicolor/256x256/apps/scoringnidra.png
+/usr/bin/ccs-sleep-studio
+/usr/lib/ccs-sleep-studio
+/usr/share/applications/ccs-sleep-studio.desktop
+/usr/share/icons/hicolor/256x256/apps/ccs-sleep-studio.png
 
 %changelog
-* Sat Jun 20 2026 ScoringNidra Project <noreply@github.com> - $version-1
+* Sat Jun 20 2026 CCS Sleep Studio Project <noreply@github.com> - $version-1
 - Automated desktop release
 EOF
 
 rpmbuild --define "_topdir $top_dir" --target x86_64 \
-  -bb "$top_dir/SPECS/scoringnidra.spec"
+  -bb "$top_dir/SPECS/ccs-sleep-studio.spec"
 built_rpm=$(find "$top_dir/RPMS" -type f -name '*.rpm' -print -quit)
 if [[ -z "$built_rpm" ]]; then
   echo "rpmbuild did not produce an RPM package." >&2
@@ -111,4 +111,4 @@ mkdir -p "$(dirname "$output_rpm")"
 cp "$built_rpm" "$output_rpm"
 rpm -qip "$output_rpm"
 rpm -qlp "$output_rpm" | grep -E \
-  '/usr/bin/scoringnidra|/usr/lib/scoringnidra/ScoringNidra|/usr/lib/scoringnidra/analyse-nidra|scoringnidra.desktop'
+  '/usr/bin/ccs-sleep-studio|/usr/lib/ccs-sleep-studio/CCSSleepStudio|/usr/lib/ccs-sleep-studio/analyse-nidra|ccs-sleep-studio.desktop'

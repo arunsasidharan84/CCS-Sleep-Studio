@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/regional_csv.dart';
+import 'package:ccs_sleep_studio/src/regional_csv.dart';
 
 void main() {
   test('parses quoted regional CSV values', () {

@@ -127,18 +127,18 @@ jobs:
 
       - name: Copy AnalyseNidra into macOS App bundle (Lite)
         run: |
-          cp analyseNidra/target/release/analyse-nidra frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
-          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/analyse-nidra
+          cp analyseNidra/target/release/analyse-nidra "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/"
+          test -x "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/analyse-nidra"
 
       - name: Ad-hoc sign macOS app (Lite)
-        run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
+        run: codesign --force --deep --sign - "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app"
 
       - name: Package macOS app (Lite)
         run: |
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
-            frontend/build/macos/Build/Products/Release/ScoringNidra.app \
-            dist/ScoringNidra-lite-macos.zip
+            "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app" \
+            dist/CCSSleepStudio-lite-macos.zip
 
       # 2. Build and Package Full version
       - name: Build macOS app (Full)
@@ -147,37 +147,37 @@ jobs:
 
       - name: Copy Python backend into macOS App bundle (Full)
         run: |
-          cp -R dist/autoscore-backend frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
-          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/autoscore-backend/autoscore-backend
+          cp -R dist/autoscore-backend "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/"
+          test -x "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/autoscore-backend/autoscore-backend"
 
       - name: Copy AnalyseNidra into macOS App bundle (Full)
         run: |
-          cp analyseNidra/target/release/analyse-nidra frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/
-          test -x frontend/build/macos/Build/Products/Release/ScoringNidra.app/Contents/Resources/analyse-nidra
+          cp analyseNidra/target/release/analyse-nidra "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/"
+          test -x "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app/Contents/Resources/analyse-nidra"
 
       - name: Ad-hoc sign macOS app (Full)
-        run: codesign --force --deep --sign - frontend/build/macos/Build/Products/Release/ScoringNidra.app
+        run: codesign --force --deep --sign - "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app"
 
       - name: Package macOS app (Full)
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
-            frontend/build/macos/Build/Products/Release/ScoringNidra.app \
-            dist/ScoringNidra-macos.zip
+            "frontend/build/macos/Build/Products/Release/CCS Sleep Studio.app" \
+            dist/CCSSleepStudio-macos.zip
 
       # 3. Upload Artifacts
       - name: Upload macOS Full artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-macos
-          path: dist/ScoringNidra-macos.zip
+          name: CCSSleepStudio-macos
+          path: dist/CCSSleepStudio-macos.zip
           if-no-files-found: error
           retention-days: 1
 
       - name: Upload macOS Lite artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-lite-macos
-          path: dist/ScoringNidra-lite-macos.zip
+          name: CCSSleepStudio-lite-macos
+          path: dist/CCSSleepStudio-lite-macos.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -289,7 +289,7 @@ jobs:
           if (-not (Test-Path frontend\build\windows\x64\runner\Release\analyse-nidra.exe)) { exit 1 }
 
       - name: Package Windows app (Lite Installer)
-        run: iscc /F"ScoringNidra-lite-Installer" frontend/windows/installer.iss
+        run: iscc /F"CCSSleepStudio-lite-Installer" frontend/windows/installer-lite.iss
 
       # 2. Build and Package Full version
       - name: Build Windows app (Full)
@@ -309,22 +309,22 @@ jobs:
           if (-not (Test-Path frontend\build\windows\x64\runner\Release\analyse-nidra.exe)) { exit 1 }
 
       - name: Package Windows app (Full Installer)
-        run: iscc /F"ScoringNidra-Installer" frontend/windows/installer.iss
+        run: iscc /F"CCSSleepStudio-Installer" frontend/windows/installer.iss
 
       # 3. Upload Artifacts
       - name: Upload Windows Full installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-Installer
-          path: frontend/dist/ScoringNidra-Installer.exe
+          name: CCSSleepStudio-Installer
+          path: frontend/dist/CCSSleepStudio-Installer.exe
           if-no-files-found: error
           retention-days: 1
 
       - name: Upload Windows Lite installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-lite-Installer
-          path: frontend/dist/ScoringNidra-lite-Installer.exe
+          name: CCSSleepStudio-lite-Installer
+          path: frontend/dist/CCSSleepStudio-lite-Installer.exe
           if-no-files-found: error
           retention-days: 1
 
@@ -441,11 +441,11 @@ jobs:
         run: |
           bash scripts/package_linux_deb.sh \
             frontend/build/linux/x64/release/bundle \
-            dist/ScoringNidra-lite-linux-amd64.deb \
+            dist/CCSSleepStudio-lite-linux-amd64.deb \
             lite
           bash scripts/package_linux_rpm.sh \
             frontend/build/linux/x64/release/bundle \
-            dist/ScoringNidra-lite-linux-x86_64.rpm \
+            dist/CCSSleepStudio-lite-linux-x86_64.rpm \
             lite
 
       # 2. Build and Package Full version
@@ -464,11 +464,11 @@ jobs:
         run: |
           bash scripts/package_linux_deb.sh \
             frontend/build/linux/x64/release/bundle \
-            dist/ScoringNidra-linux-amd64.deb \
+            dist/CCSSleepStudio-linux-amd64.deb \
             full
           bash scripts/package_linux_rpm.sh \
             frontend/build/linux/x64/release/bundle \
-            dist/ScoringNidra-linux-x86_64.rpm \
+            dist/CCSSleepStudio-linux-x86_64.rpm \
             full
 
       - name: Validate RPM installers on AlmaLinux 9
@@ -476,21 +476,21 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}/dist:/packages:ro" \
             almalinux:9 bash -lc '
-              dnf install -y /packages/ScoringNidra-lite-linux-x86_64.rpm &&
-              test -x /usr/bin/scoringnidra &&
-              test -f /usr/share/applications/scoringnidra.desktop &&
-              ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/ldd.txt &&
+              dnf install -y /packages/CCSSleepStudio-lite-linux-x86_64.rpm &&
+              test -x /usr/bin/ccs-sleep-studio &&
+              test -f /usr/share/applications/ccs-sleep-studio.desktop &&
+              ldd /usr/lib/ccs-sleep-studio/CCSSleepStudio > /tmp/ldd.txt &&
               ! grep -E "not found|version .* not found" /tmp/ldd.txt
             '
           docker run --rm \
             -v "${{ github.workspace }}/dist:/packages:ro" \
             almalinux:9 bash -lc '
-              dnf install -y /packages/ScoringNidra-linux-x86_64.rpm &&
-              test -x /usr/bin/scoringnidra &&
-              test -x /usr/lib/scoringnidra/autoscore-backend/autoscore-backend &&
-              test -x /usr/lib/scoringnidra/analyse-nidra &&
-              ldd /usr/lib/scoringnidra/ScoringNidra > /tmp/app-ldd.txt &&
-              ldd /usr/lib/scoringnidra/autoscore-backend/autoscore-backend > /tmp/backend-ldd.txt &&
+              dnf install -y /packages/CCSSleepStudio-linux-x86_64.rpm &&
+              test -x /usr/bin/ccs-sleep-studio &&
+              test -x /usr/lib/ccs-sleep-studio/autoscore-backend/autoscore-backend &&
+              test -x /usr/lib/ccs-sleep-studio/analyse-nidra &&
+              ldd /usr/lib/ccs-sleep-studio/CCSSleepStudio > /tmp/app-ldd.txt &&
+              ldd /usr/lib/ccs-sleep-studio/autoscore-backend/autoscore-backend > /tmp/backend-ldd.txt &&
               ! grep -E "not found|version .* not found" /tmp/app-ldd.txt /tmp/backend-ldd.txt
             '
 
@@ -498,20 +498,20 @@ jobs:
       - name: Upload Linux Full artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-linux-installers
+          name: CCSSleepStudio-linux-installers
           path: |
-            dist/ScoringNidra-linux-amd64.deb
-            dist/ScoringNidra-linux-x86_64.rpm
+            dist/CCSSleepStudio-linux-amd64.deb
+            dist/CCSSleepStudio-linux-x86_64.rpm
           if-no-files-found: error
           retention-days: 1
 
       - name: Upload Linux Lite artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScoringNidra-lite-linux-installers
+          name: CCSSleepStudio-lite-linux-installers
           path: |
-            dist/ScoringNidra-lite-linux-amd64.deb
-            dist/ScoringNidra-lite-linux-x86_64.rpm
+            dist/CCSSleepStudio-lite-linux-amd64.deb
+            dist/CCSSleepStudio-lite-linux-x86_64.rpm
           if-no-files-found: error
           retention-days: 1
 
@@ -527,37 +527,37 @@ jobs:
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-macos
+          name: CCSSleepStudio-macos
           path: dist
 
       - name: Download macOS Lite artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-lite-macos
+          name: CCSSleepStudio-lite-macos
           path: dist
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-Installer
+          name: CCSSleepStudio-Installer
           path: dist
 
       - name: Download Windows Lite artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-lite-Installer
+          name: CCSSleepStudio-lite-Installer
           path: dist
 
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-linux-installers
+          name: CCSSleepStudio-linux-installers
           path: dist
 
       - name: Download Linux Lite artifact
         uses: actions/download-artifact@v4
         with:
-          name: ScoringNidra-lite-linux-installers
+          name: CCSSleepStudio-lite-linux-installers
           path: dist
 
       - name: Generate Release Tag & Name
@@ -581,14 +581,14 @@ jobs:
           name: ${{ steps.release_info.outputs.title }}
           prerelease: ${{ steps.release_info.outputs.prerelease == 'true' }}
           files: |
-            dist/ScoringNidra-macos.zip
-            dist/ScoringNidra-lite-macos.zip
-            dist/ScoringNidra-Installer.exe
-            dist/ScoringNidra-lite-Installer.exe
-            dist/ScoringNidra-linux-amd64.deb
-            dist/ScoringNidra-lite-linux-amd64.deb
-            dist/ScoringNidra-linux-x86_64.rpm
-            dist/ScoringNidra-lite-linux-x86_64.rpm
+            dist/CCSSleepStudio-macos.zip
+            dist/CCSSleepStudio-lite-macos.zip
+            dist/CCSSleepStudio-Installer.exe
+            dist/CCSSleepStudio-lite-Installer.exe
+            dist/CCSSleepStudio-linux-amd64.deb
+            dist/CCSSleepStudio-lite-linux-amd64.deb
+            dist/CCSSleepStudio-linux-x86_64.rpm
+            dist/CCSSleepStudio-lite-linux-x86_64.rpm
           draft: false
           make_latest: ${{ steps.release_info.outputs.tag != 'latest' && 'true' || 'false' }}
           generate_release_notes: true

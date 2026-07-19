@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/signal_processing.dart' as sp;
+import 'package:ccs_sleep_studio/src/signal_processing.dart' as sp;
 
 void main() {
   test('Check filter stability and print coefficients', () {

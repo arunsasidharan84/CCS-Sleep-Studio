@@ -1,4 +1,4 @@
-# ScoringNidra - The High-Performance Sleep EEG Visualization, Annotation & Scoring Software
+# CCS Sleep Studio - The High-Performance Sleep EEG Visualization, Annotation & Analysis Suite
 
 <p align="center">
   <img src="screenshots/ccs_logo.png" width="200" alt="CCS NIMHANS Logo">
@@ -12,17 +12,22 @@
 
 **Version:** 1.2.1
 
-Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, manual scoring, automated sleep staging, advanced sleep EEG analysis and batch processing.
+Welcome to **CCS Sleep Studio**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, sleep scoring, automated staging, and advanced EEG analysis.
 
-Built from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **ScoringNidra** is inspired heavily from the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files and advanced analysis.
+CCS Sleep Studio is comprised of the following key modules:
+*   **ScoringNidra**: Interactive sleep scoring and event annotation module within the app.
+*   **AutoscoreNidra**: Automated sleep scoring module with both interactive and batch modes.
+*   **AnalyseNidra**: Automated sleep EEG analysis and reporting module operating in both interactive and batch modes.
 
-![ScoringNidra Main Window](screenshots/main.png)
+Built from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **CCS Sleep Studio** is inspired heavily from the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files and advanced analysis.
+
+![CCS Sleep Studio Main Window](screenshots/main.png)
 
 ---
 
 ## About
 
-**ScoringNidra** is a standalone desktop platform for sleep EEG review, manual staging, automated sleep scoring, and quantitative sleep neurophysiology. It combines a Flutter interface with native Rust signal-processing backends so full-night polysomnography files can be loaded, filtered, scored, compared, and analyzed without maintaining a separate Python or MATLAB environment.
+**CCS Sleep Studio** is a standalone desktop platform for sleep EEG review, manual staging, automated sleep scoring, and quantitative sleep neurophysiology. It combines a Flutter interface with native Rust signal-processing backends so full-night polysomnography files can be loaded, filtered, scored, compared, and analyzed without maintaining a separate Python or MATLAB environment.
 
 The application is built for research and clinical neurophysiology workflows that need repeatable staging, transparent manual review, batch processing, AnalyseNidra quantitative reports, and exportable outputs across macOS, Windows, and Linux.
 
@@ -30,31 +35,31 @@ The application is built for research and clinical neurophysiology workflows tha
 
 ## 📥 Download Standalone Releases
 
-We compile two distinct variants of **ScoringNidra** automatically via GitHub Actions:
-*   **ScoringNidra (Full)**: Includes manual scoring, data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
-*   **ScoringNidra-lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
+We compile two distinct variants of **CCS Sleep Studio** automatically via GitHub Actions:
+*   **CCS Sleep Studio (Full)**: Includes manual scoring (ScoringNidra), data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
+*   **CCS Sleep Studio Lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders, and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
 
 [![Retained release asset downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/total?label=retained%20release%20downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases)
 
 | Operating System | Variant | Package Type | Download Link |
 |------------------|---------|--------------|---------------|
-| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip) |
-| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-macos.zip) |
-| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe) |
-| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-Installer.exe) |
-| **Linux (Debian/Ubuntu)** | **Full** | x64 DEB Installer | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux-amd64.deb) |
-| | **Lite** | x64 DEB Installer | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux-amd64.deb) |
-| **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | [Download Linux Full RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-linux-x86_64.rpm) |
-| | **Lite** | x86_64 RPM Installer | [Download Linux Lite RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-lite-linux-x86_64.rpm) |
+| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-macos.zip) |
+| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-macos.zip) |
+| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-Installer.exe) |
+| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-Installer.exe) |
+| **Linux (Debian/Ubuntu)** | **Full** | x64 DEB Installer | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-linux-amd64.deb) |
+| | **Lite** | x64 DEB Installer | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-linux-amd64.deb) |
+| **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | [Download Linux Full RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-linux-x86_64.rpm) |
+| | **Lite** | x86_64 RPM Installer | [Download Linux Lite RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-linux-x86_64.rpm) |
 
 On Debian, Ubuntu, Linux Mint, and compatible distributions, open the downloaded
-`.deb` in the software installer or run `sudo apt install ./ScoringNidra-linux-amd64.deb`.
-The installer registers ScoringNidra in the desktop application menu and adds
-the `scoringnidra` command.
+`.deb` in the software installer or run `sudo apt install ./CCSSleepStudio-linux-amd64.deb`.
+The installer registers CCS Sleep Studio in the desktop application menu and adds
+the `ccs-sleep-studio` command.
 
 On Red Hat Enterprise Linux 9, AlmaLinux 9, Rocky Linux 9, and compatible
 systems, install the RPM with
-`sudo dnf install ./ScoringNidra-linux-x86_64.rpm`. Each release is smoke-tested
+`sudo dnf install ./CCSSleepStudio-linux-x86_64.rpm`. Each release is smoke-tested
 inside AlmaLinux 9 before publication.
 
 The `latest` development release is a rolling prerelease. Each successful build
@@ -68,11 +73,11 @@ Because the application is signed ad-hoc, you must clear the macOS Gatekeeper qu
 1.  Download & Extract the zip folder into your **Downloads** folder.
 2.  Open **Terminal**.
 3.  Copy, Paste & Run the following command:
-    ```sh
-    xattr -rd com.apple.quarantine ~/Downloads/ScoringNidra.app
-    ```
-4.  Now you are ready to run the **ScoringNidra.app**.
-5.  Drag and drop the **ScoringNidra.app** into **Applications** folder so that you can open like any other App in future.
+     ```sh
+     xattr -rd com.apple.quarantine ~/Downloads/CCS\ Sleep\ Studio.app
+     ```
+4.  Now you are ready to run the **CCS Sleep Studio.app**.
+5.  Drag and drop the **CCS Sleep Studio.app** into the **Applications** folder so that you can open it like any other app in the future.
 
 ---
 
@@ -90,7 +95,7 @@ Load a recording from `SamplePSGData/Data/`, then import the corresponding file 
 
 ## ⚡ Speed & Architectural Enhancements
 
-ScoringNidra overcomes the main performance bottlenecks of standard Python-based visualization tools:
+CCS Sleep Studio overcomes the main performance bottlenecks of standard Python-based visualization tools:
 
 1.  **Hybrid Flutter + Rust FFI Pipeline**: Heavy mathematical operations (zero-phase Chebyshev/Butterworth filters, Welch periodograms, Morlet wavelets) are written in Rust, leveraging SIMD compiler optimizations and multi-threaded processing via `rayon`.
 2.  **Isolate-Based Background Worker**: Computations run off the main thread in background Dart **Isolates**, leaving the main interface to render at a locked 60+ FPS.
@@ -102,7 +107,7 @@ ScoringNidra overcomes the main performance bottlenecks of standard Python-based
 
 ## AutoscoreNidra — Automated Sleep Scoring (Full App Only)
 
-**AutoscoreNidra** is ScoringNidra's automated sleep-scoring system. It provides a consistent UI, dependency preflight, live epoch progress, and local execution for modern deep-learning and machine-learning staging models:
+**AutoscoreNidra** is the automated sleep-scoring system within CCS Sleep Studio. It provides a consistent UI, dependency preflight, live epoch progress, and local execution for modern deep-learning and machine-learning staging models:
 
 *   **Multi-Montage Consensus Scoring**: AutoscoreNidra independently scores every selected EEG channel and clinically valid reference combination. It then combines their epoch-wise probabilities into one consensus hypnogram, reducing dependence on any single channel or montage.
 *   **Optional SleepGPT Sequence Refinement**: After the base consensus scoring, SleepGPT can apply a condition-agnostic sequence correction pass. It uses the temporal sleep-stage sequence to reduce implausible transitions without requiring a diagnosis-specific model.

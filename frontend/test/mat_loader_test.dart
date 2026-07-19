@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/mat_loader.dart';
+import 'package:ccs_sleep_studio/src/mat_loader.dart';
 
 void main() {
   test('loads ScoringHero EEGLAB v5 MAT example when available', () {

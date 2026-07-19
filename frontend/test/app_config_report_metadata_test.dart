@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/eeg_backend.dart';
+import 'package:ccs_sleep_studio/src/eeg_backend.dart';
 
 void main() {
   test('report metadata survives native configuration serialization', () {

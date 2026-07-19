@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/eeg_backend.dart';
-import 'package:scoring_nidra/src/models.dart';
-import 'package:scoring_nidra/src/publication_sleep_report.dart';
-import 'package:scoring_nidra/src/regional_csv.dart';
+import 'package:ccs_sleep_studio/src/eeg_backend.dart';
+import 'package:ccs_sleep_studio/src/models.dart';
+import 'package:ccs_sleep_studio/src/publication_sleep_report.dart';
+import 'package:ccs_sleep_studio/src/regional_csv.dart';
 
 void main() {
   test('builds a five-page quantitative sleep report', () {

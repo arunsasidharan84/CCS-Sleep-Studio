@@ -1,17 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scoring_nidra/src/autoscore_command.dart';
+import 'package:ccs_sleep_studio/src/autoscore_command.dart';
 
 void main() {
   test('uses packaged macOS AutoscoreNidra backend', () {
     final invocation = resolveAutoscoreInvocation(
       resolvedExecutable:
-          '/Applications/ScoringNidra.app/Contents/MacOS/ScoringNidra',
+          '/Applications/CCS Sleep Studio.app/Contents/MacOS/CCS Sleep Studio',
       currentDirectory: '/tmp',
       isWindows: false,
       isMacOS: true,
       fileExists: (path) =>
           path ==
-          '/Applications/ScoringNidra.app/Contents/MacOS/../Resources/autoscore-backend/autoscore-backend',
+          '/Applications/CCS Sleep Studio.app/Contents/MacOS/../Resources/autoscore-backend/autoscore-backend',
     );
 
     expect(
@@ -23,53 +23,53 @@ void main() {
 
   test('pairs development Python with backend_entry.py', () {
     final invocation = resolveAutoscoreInvocation(
-      resolvedExecutable: '/tmp/ScoringNidra',
-      currentDirectory: '/workspace/ScoringNidra',
+      resolvedExecutable: '/tmp/CCSSleepStudio',
+      currentDirectory: '/workspace/CCSSleepStudio',
       isWindows: false,
       isMacOS: true,
       fileExists: (path) =>
-          path == '/workspace/ScoringNidra/backend_entry.py' ||
+          path == '/workspace/CCSSleepStudio/backend_entry.py' ||
           path == '/opt/homebrew/bin/python3',
     );
 
     expect(invocation.executable, '/opt/homebrew/bin/python3');
     expect(invocation.argumentPrefix, [
-      '/workspace/ScoringNidra/backend_entry.py',
+      '/workspace/CCSSleepStudio/backend_entry.py',
     ]);
   });
 
   test('finds the backend from an installed Linux launcher path', () {
     final invocation = resolveAutoscoreInvocation(
-      resolvedExecutable: '/usr/bin/scoringnidra',
+      resolvedExecutable: '/usr/bin/ccs-sleep-studio',
       currentDirectory: '/home/researcher',
       isWindows: false,
       isMacOS: false,
       fileExists: (path) =>
           path ==
-          '/usr/bin/../lib/scoringnidra/autoscore-backend/autoscore-backend',
+          '/usr/bin/../lib/ccs-sleep-studio/autoscore-backend/autoscore-backend',
     );
 
     expect(
       invocation.executable,
-      '/usr/bin/../lib/scoringnidra/autoscore-backend/autoscore-backend',
+      '/usr/bin/../lib/ccs-sleep-studio/autoscore-backend/autoscore-backend',
     );
   });
 
   test('prefers a validated development standalone backend', () {
     final invocation = resolveAutoscoreInvocation(
-      resolvedExecutable: '/tmp/ScoringNidra',
-      currentDirectory: '/workspace/ScoringNidra',
+      resolvedExecutable: '/tmp/CCSSleepStudio',
+      currentDirectory: '/workspace/CCSSleepStudio',
       isWindows: false,
       isMacOS: true,
       fileExists: (path) =>
-          path == '/workspace/ScoringNidra/dist/autoscore-backend' ||
-          path == '/workspace/ScoringNidra/backend_entry.py' ||
+          path == '/workspace/CCSSleepStudio/dist/autoscore-backend' ||
+          path == '/workspace/CCSSleepStudio/backend_entry.py' ||
           path == '/opt/homebrew/bin/python3',
     );
 
     expect(
       invocation.executable,
-      '/workspace/ScoringNidra/dist/autoscore-backend',
+      '/workspace/CCSSleepStudio/dist/autoscore-backend',
     );
     expect(invocation.argumentPrefix, isEmpty);
   });
@@ -77,7 +77,7 @@ void main() {
   test('never falls back to Python without a backend script', () {
     expect(
       () => resolveAutoscoreInvocation(
-        resolvedExecutable: '/tmp/ScoringNidra',
+        resolvedExecutable: '/tmp/CCSSleepStudio',
         currentDirectory: '/tmp',
         isWindows: false,
         isMacOS: true,
