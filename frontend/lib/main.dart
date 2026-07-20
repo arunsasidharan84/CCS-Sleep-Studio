@@ -52,7 +52,7 @@ void main() {
           ),
         ),
       );
-      runApp(const ScoringNidraApp());
+      runApp(const CCSSleepStudioApp());
     },
     (error, stack) => FlutterError.reportError(
       FlutterErrorDetails(exception: error, stack: stack),

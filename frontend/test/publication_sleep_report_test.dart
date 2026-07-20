@@ -99,7 +99,7 @@ void main() {
     );
     final pdf = latin1.decode(bytes);
     if (const bool.fromEnvironment('REPORT_PREVIEW')) {
-      File('/tmp/ScoringNidra_report_preview.pdf').writeAsBytesSync(bytes);
+      File('/tmp/CCSSleepStudio_report_preview.pdf').writeAsBytesSync(bytes);
     }
 
     expect(pdf, startsWith('%PDF-1.4'));

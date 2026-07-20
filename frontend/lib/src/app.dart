@@ -25,8 +25,8 @@ import 'timeline_painter.dart';
 const double _plotLeftPadding = 90.0;
 const bool buildLite = bool.fromEnvironment('LITE_BUILD', defaultValue: false);
 
-class ScoringNidraApp extends StatelessWidget {
-  const ScoringNidraApp({super.key});
+class CCSSleepStudioApp extends StatelessWidget {
+  const CCSSleepStudioApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -41,21 +41,21 @@ class ScoringNidraApp extends StatelessWidget {
         useMaterial3: false,
         fontFamily: Platform.isMacOS ? '.AppleSystemUIFont' : null,
       ),
-      home: const ScoringNidraHome(),
+      home: const CCSSleepStudioHome(),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class ScoringNidraHome extends StatefulWidget {
-  const ScoringNidraHome({super.key});
+class CCSSleepStudioHome extends StatefulWidget {
+  const CCSSleepStudioHome({super.key});
 
   @override
-  State<ScoringNidraHome> createState() => _ScoringNidraHomeState();
+  State<CCSSleepStudioHome> createState() => _CCSSleepStudioHomeState();
 }
 
-class _ScoringNidraHomeState extends State<ScoringNidraHome>
+class _CCSSleepStudioHomeState extends State<CCSSleepStudioHome>
     with SingleTickerProviderStateMixin {
   final EegBackend _backend = EegBackend();
   final FocusNode _viewerFocusNode = FocusNode();
@@ -8532,10 +8532,10 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
     try {
       final request = await client.getUrl(
         Uri.parse(
-          'https://api.github.com/repos/arunsasidharan84/ScoringNidra/releases/tags/latest',
+          'https://api.github.com/repos/arunsasidharan84/CCS-Sleep-Studio/releases/tags/latest',
         ),
       );
-      request.headers.set(HttpHeaders.userAgentHeader, 'ScoringNidra-App');
+      request.headers.set(HttpHeaders.userAgentHeader, 'CCS-Sleep-Studio-App');
       final response = await request.close();
 
       if (response.statusCode == 200) {
@@ -8546,12 +8546,14 @@ class _DownloadStatsDialogState extends State<_DownloadStatsDialog> {
           final List<Map<String, dynamic>> loadedAssets = [];
           int total = 0;
           final expectedAssetNames = {
-            'ScoringNidra-macos.zip': 'macOS (Full Edition)',
-            'ScoringNidra-lite-macos.zip': 'macOS (Lite Edition)',
-            'ScoringNidra-Installer.exe': 'Windows (Full Edition)',
-            'ScoringNidra-lite-Installer.exe': 'Windows (Lite Edition)',
-            'ScoringNidra-linux.tar.gz': 'Linux (Full Edition)',
-            'ScoringNidra-lite-linux.tar.gz': 'Linux (Lite Edition)',
+            'CCSSleepStudio-macos.zip': 'macOS (Full Edition)',
+            'CCSSleepStudio-lite-macos.zip': 'macOS (Lite Edition)',
+            'CCSSleepStudio-Installer.exe': 'Windows (Full Edition)',
+            'CCSSleepStudio-lite-Installer.exe': 'Windows (Lite Edition)',
+            'CCSSleepStudio-linux-amd64.deb': 'Linux DEB (Full Edition)',
+            'CCSSleepStudio-lite-linux-amd64.deb': 'Linux DEB (Lite Edition)',
+            'CCSSleepStudio-linux-x86_64.rpm': 'Linux RPM (Full Edition)',
+            'CCSSleepStudio-lite-linux-x86_64.rpm': 'Linux RPM (Lite Edition)',
           };
 
           for (final asset in assetsList) {

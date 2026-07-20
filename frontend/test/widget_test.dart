@@ -13,7 +13,7 @@ void main() {
       buildNumber: '9',
       buildSignature: '',
     );
-    await tester.pumpWidget(const ScoringNidraApp());
+    await tester.pumpWidget(const CCSSleepStudioApp());
     await tester.pump();
 
     expect(find.text('Jump to epoch:'), findsOneWidget);
@@ -31,7 +31,7 @@ void main() {
       buildNumber: '14',
       buildSignature: '',
     );
-    await tester.pumpWidget(const ScoringNidraApp());
+    await tester.pumpWidget(const CCSSleepStudioApp());
     await tester.pump();
     await tester.tap(find.text('Batch'));
     await tester.pumpAndSettle();

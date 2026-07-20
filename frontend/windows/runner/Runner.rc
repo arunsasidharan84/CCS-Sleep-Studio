@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "sleep_eeg_desktop" "\0"
+            VALUE "CompanyName", "National Institute of Mental Health and Neurosciences (NIMHANS)" "\0"
+            VALUE "FileDescription", "CCS Sleep Studio Desktop Application" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "sleep_eeg_desktop" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "sleep_eeg_desktop.exe" "\0"
-            VALUE "ProductName", "sleep_eeg_desktop" "\0"
+            VALUE "InternalName", "CCSSleepStudio" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 CCS NIMHANS. All rights reserved." "\0"
+            VALUE "OriginalFilename", "CCSSleepStudio.exe" "\0"
+            VALUE "ProductName", "CCS Sleep Studio" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

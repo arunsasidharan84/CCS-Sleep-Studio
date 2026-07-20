@@ -1,42 +1,44 @@
-# ScoringNidra - The High-Performance Open-Source Sleep EEG Visualization, Annotation & Scoring Software
+# CCS Sleep Studio - The High-Performance Open-Source Sleep EEG Visualization, Annotation & Scoring Software
 
-Welcome to **ScoringNidra**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, and sleep stage scoring.
+Welcome to **CCS Sleep Studio**, a high-performance, cross-platform desktop application designed to assist researchers and clinicians in sleep EEG visualization, event annotation, sleep stage scoring, and quantitative EEG analysis.
 
-Rebuilt from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **ScoringNidra** is a modernized, standalone recreation of the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files.
+CCS Sleep Studio is comprised of the following key modules:
+*   **ScoringNidra**: Interactive sleep scoring and event annotation module.
+*   **AutoscoreNidra**: Automated sleep scoring module.
+*   **AnalyseNidra**: Automated sleep EEG analysis and reporting module.
 
-![ScoringNidra Main Window](screenshots/main.png)
+Rebuilt from the ground up using **Flutter** for a lightweight, fluid UI, and **Rust** for native-speed signal processing, **CCS Sleep Studio** is inspired heavily from the Python-based [ScoringHero](https://github.com/SvennoNito/ScoringHero) repository. It operates without any complex Python or MATLAB runtime setup, bringing near-instant response times to massive sleep EEG files.
+
+![CCS Sleep Studio Main Window](screenshots/main.png)
 
 ---
 
 ## About
 
-**ScoringNidra** is designed to overcome the performance lag and dependency hurdles of traditional sleep scoring applications. By combining the reactive rendering of Flutter with the computational muscle of Rust (via background Isolates and FFI), the application effortlessly handles full-night EEG recordings, real-time filtering, dynamic Welch periodograms, and Morlet wavelet decompositions.
+**CCS Sleep Studio** is designed to overcome the performance lag and dependency hurdles of traditional sleep scoring applications. By combining the reactive rendering of Flutter with the computational muscle of Rust (via background Isolates and FFI), the application effortlessly handles full-night EEG recordings, real-time filtering, dynamic Welch periodograms, and Morlet wavelet decompositions.
 
 ---
 
 ## 📥 Download Pre-built Releases
 
-No installation of Python, MATLAB, or other runtime dependencies is required. Standing alone as pre-compiled binaries, you can download the latest builds directly:
+No installation of Python, MATLAB, or other runtime dependencies is required. Standing alone as pre-compiled binaries, you can download the latest builds directly from the GitHub Releases Page:
 
-*   **macOS (Universal ZIP)**: [Download for macOS](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-macos.zip)
-*   **Windows (x64 Installer EXE)**: [Download for Windows](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/ScoringNidra-Installer.exe)
-
-*(These links always point to the latest pre-built releases compiled automatically via GitHub Actions).*
+👉 **[Download Application Packages from GitHub Releases Page](https://github.com/arunsasidharan84/CCS-Sleep-Studio/releases)**
 
 ### For Mac Users
 Because the application is signed ad-hoc, you must clear the macOS Gatekeeper quarantine flag after downloading and extracting it:
 1.  Open **Terminal** and navigate to your extracted folder.
 2.  Run the following command:
     ```sh
-    xattr -rd com.apple.quarantine ScoringNidra.app
+    xattr -rd com.apple.quarantine "CCS Sleep Studio.app"
     ```
-3.  Right-click `ScoringNidra.app` and choose **Open**.
+3.  Right-click `CCS Sleep Studio.app` and choose **Open**.
 
 ---
 
 ## ⚡ Speed & Architectural Enhancements
 
-ScoringNidra overcomes the main performance bottlenecks of standard Python-based visualization tools:
+CCS Sleep Studio overcomes the main performance bottlenecks of standard Python-based visualization tools:
 
 1.  **Hybrid Flutter + Rust FFI Pipeline**: Heavy mathematical operations (zero-phase Chebyshev/Butterworth filters, Welch periodograms, Morlet wavelets) are written in Rust, leveraging SIMD compiler optimizations and multi-threaded processing via `rayon`.
 2.  **Isolate-Based Background Worker**: Computations run off the main thread in background Dart **Isolates**, leaving the main interface to render at a locked 60+ FPS.
