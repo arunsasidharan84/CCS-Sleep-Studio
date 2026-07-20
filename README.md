@@ -39,10 +39,10 @@ We compile two distinct variants of **CCS Sleep Studio** automatically via GitHu
 *   **CCS Sleep Studio (Full)**: Includes manual scoring (ScoringNidra), data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
 *   **CCS Sleep Studio Lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders, and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
 
-[![Latest Release](https://img.shields.io/github/v/release/arunsasidharan84/ScoringNidra?label=Latest%20Release&style=flat-square&color=blue)](https://github.com/arunsasidharan84/ScoringNidra/releases/latest)
-[![Total Downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/total?label=Total%20Downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases)
+[![Latest Release](https://img.shields.io/github/v/release/arunsasidharan84/CCS-Sleep-Studio?label=Latest%20Release&style=flat-square&color=blue)](https://github.com/arunsasidharan84/CCS-Sleep-Studio/releases/latest)
+[![Total Downloads](https://img.shields.io/github/downloads/arunsasidharan84/CCS-Sleep-Studio/total?label=Total%20Downloads&style=flat-square)](https://github.com/arunsasidharan84/CCS-Sleep-Studio/releases)
 
-📦 **[Download Application Packages from GitHub Releases Page](https://github.com/arunsasidharan84/ScoringNidra/releases)**
+📦 **[Download Application Packages from GitHub Releases Page](https://github.com/arunsasidharan84/CCS-Sleep-Studio/releases)**
 
 | Operating System | Variant | Package Type | Release Asset Name |
 |------------------|---------|--------------|--------------------|
@@ -55,7 +55,7 @@ We compile two distinct variants of **CCS Sleep Studio** automatically via GitHu
 | **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | `CCSSleepStudio-linux-x86_64.rpm` |
 | | **Lite** | x86_64 RPM Installer | `CCSSleepStudio-lite-linux-x86_64.rpm` |
 
-All binaries and installer packages are published directly under the [GitHub Releases Page](https://github.com/arunsasidharan84/ScoringNidra/releases).
+All binaries and installer packages are published directly under the [GitHub Releases Page](https://github.com/arunsasidharan84/CCS-Sleep-Studio/releases).
 
 On Debian, Ubuntu, Linux Mint, and compatible distributions, open the downloaded `.deb` in the software installer or run:
 ```sh
