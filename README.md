@@ -39,34 +39,35 @@ We compile two distinct variants of **CCS Sleep Studio** automatically via GitHu
 *   **CCS Sleep Studio (Full)**: Includes manual scoring (ScoringNidra), data loaders, detections, advanced sleep EEG analysis (AnalyseNidra) plus the packaged Python ML runtime to run automated staging models locally (AutoscoreNidra).
 *   **CCS Sleep Studio Lite**: A lightweight version focusing exclusively on manual scoring, EEG visualization, data loaders, and advanced sleep EEG analysis (AnalyseNidra), with a significantly smaller download size (does not bundle Python runtimes of AutoscoreNidra).
 
-[![Retained release asset downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/total?label=retained%20release%20downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases)
+[![Latest Release](https://img.shields.io/github/v/release/arunsasidharan84/ScoringNidra?label=Latest%20Release&style=flat-square&color=blue)](https://github.com/arunsasidharan84/ScoringNidra/releases/latest)
+[![Total Downloads](https://img.shields.io/github/downloads/arunsasidharan84/ScoringNidra/total?label=Total%20Downloads&style=flat-square)](https://github.com/arunsasidharan84/ScoringNidra/releases)
 
-| Operating System | Variant | Package Type | Download Link |
-|------------------|---------|--------------|---------------|
-| **macOS** | **Full** | Universal ZIP | [Download macOS Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-macos.zip) |
-| | **Lite** | Universal ZIP | [Download macOS Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-macos.zip) |
-| **Windows** | **Full** | x64 Installer EXE | [Download Windows Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-Installer.exe) |
-| | **Lite** | x64 Installer EXE | [Download Windows Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-Installer.exe) |
-| **Linux (Debian/Ubuntu)** | **Full** | x64 DEB Installer | [Download Linux Full](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-linux-amd64.deb) |
-| | **Lite** | x64 DEB Installer | [Download Linux Lite](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-linux-amd64.deb) |
-| **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | [Download Linux Full RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-linux-x86_64.rpm) |
-| | **Lite** | x86_64 RPM Installer | [Download Linux Lite RPM](https://github.com/arunsasidharan84/ScoringNidra/releases/download/latest/CCSSleepStudio-lite-linux-x86_64.rpm) |
+📦 **[Download Application Packages from GitHub Releases Page](https://github.com/arunsasidharan84/ScoringNidra/releases)**
 
-On Debian, Ubuntu, Linux Mint, and compatible distributions, open the downloaded
-`.deb` in the software installer or run `sudo apt install ./CCSSleepStudio-linux-amd64.deb`.
-The installer registers CCS Sleep Studio in the desktop application menu and adds
-the `ccs-sleep-studio` command.
+| Operating System | Variant | Package Type | Release Asset Name |
+|------------------|---------|--------------|--------------------|
+| **macOS** | **Full** | Universal ZIP | `CCSSleepStudio-macos.zip` |
+| | **Lite** | Universal ZIP | `CCSSleepStudio-lite-macos.zip` |
+| **Windows** | **Full** | x64 Installer EXE | `CCSSleepStudio-Installer.exe` |
+| | **Lite** | x64 Installer EXE | `CCSSleepStudio-lite-Installer.exe` |
+| **Linux (Debian/Ubuntu)** | **Full** | x64 DEB Installer | `CCSSleepStudio-linux-amd64.deb` |
+| | **Lite** | x64 DEB Installer | `CCSSleepStudio-lite-linux-amd64.deb` |
+| **Linux (RHEL/AlmaLinux)** | **Full** | x86_64 RPM Installer | `CCSSleepStudio-linux-x86_64.rpm` |
+| | **Lite** | x86_64 RPM Installer | `CCSSleepStudio-lite-linux-x86_64.rpm` |
 
-On Red Hat Enterprise Linux 9, AlmaLinux 9, Rocky Linux 9, and compatible
-systems, install the RPM with
-`sudo dnf install ./CCSSleepStudio-linux-x86_64.rpm`. Each release is smoke-tested
-inside AlmaLinux 9 before publication.
+All binaries and installer packages are published directly under the [GitHub Releases Page](https://github.com/arunsasidharan84/ScoringNidra/releases).
 
-The `latest` development release is a rolling prerelease. Each successful build
-replaces its assets, and GitHub starts the replacement assets with new download
-counters. The badge above therefore counts downloads only for assets that are
-still retained in GitHub Releases. Versioned releases such as `v1.1.5` retain
-their own permanent asset counters.
+On Debian, Ubuntu, Linux Mint, and compatible distributions, open the downloaded `.deb` in the software installer or run:
+```sh
+sudo apt install ./CCSSleepStudio-linux-amd64.deb
+```
+The installer registers CCS Sleep Studio in the desktop application menu and adds the `ccs-sleep-studio` command.
+
+On Red Hat Enterprise Linux 9, AlmaLinux 9, Rocky Linux 9, and compatible systems, install the RPM with:
+```sh
+sudo dnf install ./CCSSleepStudio-linux-x86_64.rpm
+```
+Each release is smoke-tested inside AlmaLinux 9 before publication.
 
 ### For macOS Users
 Because the application is signed ad-hoc, you must clear the macOS Gatekeeper quarantine flag after extracting:

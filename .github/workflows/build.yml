@@ -300,6 +300,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -Recurse dist\autoscore-backend frontend\build\windows\x64\runner\Release\
+          Get-ChildItem -Path "frontend\build\windows\x64\runner\Release\autoscore-backend\_internal" -Recurse -Directory -Filter "licenses" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           if (-not (Test-Path frontend\build\windows\x64\runner\Release\autoscore-backend\autoscore-backend.exe)) { exit 1 }
 
       - name: Copy AnalyseNidra into Windows runner build output (Full)
